@@ -303,7 +303,7 @@ it in the user's settings folder (`mica profiles fetch`, or the app's download).
 differs from the git commit only by 16 `thumbnail` lines; both hashes are accepted and slice
 identically. **OrcaSlicer's vendor profiles are AGPL-3.0** like Mica, so a packaged build *ships*
 a curated subset of the pinned `orca` copy (`cargo xtask bundle-profiles`, vendor list
-`SHIPPED_ORCA_VENDORS`: Snapmaker, Ratrig, BBL, Creality, Voron, Elegoo, Anycubic, Qidi, Sovol, plus
+`SHIPPED_ORCA_VENDORS`: Snapmaker, Ratrig, Prusa (Orca's own Prusa profiles, used for Orca rules), BBL, Creality, Voron, Elegoo, Anycubic, Qidi, Sovol, plus
 `OrcaFilamentLibrary`, with their bed models, textures and pictures, OrcaSlicer's LICENSE.txt and a
 NOTICE); see THIRD_PARTY.md.
 Test fixtures copied from them (`crates/mica-template/tests/fixtures/coreone_hf04_*`,

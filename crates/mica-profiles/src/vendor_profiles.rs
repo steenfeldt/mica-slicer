@@ -24,10 +24,13 @@ use std::path::{Path, PathBuf};
 /// The OrcaSlicer vendors a packaged Mica ships (Orca's vendor index names, `<name>.json` in
 /// `resources/profiles`). The one place to change the list: the xtask, the release script and
 /// the tests all read it. Everything they inherit from is added by [`write_orca_subset`].
-pub const SHIPPED_ORCA_VENDORS: [&str; 9] = [
+pub const SHIPPED_ORCA_VENDORS: [&str; 10] = [
     // Tested with Mica.
     "Snapmaker",
     "Ratrig",
+    // Orca's own Prusa profiles: a Prusa printer switched to Orca rules fills its Orca-only
+    // settings from them (`rules_fill`), as in a development build.
+    "Prusa",
     // Popular printers (untested with Mica; the gallery lists tested printers first).
     "BBL",
     "Creality",

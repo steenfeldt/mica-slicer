@@ -61,7 +61,7 @@ cargo run -p mica-gui --features openh264   # optional: OpenH264 for RTSP camera
 ```
 
 Slicing needs the printer profiles. The app ships OrcaSlicer's profiles for Snapmaker, RatRig,
-Bambu Lab, Creality, Voron, Elegoo, Anycubic, QIDI and Sovol. **Prusa printer profiles are
+Bambu Lab, Creality, Voron, Elegoo, Anycubic, QIDI and Sovol, plus its Prusa profiles for Orca rules. **Prusa printer profiles are
 downloaded from Prusa on first use** (once, checked by SHA-256; `mica profiles fetch` on the
 command line), since Mica may not redistribute them. An installed PrusaSlicer or OrcaSlicer is
 used as a fallback; development builds read the pinned profile checkouts

@@ -151,7 +151,7 @@ default off) and must never be enabled for packaged builds.
 
 Packaged Mica builds ship a subset of OrcaSlicer's `resources/profiles` (orca `v2.4.2`,
 `8500fcdcca`, AGPL-3.0, the same license as Mica), unchanged: the vendors Snapmaker, Ratrig, BBL
-(Bambu Lab), Creality, Voron, Elegoo, Anycubic, Qidi and Sovol with all their printer, process and
+(Bambu Lab), Creality, Voron, Elegoo, Anycubic, Qidi, Sovol and Prusa (Orca's own Prusa profiles, for Orca rules) with all their printer, process and
 filament profiles, the shared `OrcaFilamentLibrary` they inherit from, and their printers' bed
 models, bed textures and `_cover.png` pictures. `cargo xtask bundle-profiles` writes it from the
 pinned checkout (with OrcaSlicer's `LICENSE.txt` and a `NOTICE.txt`); the vendor list lives in

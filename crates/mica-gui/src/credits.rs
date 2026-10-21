@@ -529,8 +529,8 @@ pub fn entries(brick_layers: bool) -> Vec<Entry> {
             "AGPL-3.0",
             "https://github.com/OrcaSlicer/OrcaSlicer/tree/main/resources/profiles",
             "Printer, print and filament profiles, bed models and pictures for Snapmaker, \
-             RatRig, Bambu Lab, Creality, Voron, Elegoo, Anycubic, QIDI and Sovol, shipped \
-             with Mica from OrcaSlicer 2.4.2, with OrcaSlicer's shared filament library. \
+             RatRig, Bambu Lab, Creality, Voron, Elegoo, Anycubic, QIDI and Sovol (plus OrcaSlicer's own \
+             Prusa profiles), shipped with Mica from OrcaSlicer 2.4.2, with OrcaSlicer's shared filament library. \
              Names and logos are trademarks of their owners.",
             Some("orca"),
         ),
