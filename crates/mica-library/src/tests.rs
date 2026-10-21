@@ -227,6 +227,8 @@ fn offline_folder_keeps_its_models_and_comes_back() {
 /// GUI monkey test, seed 108: a folder added while it was away was stored under the path as
 /// typed (`/var/…` on macOS, a symbolic link), not the resolved one the library uses
 /// everywhere else, so it could be indexed twice.
+/// Unix only: creating a symbolic link on Windows needs a privilege test runners lack.
+#[cfg(unix)]
 #[test]
 fn a_folder_added_while_away_is_stored_resolved() {
     let base = TempDir::new("away");
@@ -234,10 +236,7 @@ fn a_folder_added_while_away_is_stored_resolved() {
     let real = base.path().join("real");
     std::fs::create_dir_all(&real).unwrap();
     let link = base.path().join("link");
-    #[cfg(unix)]
     std::os::unix::fs::symlink(&real, &link).unwrap();
-    #[cfg(not(unix))]
-    return;
     let share = link.join("share");
     let l = Library::open(data.path(), quiet()).unwrap();
     l.add_folder(&share).unwrap();

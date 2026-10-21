@@ -78,26 +78,30 @@ impl Source {
     /// naming a snapshot → snapshots; any other HTTP(S) → MJPEG.
     pub fn from_url(url: &str) -> Result<Self, String> {
         let u = url.trim();
-        let lower = u.to_ascii_lowercase();
         check_url(u)?;
+        Ok(Self::classify(u))
+    }
+    /// The kind of an already checked URL (see [`Source::from_url`]).
+    fn classify(u: &str) -> Self {
+        let lower = u.to_ascii_lowercase();
         if lower.starts_with("rtsp://") || lower.starts_with("rtsps://") {
-            return Ok(Self::Rtsp(u.to_string()));
+            return Self::Rtsp(u.to_string());
         }
         let path = lower.split('#').next().unwrap_or("");
         let (path_only, query) = path.split_once('?').unwrap_or((path, ""));
         if path_only.trim_end_matches('/').ends_with("/webrtc") {
-            return Ok(Self::WebRtc(u.to_string(), None));
+            return Self::WebRtc(u.to_string(), None);
         }
         let snapshot = [".jpg", ".jpeg", ".png"]
             .iter()
             .any(|e| path_only.ends_with(e))
             || path_only.contains("snapshot")
             || query.contains("snapshot");
-        Ok(if snapshot {
+        if snapshot {
             Self::Snapshot(u.to_string())
         } else {
             Self::Mjpeg(u.to_string())
-        })
+        }
     }
     /// The URL, if this source has one.
     pub fn url(&self) -> Option<&str> {

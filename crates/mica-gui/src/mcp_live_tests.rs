@@ -195,7 +195,6 @@ fn center_px(info: &Value) -> (u64, u64) {
     (c[0].as_u64().unwrap(), c[1].as_u64().unwrap())
 }
 
-#[cfg(unix)]
 #[test]
 fn live_paint_matches_headless_and_is_one_undo_step() {
     let mut live = Live::new(&["cube20.stl"]);
@@ -309,7 +308,6 @@ fn live_paint_matches_headless_and_is_one_undo_step() {
     assert!(live.app.mcp.last_error.is_some());
 }
 
-#[cfg(unix)]
 #[test]
 fn live_open_and_save_protect_the_users_project() {
     let mut live = Live::new(&["cube20.stl"]);
@@ -354,7 +352,6 @@ fn live_open_and_save_protect_the_users_project() {
     assert!(e.contains("no such file"), "{e}");
 }
 
-#[cfg(unix)]
 #[test]
 fn a_user_edit_during_a_call_is_never_overwritten() {
     let mut live = Live::new(&["cube20.stl"]);
@@ -379,7 +376,6 @@ fn a_user_edit_during_a_call_is_never_overwritten() {
     assert_eq!(live.app.undo.undo_label(), Some("Move"));
 }
 
-#[cfg(unix)]
 #[test]
 fn without_a_window_auto_mode_works_headless_and_live_mode_says_why() {
     let dir = Temp::new("n");
@@ -413,7 +409,6 @@ fn without_a_window_auto_mode_works_headless_and_live_mode_says_why() {
     assert!(!socket.exists(), "the socket goes with the window");
 }
 
-#[cfg(unix)]
 #[test]
 fn painted_projects_keep_their_paint_and_take_more() {
     // A PrusaSlicer project with color paint: the window's painting maps both ways, so a live
@@ -450,7 +445,6 @@ fn painted_projects_keep_their_paint_and_take_more() {
     );
 }
 
-#[cfg(unix)]
 #[test]
 fn live_slice_summary_is_the_headless_one_and_the_window_slices_too() {
     let mut live = Live::new(&["cube20.stl"]);
@@ -482,7 +476,6 @@ fn live_slice_summary_is_the_headless_one_and_the_window_slices_too() {
     assert!(summary["tool_changes"].as_u64().unwrap() > 0, "{summary}");
 }
 
-#[cfg(unix)]
 #[test]
 fn objects_on_every_plate_map_back_to_their_plate() {
     if !mica_testkit::require_orca_profiles() {
@@ -529,7 +522,6 @@ fn objects_on_every_plate_map_back_to_their_plate() {
     }
 }
 
-#[cfg(unix)]
 #[test]
 fn live_add_shape_puts_shapes_in_the_window_as_undo_steps() {
     let mut live = Live::new(&["cube20.stl"]);
@@ -570,7 +562,6 @@ fn live_add_shape_puts_shapes_in_the_window_as_undo_steps() {
     assert!(live.app.plates.current().objects[0].volumes.is_empty());
 }
 
-#[cfg(unix)]
 #[test]
 fn live_create_mix_is_one_undo_step_and_matches_gui_project_and_slice() {
     use crate::mixes::{Draft, MixAct};

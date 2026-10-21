@@ -1,0 +1,3 @@
+# Byte-exact checkouts on every OS (no CRLF conversion on Windows): fixtures, profiles and
+# G-code are compared and hashed byte for byte.
+* -text

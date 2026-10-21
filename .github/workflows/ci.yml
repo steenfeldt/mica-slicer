@@ -13,9 +13,9 @@ env:
 jobs:
   provenance:
     name: Provenance
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo xtask provenance
 
@@ -24,7 +24,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, ubuntu-latest, windows-latest]
+        # Ubuntu pinned: the apt package names below are those of 24.04.
+        os: [macos-latest, ubuntu-24.04, windows-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 90
     env:
@@ -33,16 +34,25 @@ jobs:
       # Shared runners are slower than the developer Mac the 60 s quick budget is set for.
       MICA_CORPUS_QUICK_BUDGET: "300"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
+      # mica-videodec decodes H.264 with GStreamer on Linux (gstreamer, -app, -video link
+      # against these). Everything else in the tree is pure Rust or loads its system
+      # libraries at run time (winit/wgpu: wayland, xkbcommon, X11 via dlopen).
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends pkg-config \
+            libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
       # The pinned vendor profiles the tests slice with (upstream/UPSTREAM.lock): the Prusa
       # profiles repository and only resources/profiles of OrcaSlicer and Snapmaker Orca
       # (sparse checkouts, ~330 MB in all). Cached until the lock or the fetch script changes.
       - name: Cache pinned upstream data
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             upstream/prusa-profiles
@@ -58,14 +68,15 @@ jobs:
       # slicing tests quickly and includes the 3DBenchy reference hashes, which debug skips.
       # The hashes themselves are asserted on macOS arm64, where they are recorded.
       - name: Tests (incl. reference hashes)
-        run: cargo test --workspace --locked --profile fast
+        # --no-fail-fast: one failing crate does not hide the other crates' results.
+        run: cargo test --workspace --locked --profile fast --no-fail-fast
       # The quick regression corpus (tests/corpus/run.py; os.wait4 is POSIX only).
       - name: Quick corpus
         if: runner.os != 'Windows'
         run: cargo xtask corpus --quick
       - name: Corpus report
         if: always() && runner.os != 'Windows'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: corpus-report-${{ matrix.os }}
           path: out/corpus-report.md

@@ -34,7 +34,8 @@ mod library_drop;
 mod library_drop_tests;
 mod library_preview;
 mod mcp_live;
-#[cfg(test)]
+// Live mode needs a Unix socket (not on Windows yet).
+#[cfg(all(test, unix))]
 mod mcp_live_tests;
 mod measure;
 mod menu;
