@@ -71,24 +71,40 @@ fn quadrants(f: &Frame) -> String {
     .collect()
 }
 
+/// Classification and the URL checks do not depend on `restrict_to_loopback`, which another
+/// test of this process turns on at any moment (tests run in parallel).
 #[test]
 fn urls_are_classified_and_checked_without_network() {
     assert!(matches!(
-        Source::from_url("rtsp://198.51.100.9:554/stream1"),
-        Ok(Source::Rtsp(_))
+        Source::classify("rtsp://198.51.100.9:554/stream1"),
+        Source::Rtsp(_)
     ));
     assert!(matches!(
-        Source::from_url("http://cam/snapshot.jpg"),
-        Ok(Source::Snapshot(_))
+        Source::classify("http://cam/snapshot.jpg"),
+        Source::Snapshot(_)
     ));
     assert!(matches!(
-        Source::from_url("http://u1/webcam/?action=snapshot"),
-        Ok(Source::Snapshot(_))
+        Source::classify("http://u1/webcam/?action=snapshot"),
+        Source::Snapshot(_)
     ));
     assert!(matches!(
-        Source::from_url("http://u1/webcam/?action=stream"),
+        Source::classify("http://u1/webcam/?action=stream"),
+        Source::Mjpeg(_)
+    ));
+    assert!(matches!(
+        Source::classify("http://cam:8080/webrtc"),
+        Source::WebRtc(_, None)
+    ));
+    // `from_url` checks, then classifies (loopback: allowed either way).
+    assert!(matches!(
+        Source::from_url(" rtsp://127.0.0.1:554/stream1 "),
+        Ok(Source::Rtsp(u)) if u == "rtsp://127.0.0.1:554/stream1"
+    ));
+    assert!(matches!(
+        Source::from_url("http://localhost/webcam/?action=stream"),
         Ok(Source::Mjpeg(_))
     ));
+    // These are refused before the loopback switch is looked at.
     assert!(Source::from_url("ftp://cam/x").is_err());
     assert!(Source::from_url("rtsp://admin:secret@cam/x").is_err());
     assert!(Source::from_url("http:///x").is_err());
@@ -557,15 +573,17 @@ fn snapshots_refresh_up_to_four_a_second_on_one_connection_and_pause_unwatched()
 }
 
 /// A camera that takes 0.3 s per snapshot (the U1 takes 0.25–0.45 s) is asked again as
-/// soon as it answers: over 3/s, not one answer plus a quarter second each.
+/// soon as it answers: over 3/s, not one answer plus a quarter second each. Measured on the
+/// camera's side (from the end of an answer to the next request), so a slow or busy machine
+/// does not change the result: back to back takes milliseconds, the quarter second it must
+/// not wait takes 250 ms.
 #[test]
 fn slow_snapshots_are_asked_for_back_to_back() {
     let jpeg = mock::jpeg(&test_pattern(64, 48, 0.), 85);
-    let requests = Arc::new(AtomicUsize::new(0));
-    let r = requests.clone();
+    let gaps = Arc::new(Mutex::new(Vec::<Duration>::new()));
+    let g = gaps.clone();
     let (port, _) = http_server(move |_, s| {
         loop {
-            r.fetch_add(1, Ordering::Relaxed);
             thread::sleep(Duration::from_millis(300));
             let _ = write!(
                 s,
@@ -573,9 +591,11 @@ fn slow_snapshots_are_asked_for_back_to_back() {
                 jpeg.len()
             );
             let _ = s.write_all(&jpeg);
+            let answered = Instant::now();
             if read_head(s).is_none() {
                 return;
             }
+            g.lock().unwrap().push(answered.elapsed());
         }
     });
     let p = Player::start(
@@ -587,10 +607,20 @@ fn slow_snapshots_are_asked_for_back_to_back() {
     )
     .unwrap();
     wait_frame(&p, Duration::from_secs(5)).expect("a snapshot");
-    let before = p.status().frames;
-    thread::sleep(Duration::from_millis(3000));
-    let n = p.status().frames - before;
-    assert!((9..=11).contains(&n), "{n} snapshots in 3 s at 0.3 s each");
+    assert!(
+        wait_until(Duration::from_secs(10), || gaps.lock().unwrap().len() >= 5),
+        "five more snapshots asked for"
+    );
+    let mut gaps = gaps.lock().unwrap().clone();
+    gaps.sort();
+    // The median: one hiccup of a shared CI runner does not decide it.
+    let median = gaps[gaps.len() / 2];
+    assert!(
+        median < Duration::from_millis(125),
+        "asked again {median:?} after an answer ({gaps:?}); back to back expected"
+    );
+    // The answers are shown, not only fetched.
+    assert!(p.status().frames >= 3, "{} frames", p.status().frames);
 }
 
 fn streamer(lose_every: Option<u32>, webrtc: bool) -> mock::CameraStreamer {

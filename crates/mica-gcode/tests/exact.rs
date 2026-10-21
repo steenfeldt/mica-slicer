@@ -57,7 +57,8 @@ fn compare(gcode: &str, layers: &[usize]) {
         NEXT.fetch_add(1, Ordering::Relaxed)
     )));
     std::fs::write(&path.0, gcode).unwrap();
-    let mut command = Command::new("python3");
+    // Windows installs Python 3 as `python` (no `python3`).
+    let mut command = Command::new(if cfg!(windows) { "python" } else { "python3" });
     command
         .arg(concat!(
             env!("CARGO_MANIFEST_DIR"),

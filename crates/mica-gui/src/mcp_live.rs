@@ -31,7 +31,9 @@
 use crate::app::App;
 use crate::save::DocState;
 use eframe::egui;
-use mica_cli::mcp::live::{self, Content, Request, Response};
+#[cfg(unix)]
+use mica_cli::mcp::live;
+use mica_cli::mcp::live::{Content, Request, Response};
 use mica_cli::mcp::session::{self, Profiles, Scene};
 use mica_cli::mcp::tools;
 use mica_core::painting::FacetStates;

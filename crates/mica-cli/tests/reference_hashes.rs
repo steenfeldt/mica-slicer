@@ -130,8 +130,9 @@ macro_rules! reference {
             not(all(target_os = "macos", target_arch = "aarch64")),
             ignore = "reference hashes are recorded on macOS arm64"
         )]
+        // One `ignore` at most (a second one is an unused attribute).
         #[cfg_attr(
-            debug_assertions,
+            all(target_os = "macos", target_arch = "aarch64", debug_assertions),
             ignore = "slow in debug: cargo test --profile fast (CI) or --release runs it"
         )]
         fn $benchy() {
