@@ -46,6 +46,50 @@ fn core_one_speed_pla_matches_prusaslicer() {
     );
 }
 
+/// The fixture's provenance: every value is PrusaSlicer's own AGPL-3.0 copy of the vendor profiles
+/// (`prusaslicer/resources/profiles/PrusaResearch.ini`, config 2.4.14) resolved for the same
+/// selection, except the three values its header lists as updated to the newer bundle. Ignored by
+/// default because CI fetches only the vendor profiles, not the PrusaSlicer tree; run it with
+/// `scripts/fetch-upstream.sh prusaslicer` and `cargo test -p mica-profiles -- --ignored fixture_is`.
+#[test]
+#[ignore = "needs upstream/prusaslicer (scripts/fetch-upstream.sh prusaslicer)"]
+fn fixture_is_the_agpl_bundle_plus_noted_changes() {
+    let path = mica_testkit::upstream("prusaslicer/resources/profiles/PrusaResearch.ini");
+    if !mica_testkit::require_fixture(
+        &path,
+        "PrusaSlicer sources: scripts/fetch-upstream.sh prusaslicer",
+    ) {
+        return;
+    }
+    let bundle = Bundle::parse(&std::fs::read_to_string(path).unwrap());
+    let mut config = bundle
+        .full_config(
+            "Prusa CORE One HF0.4 nozzle",
+            "0.20mm SPEED @COREONE HF0.4",
+            "Prusament PLA @COREONE HF0.4",
+        )
+        .unwrap();
+    let mut replace_once = |key: &str, from: &str, to: &str| {
+        let value = config.raw(key).unwrap();
+        assert_eq!(value.matches(from).count(), 1, "{key}: {from}");
+        config.set_raw(key, &value.replace(from, to)).unwrap();
+    };
+    replace_once("start_gcode", "M115 U6.5.3+12780", "M115 U6.8.1+16182");
+    replace_once(
+        "compatible_printers_condition_cummulative",
+        "and nozzle_high_flow[0]\";",
+        "and nozzle_high_flow[0] and printer_notes!~/.*HT400.*/\";",
+    );
+    config
+        .set_raw("mmu_segmented_region_max_width", "5")
+        .unwrap();
+    config.set_raw("binary_gcode", "0").unwrap();
+    let fixture = mica_profiles::ini::parse(include_str!("fixtures/coreone_hf04_speed_pla.ini"));
+    for (key, want) in &fixture[0].entries {
+        assert_eq!(config.raw(key).as_deref(), Some(want.as_str()), "{key}");
+    }
+}
+
 #[test]
 fn engine_settings_from_profiles_equal_the_m0_settings() {
     use mica_core::settings::PrintSettings;

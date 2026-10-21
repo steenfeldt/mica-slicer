@@ -177,7 +177,14 @@ boundaries. A decoded-text round trip therefore guarantees identical text and me
 not an identical whole file. Deflate output is format-compatible; byte identity with
 Prusa's zlib encoder is not required or claimed.
 
-`coreone_cube20_start.gcode` predates this port and is used by the machine G-code tests.
+`coreone_cube20_start.gcode` predates this port and is used by the machine G-code tests. It is
+PrusaSlicer's expansion of the start G-code in `mica-profiles/tests/fixtures/coreone_hf04_speed_pla.ini`.
+
+The profile values embedded in these PrusaSlicer exports (the start G-code and the config block)
+are vendor profiles 2.5.12. They equal PrusaSlicer's own AGPL-3.0 copy
+(`prusaslicer` `resources/profiles/PrusaResearch.ini`, config 2.4.14) except for the three values
+listed in the header of `coreone_hf04_speed_pla.ini` (a firmware version string, one number, one
+compatibility clause); see PROVENANCE.md.
 
 ## Time-estimation oracles (2026-10-15)
 

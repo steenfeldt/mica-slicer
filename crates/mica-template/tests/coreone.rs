@@ -1,23 +1,30 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Provenance: original
 
-//! Acceptance tests: the real Prusa CORE One HF0.4 custom G-code (vendor profiles 2.5.12) must expand
-//! exactly as PrusaSlicer 2.9.6 expands it.
+//! Acceptance tests: the Prusa CORE One HF0.4 custom G-code (vendor profiles 2.5.12) must expand
+//! exactly as PrusaSlicer 2.9.6 expands it. The templates come from the resolved-config fixture
+//! `mica-profiles/tests/fixtures/coreone_hf04_speed_pla.ini` (derived from PrusaSlicer's AGPL-3.0
+//! profiles; see its header).
 
 use mica_template::{Context, Value, ValueType, Var, process};
 
-/// A fixture template without its two `#` provenance header lines.
-fn template(name: &str) -> String {
-    let path = format!("{}/tests/fixtures/{name}", env!("CARGO_MANIFEST_DIR"));
+/// The `key` custom G-code template of the resolved CORE One config, `\n` escapes expanded.
+fn template(key: &str) -> String {
+    let path = format!(
+        "{}/../mica-profiles/tests/fixtures/coreone_hf04_speed_pla.ini",
+        env!("CARGO_MANIFEST_DIR")
+    );
     let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{path}: {e}"));
-    let mut lines = text.splitn(3, '\n');
-    for _ in 0..2 {
-        assert!(
-            lines.next().is_some_and(|l| l.starts_with('#')),
-            "{path}: missing header"
-        );
-    }
-    lines.next().unwrap_or("").to_string()
+    let prefix = format!("{key} = ");
+    let value = text
+        .lines()
+        .find_map(|l| l.strip_prefix(&prefix))
+        .unwrap_or_else(|| panic!("{path}: no {key}"));
+    assert!(
+        !value.contains("\\\\"),
+        "{key}: unexpected escaped backslash"
+    );
+    value.replace("\\n", "\n")
 }
 
 fn non_blank_lines(s: &str) -> Vec<&str> {
@@ -55,8 +62,7 @@ fn cube20_context() -> Context {
 #[test]
 fn coreone_start_gcode_matches_prusaslicer() {
     let mut ctx = cube20_context();
-    let out = process(&template("coreone_hf04_start_gcode.txt"), &mut ctx)
-        .unwrap_or_else(|e| panic!("{e}"));
+    let out = process(&template("start_gcode"), &mut ctx).unwrap_or_else(|e| panic!("{e}"));
 
     let expected_path = format!(
         "{}/../mica-gcode/tests/fixtures/coreone_cube20_start.gcode",
@@ -79,11 +85,11 @@ fn coreone_start_gcode_nil_idle_temperature_and_chamber_heating() {
     ctx.set("chamber_minimal_temperature", Var::ints([35]));
     ctx.set("filament_type", Var::strings(["PC"]));
     // The chamber-heating branch reads idle_temperature, which is nil: PrusaSlicer fails the same way.
-    let e = process(&template("coreone_hf04_start_gcode.txt"), &mut ctx).unwrap_err();
+    let e = process(&template("start_gcode"), &mut ctx).unwrap_err();
     assert!(e.message.contains("nil"), "{e}");
 
     ctx.set("chamber_minimal_temperature", Var::ints([0]));
-    let out = process(&template("coreone_hf04_start_gcode.txt"), &mut ctx).unwrap();
+    let out = process(&template("start_gcode"), &mut ctx).unwrap();
     assert!(out.contains("\nM104 T0 S100\n"), "{out}");
     assert!(out.contains("\nM109 R205 ; wait for temp\n"), "{out}");
 }
@@ -93,7 +99,7 @@ fn coreone_end_gcode() {
     let mut ctx = cube20_context();
     ctx.set("layer_z", 20.0);
     ctx.set("max_layer_z", 20.0);
-    let out = process(&template("coreone_hf04_end_gcode.txt"), &mut ctx).unwrap();
+    let out = process(&template("end_gcode"), &mut ctx).unwrap();
     let lines = non_blank_lines(&out);
     assert_eq!(lines[0], "G1 Z21 F720 ; Move print head up");
     assert_eq!(lines[1], "M104 S0 ; turn off temperature");
@@ -102,7 +108,7 @@ fn coreone_end_gcode() {
     // At the top of the build volume the head is not lifted.
     ctx.set("layer_z", 270.0);
     ctx.set("max_layer_z", 270.0);
-    let out = process(&template("coreone_hf04_end_gcode.txt"), &mut ctx).unwrap();
+    let out = process(&template("end_gcode"), &mut ctx).unwrap();
     assert_eq!(non_blank_lines(&out)[0], "M104 S0 ; turn off temperature");
 }
 
@@ -112,14 +118,14 @@ fn coreone_before_layer_gcode() {
     ctx.set("max_layer_z", 20.0);
 
     ctx.set("layer_z", 20.0);
-    let out = process(&template("coreone_hf04_before_layer_gcode.txt"), &mut ctx).unwrap();
+    let out = process(&template("before_layer_gcode"), &mut ctx).unwrap();
     assert_eq!(
         non_blank_lines(&out),
         [";BEFORE_LAYER_CHANGE", "G92 E0.0", ";20"]
     );
 
     ctx.set("layer_z", 175.0);
-    let out = process(&template("coreone_hf04_before_layer_gcode.txt"), &mut ctx).unwrap();
+    let out = process(&template("before_layer_gcode"), &mut ctx).unwrap();
     assert_eq!(
         non_blank_lines(&out),
         [
@@ -131,6 +137,6 @@ fn coreone_before_layer_gcode() {
     );
 
     ctx.set("layer_z", 0.2);
-    let out = process(&template("coreone_hf04_before_layer_gcode.txt"), &mut ctx).unwrap();
+    let out = process(&template("before_layer_gcode"), &mut ctx).unwrap();
     assert_eq!(non_blank_lines(&out)[2], ";0.2");
 }

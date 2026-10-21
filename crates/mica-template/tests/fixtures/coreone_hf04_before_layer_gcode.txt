@@ -1,8 +1,0 @@
-# prusa-profiles@c712aaf177 PrusaResearch/2.5.12.ini [printer:Prusa CORE One HF0.4 nozzle] before_layer_gcode
-# (the INI's \n escapes are expanded; these two header lines are stripped by the test)
-;BEFORE_LAYER_CHANGE
-G92 E0.0
-;[layer_z]
-{if layer_z > 150}
-M201 X{interpolate_table(layer_z, (0,7000), (150,7000), (200,4000), (270,2000))} Y{interpolate_table(layer_z, (0,7000), (150,7000), (200,4000), (270,2000))}
-{endif}
