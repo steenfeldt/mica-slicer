@@ -1,5 +1,5 @@
 ; PrusaSlicer 2.9.6 output for tests/models/cube20.stl centred at (180,180): printer 'Original Prusa XL - 5T Input Shaper 0.4 nozzle',
-; print '0.20mm SPEED @XLIS 0.4', filament 'Prusament PLA @XLIS', vendor profiles 2.5.11. Only the custom G-code before the first
+; print '0.20mm SPEED @XLIS 0.4', filament 'Prusament PLA @XLIS', vendor profiles 2.5.11, whose custom G-code for this selection is identical in PrusaSlicer's AGPL-3.0 PrusaResearch.ini (2.4.14). Only the custom G-code before the first
 ; layer and after the last layer is kept (layer moves removed).
 ;TYPE:Custom
 M17 ; enable steppers

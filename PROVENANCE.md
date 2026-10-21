@@ -294,9 +294,14 @@ source (including this file) must be made available under the AGPL.
 PrusaSlicer's AGPL repository (`prusaslicer/resources/profiles/`, older versions). Until this is
 clarified, Mica must not *bundle* profiles from `prusa-profiles` in anything it distributes; reading
 them at runtime from the user's own PrusaSlicer installation or from a local checkout is fine.
-Test fixtures copied from them (`crates/mica-template/tests/fixtures/coreone_hf04_*`,
-`crates/mica-gcode/tests/fixtures/coreone_cube20_start.gcode`, `crates/mica-profiles/tests/fixtures/`)
-must be removed or replaced before any distribution.
+The Prusa test fixtures are derived from PrusaSlicer's AGPL-3.0 copy instead:
+`crates/mica-profiles/tests/fixtures/coreone_hf04_speed_pla.ini` is the CORE One selection resolved
+from `prusaslicer/resources/profiles/PrusaResearch.ini` (2.4.14) with three short values updated to
+2.5.12 (a firmware version string, `mmu_segmented_region_max_width`, one compatibility clause; its
+header lists them and an ignored test in `prusa_bundle.rs` re-derives it). The template tests read
+their CORE One templates from that file. The PrusaSlicer exports (`crates/mica-gcode/tests/fixtures/`,
+`xl5is_cube20_prusaslicer.gcode`) embed only those same values; the XL templates are identical in
+2.4.14. Tests that need the full 2.5.12 bundle read the local checkout at test time.
 
 ## M6 GUI, mesh tools (boolean, simplify, repair)
 

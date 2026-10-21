@@ -1,6 +1,6 @@
-; Expected start G-code for tests/models/cube20.stl centred at (125,110) on a Prusa CORE One HF0.4
-; with Prusament PLA, as produced by PrusaSlicer 2.9.6 from vendor profiles 2.5.12
-; (prusa-profiles@c712aaf177 PrusaResearch/2.5.12.ini [printer:Prusa CORE One HF0.4 nozzle] start_gcode).
+; Start G-code PrusaSlicer 2.9.6 produced for tests/models/cube20.stl centred at (125,110), Prusa CORE One HF0.4,
+; 0.20mm SPEED, Prusament PLA. Template: start_gcode of mica-profiles/tests/fixtures/coreone_hf04_speed_pla.ini
+; (PrusaSlicer's AGPL-3.0 PrusaResearch.ini 2.4.14 with the 2.5.12 firmware version, see that header).
 ; Lines below are compared verbatim, blank lines removed.
 M17 ; enable steppers
 M862.1 P0.4 A0 F1 ; nozzle check
