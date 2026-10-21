@@ -12,8 +12,9 @@
 //! a vendor's full bundle is loaded when one of its printers is picked.
 //!
 //! Images: PrusaSlicer's bundle names a `thumbnail` per `[printer_model]`; Orca bundles ship
-//! `<model name>_cover.png`. Both are looked up at runtime in the pinned upstream checkouts
-//! and installed slicers (`scene::bed_assets::asset_roots`), never bundled with Mica.
+//! `<model name>_cover.png`. Both are looked up at runtime (`scene::bed_assets::asset_roots`):
+//! the pinned upstream checkouts, the Orca subset a packaged Mica ships, the Prusa assets it
+//! downloaded, and installed slicers.
 
 use crate::panels::profiles::{Profiles, Vendor};
 use mica_profiles::{orca, project::split_printer_name, prusa::Kind};

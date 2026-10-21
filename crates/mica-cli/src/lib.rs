@@ -34,6 +34,7 @@ Usage:
   mica calibrate <kind> [options] -o out.gcode (calibrate --help for kinds)
   mica validate <file.gcode|file.bgcode> [profile options] [--json] [--estimate]
   mica profiles [printer|print|filament] [--vendor <name>] [options]
+  mica profiles fetch   download the Prusa printer profiles from Prusa (once; checked by SHA-256)
   mica profile …   (your own profiles; see below)
   mica print <file.gcode|file.bgcode> --printer-host <name> [--upload-only | --queue]
   mica printers status <name>
@@ -52,7 +53,8 @@ Slice options:
               OrcaSlicer for Orca profiles. Same as --set mica_slicing_rules=…
   --profiles-dir Orca resources/profiles directory (default: installed OrcaSlicer, then checkout)
   --bed       Orca plate type, e.g. \"High Temp Plate\" (default: machine default_bed_type)
-  --bundle    Prusa vendor bundle (default: your PrusaSlicer installation's, else the pinned copy)
+  --bundle    Prusa vendor bundle (default: the one `mica profiles fetch` downloaded from Prusa,
+              else your PrusaSlicer installation's)
   --gcode-identity mica|orca-compatible  generator identity (U1 defaults to orca-compatible)
   -o          output file; .bgcode writes Prusa binary G-code (default: <model>.gcode or .bgcode,
               as the printer profile's binary_gcode setting says, next to the model)
@@ -96,32 +98,15 @@ const DEFAULT_PRINTER: &str = "Prusa CORE One HF0.4 nozzle";
 const DEFAULT_PRINT: &str = "0.20mm SPEED @COREONE HF0.4";
 const DEFAULT_FILAMENT: &str = "Prusament PLA @COREONE HF0.4";
 
-/// Prusa's vendor profiles: read at runtime from the user's PrusaSlicer installation (Mica does not
-/// redistribute them, see PROVENANCE.md), falling back to the pinned upstream copy of a
-/// development checkout ([`mica_core::user_data::upstream_dir`]; never in a packaged build).
+/// Prusa's vendor profiles (Mica does not redistribute them, see PROVENANCE.md): `--bundle`,
+/// `MICA_PRUSA_BUNDLE`, a development checkout's pinned copy, the copy `mica profiles fetch`
+/// downloaded from Prusa, else the user's PrusaSlicer installation
+/// (`mica_profiles::vendor_profiles::prusa::find_bundle`).
 fn find_bundle(explicit: Option<&Path>) -> Result<PathBuf, String> {
-    if let Some(p) = explicit {
-        return Ok(p.to_path_buf());
-    }
-    let mut candidates = Vec::new();
-    if let Some(home) = mica_core::user_data::home() {
-        candidates
-            .push(home.join("Library/Application Support/PrusaSlicer/vendor/PrusaResearch.ini"));
-        candidates.push(home.join(".config/PrusaSlicer/vendor/PrusaResearch.ini"));
-        candidates.push(
-            home.join(
-                ".var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer/vendor/PrusaResearch.ini",
-            ),
-        );
-    }
-    if let Some(appdata) = mica_core::user_data::var_dir("APPDATA") {
-        candidates.push(appdata.join("PrusaSlicer/vendor/PrusaResearch.ini"));
-    }
-    if let Some(upstream) = mica_core::user_data::upstream_dir() {
-        candidates.push(upstream.join("prusa-profiles/PrusaResearch/2.5.12.ini"));
-    }
-    candidates.into_iter().find(|p| p.is_file()).ok_or_else(|| {
-        "no Prusa vendor profiles found; install PrusaSlicer or pass --bundle".to_string()
+    mica_profiles::vendor_profiles::prusa::find_bundle(explicit).ok_or_else(|| {
+        "the Prusa printer profiles are not on this computer yet: run `mica profiles fetch` \
+         to download them from Prusa (once), or pass --bundle"
+            .to_string()
     })
 }
 
@@ -862,6 +847,47 @@ fn write_previews(obj: &dyn LayerSource, dir: &Path, layers: &[usize]) -> Result
     Ok(())
 }
 
+/// `mica profiles fetch`: downloads the pinned Prusa bundle (and its bed assets) into Mica's
+/// settings folder, unless an intact copy is already there.
+fn fetch_profiles(args: &[String]) -> Result<(), String> {
+    use mica_profiles::vendor_profiles::prusa;
+    if let Some(a) = args.first() {
+        return Err(format!(
+            "unknown argument '{a}' (mica profiles fetch takes none)"
+        ));
+    }
+    eprintln!(
+        "Downloading the Prusa printer profiles {} from {} …",
+        prusa::VERSION,
+        prusa::REPOSITORY
+    );
+    let mut shown = -1i32;
+    let fetched = prusa::fetch(
+        &mut |f| {
+            let pct = (f * 100.) as i32;
+            if pct / 10 != shown / 10 {
+                shown = pct;
+                eprintln!("{pct:3} %");
+            }
+        },
+        &std::sync::atomic::AtomicBool::new(false),
+    )?;
+    println!(
+        "Prusa printer profiles {}: {} (SHA-256 checked)",
+        prusa::VERSION,
+        fetched.bundle.display()
+    );
+    println!("Bed models and pictures: {}", fetched.assets);
+    if !fetched.missing_assets.is_empty() {
+        println!(
+            "Not available ({}; those printers get a plain bed drawing): {}",
+            fetched.missing_assets.len(),
+            fetched.missing_assets.join(", ")
+        );
+    }
+    Ok(())
+}
+
 fn list_profiles(args: &[String]) -> Result<(), String> {
     let mut kinds = Vec::new();
     let mut bundle = None;
@@ -978,6 +1004,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 slice(a)
             }
         }),
+        Some("profiles") if args.get(1).is_some_and(|a| a == "fetch") => fetch_profiles(&args[2..]),
         Some("profiles") => list_profiles(&args[1..]),
         Some("profile") => profile_cmd::run(&args[1..], || load_bundle(None)),
         Some("mcp") => mcp_allowed(&args[1..]).and_then(|()| mcp::run(&args[1..])),

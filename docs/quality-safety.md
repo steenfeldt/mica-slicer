@@ -88,10 +88,12 @@ time per runner: ~15 s fetch (0 when cached), 10–20 min cold build (~3–6 min
 cache), ~3–5 min tests, ~1–3 min corpus. The full corpus and `cargo xtask parity` stay in the
 local merge gate.
 
-**Packaged builds** never read the build machine's checkout. A development binary falls back to
-the pinned profiles of the checkout it was built in (`mica_core::user_data::upstream_dir`) only
-when no PrusaSlicer/OrcaSlicer is installed and only while it runs from inside that checkout;
-`scripts/release.sh` compiles with `MICA_PACKAGED=1`, which removes the fallback entirely.
+**Packaged builds** never read the build machine's checkout. A development binary reads the
+pinned profiles of the checkout it was built in (`mica_core::user_data::upstream_dir`) first, but
+only while it runs from inside that checkout; `scripts/release.sh` compiles with `MICA_PACKAGED=1`,
+which removes that source entirely: packaged builds read the shipped OrcaSlicer subset and the
+Prusa bundle downloaded from Prusa (`mica_profiles::vendor_profiles`), then installed slicers.
+Tests never download: `crates/mica-cli/tests/packaged_profiles.rs` simulates a packaged build.
 `MICA_UPSTREAM_DIR` names the folder explicitly (the corpus runs a copy of the CLI outside the
 checkout and sets it).
 

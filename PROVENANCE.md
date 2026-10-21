@@ -294,6 +294,18 @@ source (including this file) must be made available under the AGPL.
 PrusaSlicer's AGPL repository (`prusaslicer/resources/profiles/`, older versions). Until this is
 clarified, Mica must not *bundle* profiles from `prusa-profiles` in anything it distributes; reading
 them at runtime from the user's own PrusaSlicer installation or from a local checkout is fine.
+Packaged builds therefore **download** the Prusa bundle: on first need Mica fetches exactly the
+pinned `PrusaResearch/2.5.12.ini` (and its bed models, textures and thumbnails) from Prusa's own
+public profile repository, the one PrusaSlicer updates from
+(`https://preset-repo-api.prusa3d.com/v1/repos/prusa-fff/`), checks each file's SHA-256 against the
+pins in `crates/mica-profiles/src/vendor_profiles.rs` / `vendor_profiles/prusa_assets.tsv` and keeps
+it in the user's settings folder (`mica profiles fetch`, or the app's download). The served bundle
+differs from the git commit only by 16 `thumbnail` lines; both hashes are accepted and slice
+identically. **OrcaSlicer's vendor profiles are AGPL-3.0** like Mica, so a packaged build *ships*
+a curated subset of the pinned `orca` copy (`cargo xtask bundle-profiles`, vendor list
+`SHIPPED_ORCA_VENDORS`: Snapmaker, Ratrig, Prusa (Orca's own Prusa profiles, used for Orca rules), BBL, Creality, Voron, Elegoo, Anycubic, Qidi, Sovol, plus
+`OrcaFilamentLibrary`, with their bed models, textures and pictures, OrcaSlicer's LICENSE.txt and a
+NOTICE); see THIRD_PARTY.md.
 The Prusa test fixtures are derived from PrusaSlicer's AGPL-3.0 copy instead:
 `crates/mica-profiles/tests/fixtures/coreone_hf04_speed_pla.ini` is the CORE One selection resolved
 from `prusaslicer/resources/profiles/PrusaResearch.ini` (2.4.14) with three short values updated to

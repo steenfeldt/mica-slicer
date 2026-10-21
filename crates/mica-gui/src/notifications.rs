@@ -95,6 +95,8 @@ pub enum Action {
     DismissImports,
     /// Show an exported file in Finder (the file manager), selected.
     Reveal(std::path::PathBuf),
+    /// Download the Prusa printer profiles (again, after a failure).
+    PrusaProfilesDownload,
 }
 
 #[derive(Clone, Debug)]
@@ -639,6 +641,7 @@ impl App {
         }
         wanted.extend(self.feature_off_notifications());
         wanted.extend(self.update_notification());
+        wanted.extend(self.prusa_download_notification());
         self.notifications.sync(wanted);
         self.notifications.expire();
     }
@@ -709,6 +712,7 @@ impl App {
                 self.open_import_review();
             }
             Action::DismissImports => self.answer_import_offer(id),
+            Action::PrusaProfilesDownload => self.retry_prusa_download(ctx),
             Action::Reveal(path) => {
                 if let Err(e) = crate::library::reveal(&path) {
                     self.notify_error(

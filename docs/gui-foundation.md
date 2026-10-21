@@ -18,9 +18,10 @@ export PATH="/opt/homebrew/opt/rustup/bin:$PATH"
 cargo run --offline -p mica-gui
 ```
 
-Profiles are read from the installed PrusaSlicer / OrcaSlicer resources, never bundled.
-Prusa also checks the repository's pinned `upstream/prusa-profiles` checkout. Override
-locations with `MICA_PRUSA_BUNDLE=/path/PrusaResearch.ini` or
+Profiles come from a development checkout's pinned `upstream/` first, then (packaged builds) the
+OrcaSlicer subset shipped in the app and the Prusa bundle downloaded from Prusa once
+(`mica_profiles::vendor_profiles`, `prusa_download.rs`), then installed PrusaSlicer / OrcaSlicer.
+Override locations with `MICA_PRUSA_BUNDLE=/path/PrusaResearch.ini` or
 `MICA_ORCA_PROFILES=/path/to/profiles`. Prusa's Mica user profiles are registered from
 `mica_profiles::user::Store::default_root()`; Orca native user presets are loaded from
 its macOS/Linux `user/default` directories. Printer compatibility filters print and

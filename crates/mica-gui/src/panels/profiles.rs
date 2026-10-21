@@ -149,32 +149,14 @@ pub struct Profiles {
     /// The OrcaSlicer `profiles` folder the Orca vendors come from (`MICA_ORCA_PROFILES`, an
     /// installed OrcaSlicer, or the pinned checkout); `None` when there is none.
     pub orca_root: Option<PathBuf>,
+    /// No Prusa bundle was found: it needs downloading from Prusa (`prusa_download.rs`).
+    pub prusa_missing: bool,
 }
 
 impl Profiles {
     pub fn discover_with_store(store: Store) -> Self {
         let mut vendors = Vec::new();
         let mut warnings = Vec::new();
-        let mut candidates = Vec::new();
-        if let Some(p) = std::env::var_os("MICA_PRUSA_BUNDLE") {
-            candidates.push(PathBuf::from(p));
-        }
-        if let Some(home) = mica_core::user_data::home() {
-            for p in [
-                "Library/Application Support/PrusaSlicer/vendor/PrusaResearch.ini",
-                ".config/PrusaSlicer/vendor/PrusaResearch.ini",
-                ".var/app/com.prusa3d.PrusaSlicer/config/PrusaSlicer/vendor/PrusaResearch.ini",
-            ] {
-                candidates.push(Path::new(&home).join(p));
-            }
-        }
-        if let Some(p) = mica_core::user_data::var_dir("APPDATA") {
-            candidates.push(Path::new(&p).join("PrusaSlicer/vendor/PrusaResearch.ini"));
-        }
-        // A development checkout's pinned copy (never in a packaged build).
-        if let Some(upstream) = mica_core::user_data::upstream_dir() {
-            candidates.push(upstream.join("prusa-profiles/PrusaResearch/2.5.12.ini"));
-        }
         let mut orca_user = Vec::new();
         let user_profiles: Vec<UserProfile> = [Kind::Printer, Kind::Print, Kind::Filament]
             .into_iter()
@@ -187,26 +169,19 @@ impl Profiles {
             })
             .flatten()
             .collect();
-        if let Some(p) = candidates.into_iter().find(|p| p.is_file()) {
-            match std::fs::read_to_string(p) {
-                Ok(s) => {
-                    let mut b = Bundle::parse(&s);
-                    let vendor_name = b.vendor.get("name").cloned().unwrap_or_default();
-                    for p in &user_profiles {
-                        if p.orca.is_none()
-                            && (p.inherits_source.is_empty() || p.inherits_source == vendor_name)
-                        {
-                            b.add_user_preset(p.kind, &p.name, &p.inherits, &p.settings);
-                        }
-                    }
-                    vendors.push(("Prusa".into(), Vendor::Prusa(b)));
-                }
-                Err(e) => warnings.push(e.to_string()),
+        // The Prusa bundle (`vendor_profiles::prusa::find_bundle`); when there is none yet it is
+        // downloaded from Prusa (`prusa_download.rs`), never silently missing.
+        let mut prusa_missing = false;
+        if let Some(p) = mica_profiles::vendor_profiles::prusa::find_bundle(None) {
+            match std::fs::read_to_string(&p) {
+                Ok(s) => vendors.push((
+                    "Prusa".into(),
+                    Vendor::Prusa(Self::prusa_bundle(&s, &user_profiles)),
+                )),
+                Err(e) => warnings.push(format!("{}: {e}", p.display())),
             }
         } else {
-            warnings.push(
-                "Prusa profiles missing. Install PrusaSlicer or set MICA_PRUSA_BUNDLE.".into(),
-            );
+            prusa_missing = true;
         }
         let root = std::env::var_os("MICA_ORCA_PROFILES").map(PathBuf::from);
         let mut orca_root = root.clone();
@@ -247,6 +222,7 @@ impl Profiles {
             incompatible: BTreeSet::new(),
             store,
             orca_root: orca_root.filter(|r| r.is_dir()),
+            prusa_missing,
         };
         if let Some(home) = mica_core::user_data::home() {
             let appdata = mica_core::user_data::var_dir("APPDATA");
@@ -261,6 +237,33 @@ impl Profiles {
     pub fn look_in(&mut self, home: &Path, appdata: Option<&Path>) {
         self.import_dirs = mica_profiles::import::source_dirs(home, appdata);
         self.import_home = Some((home.to_path_buf(), appdata.map(Path::to_path_buf)));
+    }
+
+    /// Parses the Prusa bundle with Mica's own Prusa-based user profiles registered on it.
+    fn prusa_bundle(text: &str, user_profiles: &[UserProfile]) -> Bundle {
+        let mut b = Bundle::parse(text);
+        let vendor_name = b.vendor.get("name").cloned().unwrap_or_default();
+        for p in user_profiles {
+            if p.orca.is_none()
+                && (p.inherits_source.is_empty() || p.inherits_source == vendor_name)
+            {
+                b.add_user_preset(p.kind, &p.name, &p.inherits, &p.settings);
+            }
+        }
+        b
+    }
+
+    /// Adds the Prusa bundle once it has been downloaded (`prusa_download.rs`).
+    pub fn install_prusa(&mut self, path: &Path) -> Result<(), String> {
+        if self.vendor_index("Prusa").is_some() {
+            self.prusa_missing = false;
+            return Ok(());
+        }
+        let text = std::fs::read_to_string(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        let b = Self::prusa_bundle(&text, &self.user);
+        self.vendors.push(("Prusa".into(), Vendor::Prusa(b)));
+        self.prusa_missing = false;
+        Ok(())
     }
 
     /// Loads one OrcaSlicer vendor's full bundle (`Ratrig`, `Voron`, …) with the shared
@@ -1157,6 +1160,7 @@ mod tests {
             show_incompatible: false,
             incompatible: BTreeSet::new(),
             orca_root: None,
+            prusa_missing: false,
             store,
         };
         p.refresh();

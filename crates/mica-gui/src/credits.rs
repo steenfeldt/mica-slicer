@@ -517,10 +517,22 @@ pub fn entries(brick_layers: bool) -> Vec<Entry> {
             "Prusa Research",
             "",
             "https://github.com/prusa3d/PrusaSlicer-settings-prusa-fff",
-            "Printer, print and filament profiles for the CORE One and XL. Bed models and \
-             printer pictures are read from your PrusaSlicer installation; they are trademarks \
-             of Prusa Research.",
+            "Printer, print and filament profiles for Prusa printers, downloaded from Prusa's \
+             profile server once (not shipped with Mica), with their bed models and printer \
+             pictures; they are trademarks of Prusa Research.",
             Some("prusa-profiles"),
+        ),
+        entry(
+            Printers,
+            "OrcaSlicer vendor profiles",
+            "OrcaSlicer contributors and the printer vendors",
+            "AGPL-3.0",
+            "https://github.com/OrcaSlicer/OrcaSlicer/tree/main/resources/profiles",
+            "Printer, print and filament profiles, bed models and pictures for Snapmaker, \
+             RatRig, Bambu Lab, Creality, Voron, Elegoo, Anycubic, QIDI and Sovol (plus OrcaSlicer's own \
+             Prusa profiles), shipped with Mica from OrcaSlicer 2.4.2, with OrcaSlicer's shared filament library. \
+             Names and logos are trademarks of their owners.",
+            Some("orca"),
         ),
         entry(
             Printers,

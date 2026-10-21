@@ -72,6 +72,10 @@ description = "Mica Slicer, a slicer for 3D printers"
 license-file = "../../LICENSE"
 icons = ["assets/icon/mica.icns", "assets/icon/mica.ico", "assets/icon/mica-512.png"]
 binaries = [{ path = "mica-gui", main = true }]
+# The OrcaSlicer vendor profiles a package ships, written by `cargo xtask bundle-profiles`
+# (scripts/release.sh runs it first): macOS Contents/Resources/profiles/orca, Windows next to
+# the executable (mica_profiles::vendor_profiles::bundled_root). Paths are relative to this crate.
+resources = [{ src = "../../target/bundled-profiles/orca", target = "profiles/orca" }]
 
 [[package.metadata.packager.file-associations]]
 extensions = ["3mf"]

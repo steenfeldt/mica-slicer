@@ -147,7 +147,29 @@ Linux packages must depend on the GStreamer core libraries (`libgstreamer1.0-0`,
 optional. OpenH264 compiled from source is only a development option (cargo feature `openh264`,
 default off) and must never be enabled for packaged builds.
 
+## OrcaSlicer vendor profiles (shipped in packaged builds, AGPL-3.0)
+
+Packaged Mica builds ship a subset of OrcaSlicer's `resources/profiles` (orca `v2.4.2`,
+`8500fcdcca`, AGPL-3.0, the same license as Mica), unchanged: the vendors Snapmaker, Ratrig, BBL
+(Bambu Lab), Creality, Voron, Elegoo, Anycubic, Qidi, Sovol and Prusa (Orca's own Prusa profiles, for Orca rules) with all their printer, process and
+filament profiles, the shared `OrcaFilamentLibrary` they inherit from, and their printers' bed
+models, bed textures and `_cover.png` pictures. `cargo xtask bundle-profiles` writes it from the
+pinned checkout (with OrcaSlicer's `LICENSE.txt` and a `NOTICE.txt`); the vendor list lives in
+`crates/mica-profiles/src/vendor_profiles.rs` (`SHIPPED_ORCA_VENDORS`). Copyright the OrcaSlicer
+contributors and the printer vendors. Several bed textures carry the vendor's name or logo
+(Creality, Bambu Lab, QIDI, RatRig, Voron, Snapmaker, …): these are trademarks of their owners,
+shipped as part of the vendors' own AGPL profile assets, shown only on their own printers' beds as
+OrcaSlicer shows them, and imply no affiliation.
+
+## Prusa vendor profiles (downloaded from Prusa, not distributed)
+
+The PrusaResearch bundle states no license (PROVENANCE.md), so Mica never ships it: on first use it
+downloads the pinned version 2.5.12 and its bed assets from Prusa's public profile repository
+(`preset-repo-api.prusa3d.com`), verified by SHA-256, into the user's settings folder.
+
 ## Printer bed models and textures (loaded at runtime, not distributed)
+
+Except for the shipped OrcaSlicer subset above:
 
 The 3D view shows each printer's real bed sheet: PrusaSlicer's `coreone_bed.stl` + `coreone.svg`,
 `xl_bed.stl` + `xl.svg` and OrcaSlicer's `Snapmaker U1_bed.stl` + `Snapmaker U1_texture.svg`, as
