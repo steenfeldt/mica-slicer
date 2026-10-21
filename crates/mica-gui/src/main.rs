@@ -65,6 +65,7 @@ mod printhost;
 mod project;
 #[cfg(test)]
 mod project_state_tests;
+mod prusa_download;
 #[cfg(test)]
 mod regressions;
 mod render;
@@ -88,6 +89,7 @@ mod worker;
 
 const USAGE: &str = "Mica Slicer
   mica-gui [--welcome] [--whats-new] [model.stl|project.3mf …]
+  mica-gui --list-printers   where the vendor profiles come from, and the printers loaded at start
   mica-gui --screenshot out.png model.stl|project.3mf [--preview] [--xl] [--printer name] [--select N] [--plate N]
            [--gizmo move|rotate|scale] [--focus] [--view iso|top|bottom|below|front|rear|left|right]
            [--pointer X,Y] [--plates N] [--tab Quality] [--advanced] [--search text]
@@ -113,6 +115,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             .join("cache")
             .join("textures"),
     ));
+    if args.iter().any(|a| a == "--list-printers") {
+        list_printers();
+        return Ok(());
+    }
     if args.iter().any(|a| a == "--monkey") {
         return monkey::run(&args).map_err(Into::into);
     }
@@ -168,6 +174,36 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         Box::new(move |cc| Ok(Box::new(app::App::new(cc, files, launch)))),
     )?;
     Ok(())
+}
+
+/// `mica-gui --list-printers`: where this build finds its vendor profiles and the printers it
+/// loads at start (checks a package without opening a window; reads only).
+fn list_printers() {
+    use mica_profiles::vendor_profiles::prusa;
+    let profiles = panels::profiles::Profiles::discover_with_store(
+        mica_profiles::user::Store::open(mica_profiles::user::Store::default_root()),
+    );
+    match prusa::find_bundle(None) {
+        Some(p) => println!("Prusa profiles: {}", p.display()),
+        None => println!(
+            "Prusa profiles: not downloaded yet. {}",
+            prusa::DOWNLOAD_NOTE
+        ),
+    }
+    match &profiles.orca_root {
+        Some(root) => println!(
+            "Orca profiles: {} ({})",
+            root.display(),
+            mica_profiles::orca::discovery::vendor_indexes(root).join(", ")
+        ),
+        None => println!("Orca profiles: none found"),
+    }
+    for (_, vendor, name) in profiles.all_printers() {
+        println!("{vendor}/{name}");
+    }
+    for w in &profiles.warnings {
+        eprintln!("warning: {w}");
+    }
 }
 
 /// The window and Dock icon (assets/icon/README.md). The art is compiled in, so decoding can

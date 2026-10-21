@@ -12,4 +12,5 @@ pub mod project;
 pub mod prusa;
 pub mod rules_fill;
 pub mod user;
+pub mod vendor_profiles;
 pub mod visible;

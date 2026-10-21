@@ -1394,8 +1394,19 @@ impl App {
             Stroke::new(1., p.border_soft),
         );
         let footer_h = 48.;
+        // No Prusa printers until their profiles are downloaded: say so above the cards.
+        let mut list_top = rule_y + 18.;
+        if self.profiles.prusa_missing {
+            let band = Rect::from_min_size(
+                Pos2::new(left, list_top),
+                Vec2::new(rect.width() - 2. * PAD, 52.),
+            );
+            let mut child = ui.new_child(egui::UiBuilder::new().max_rect(band));
+            self.prusa_download_ui(&mut child);
+            list_top = band.bottom() + 10.;
+        }
         let list = Rect::from_min_max(
-            Pos2::new(left, rule_y + 18.),
+            Pos2::new(left, list_top),
             Pos2::new(rect.right() - PAD, rect.bottom() - footer_h - 12.),
         );
         let mut chosen = None;

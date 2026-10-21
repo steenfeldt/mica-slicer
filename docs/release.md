@@ -122,6 +122,25 @@ tests); signatures are still checked against the trusted keys compiled into the 
   key first, followed by offline backups. Any one can sign an update. Losing all trusted
   private keys means testers must reinstall by hand.
 
+## Vendor profiles in the packages
+
+`scripts/release.sh` first runs `cargo xtask bundle-profiles target/bundled-profiles`: the
+OrcaSlicer vendors in `SHIPPED_ORCA_VENDORS` (`crates/mica-profiles/src/vendor_profiles.rs`, the
+one place to change the list), everything they inherit from (`OrcaFilamentLibrary`), their bed
+models, textures and covers, OrcaSlicer's LICENSE.txt and a NOTICE, copied from the pinned
+`upstream/orca` (needs `scripts/fetch-upstream.sh orca`; refused when the checkout is not at the
+pinned commit). cargo-packager puts it into the app (`resources` in `crates/mica-gui/Cargo.toml`:
+macOS `Contents/Resources/profiles/orca`, Windows `<install dir>\profiles\orca`), the AppImage
+script into `usr/share/mica-slicer/profiles/orca`; the macOS build stops if it is missing. About
+24 MB (7,800 files, ~8.7 MB compressed).
+
+Prusa profiles are never packaged (PROVENANCE.md): the app downloads the pinned 2.5.12 bundle from
+Prusa's profile repository on first use and checks its SHA-256 (`mica profiles fetch` on the
+command line). Moving the Prusa pin means updating `prusa::VERSION`, `BUNDLE_SHA256` and
+`vendor_profiles/prusa_assets.tsv` together. Check a package without network: `MICA_CONFIG_DIR=$(mktemp -d)
+"…/Mica Slicer.app/Contents/MacOS/mica-gui" --list-printers` lists the shipped printers and says
+the Prusa profiles still need downloading.
+
 ## H.264 and OpenH264
 
 Packaged builds contain **no OpenH264 code** (H.264 patent licensing covers only Cisco's own

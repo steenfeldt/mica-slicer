@@ -56,6 +56,11 @@ ldd "$bin" | awk '/=> \// {print $3}' | while read -r lib; do
   esac
 done
 ls "$app/usr/lib/fallback"
+# The shipped OrcaSlicer profiles (scripts/release.sh ran cargo xtask bundle-profiles); Mica
+# finds them at usr/share/mica-slicer/profiles next to usr/bin.
+[ -f target/bundled-profiles/orca/Snapmaker.json ] || { echo "error: no target/bundled-profiles" >&2; exit 1; }
+mkdir -p "$app/usr/share/mica-slicer/profiles"
+cp -R target/bundled-profiles/orca "$app/usr/share/mica-slicer/profiles/orca"
 cp crates/mica-gui/assets/icon/mica-512.png "$app/mica-slicer.png"
 cp crates/mica-gui/assets/icon/mica-512.png "$app/usr/share/icons/hicolor/512x512/apps/mica-slicer.png"
 cp crates/mica-gui/packaging/linux/mica-slicer.desktop "$app/mica-slicer.desktop"

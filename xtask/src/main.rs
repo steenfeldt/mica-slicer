@@ -15,9 +15,12 @@
 //! `monkey` runs the GUI monkey test (see monkey.rs and docs/quality-safety.md).
 //! `parity` checks that the GUI exports the CLI's G-code byte for byte (see parity.rs).
 //! `gen-credits` regenerates the About window's library list and THIRD_PARTY_LICENSES.md (see credits.rs).
+//! `bundle-profiles <out-dir>` writes the OrcaSlicer profiles a packaged Mica ships (see
+//! bundle_profiles.rs).
 //! `site-shots` regenerates the website's screenshots from site/screenshots.toml in the website
 //! repository (`$MICA_WEBSITE_DIR`, default `../mica-website`; see site_shots.rs).
 
+mod bundle_profiles;
 mod corpus;
 mod credits;
 mod gen_option_text;
@@ -88,6 +91,10 @@ fn main() -> ExitCode {
                 failed => failed,
             }
         }
+        Some("bundle-profiles") => bundle_profiles::run(
+            Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap(),
+            std::env::args().nth(2).as_deref(),
+        ),
         Some("gen-credits") => {
             credits::run(Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap())
         }
@@ -100,7 +107,7 @@ fn main() -> ExitCode {
         }
         _ => {
             eprintln!(
-                "usage: cargo xtask provenance | reference-hashes [--output DIR] [--baseline DIR] | corpus [--quick] [--case NAME] [--printer core|xl|u1|mini|mk35] | monkey [--quick] [--seeds N] [--steps N] [--seed S] | parity [test name] | gen-prusa-options <defaults.ini> | gen-option-text [orca-dir] [prusaslicer-dir] | gen-setting-names | gen-credits | site-shots [--only NAME,…] [--dry-run] [--check]"
+                "usage: cargo xtask provenance | reference-hashes [--output DIR] [--baseline DIR] | corpus [--quick] [--case NAME] [--printer core|xl|u1|mini|mk35] | monkey [--quick] [--seeds N] [--steps N] [--seed S] | parity [test name] | gen-prusa-options <defaults.ini> | gen-option-text [orca-dir] [prusaslicer-dir] | gen-setting-names | gen-credits | bundle-profiles <out-dir> | site-shots [--only NAME,…] [--dry-run] [--check]"
             );
             ExitCode::from(2)
         }

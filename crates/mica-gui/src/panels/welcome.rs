@@ -174,6 +174,10 @@ impl App {
                 ) {
                     start = Some(Start::AddPrinter);
                 }
+                if self.profiles.prusa_missing {
+                    ui.add_space(6.);
+                    self.prusa_download_ui(ui);
+                }
                 if let Some(found) = &state.importable {
                     ui.add_space(8.);
                     if card(

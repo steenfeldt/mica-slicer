@@ -7,14 +7,15 @@
 // Source: prusaslicer@b028299c77 src/libslic3r/Preset.cpp :: PresetUtils::system_printer_bed_model
 // Source: prusaslicer@b028299c77 resources/shaders/110/printbed.fs
 // Changes: Rust; the printer's bed model (STL) and texture (SVG) are looked up at runtime in
-// Changes: The home folder comes from mica_core::user_data (none in tests and test tools).
-// the pinned upstream checkouts and the installed PrusaSlicer / OrcaSlicer apps and never
-// bundled; the SVG is rasterised once with resvg instead of nanosvg + GL compression; the
+// the pinned upstream checkouts and the installed PrusaSlicer / OrcaSlicer apps; the SVG is
+// rasterised once with resvg instead of nanosvg + GL compression; the
 // texture quad carries wgpu UVs (v runs down the image) over the bed outline's bounding
 // box; the see-through rules for a camera below the bed return alpha factors for the
 // renderer instead of GL state; a sheet whose top surface would reach the texture quad
 // (OrcaSlicer's U1 model) is lowered so the top sits just under it; dark line art is
 // inverted for the dark theme.
+// Changes: The home folder comes from mica_core::user_data (none in tests and test tools).
+// Changes: Also the Orca subset a packaged Mica ships and the Prusa assets it downloaded.
 
 //! The printer's real bed sheet: PrusaSlicer and OrcaSlicer ship a bed model (`*_bed.stl`)
 //! and a texture (`*.svg`) per printer model. Mica reads them from those installations (or
@@ -50,7 +51,8 @@ impl AssetFiles {
 
 /// Directories searched for a vendor's bed assets, in order: an explicit override
 /// (`MICA_BED_ASSETS`), the pinned upstream data of a development checkout (never in a
-/// packaged build), then the installed slicers.
+/// packaged build), the Orca profiles a packaged Mica ships and the Prusa assets it downloaded
+/// (`mica_profiles::vendor_profiles`), then the installed slicers.
 pub fn asset_roots(vendor: &str) -> Vec<PathBuf> {
     let mut roots = Vec::new();
     if let Some(p) = std::env::var_os("MICA_BED_ASSETS") {
@@ -62,6 +64,13 @@ pub fn asset_roots(vendor: &str) -> Vec<PathBuf> {
         }
         // The pinned Prusa vendor profiles repository holds the same assets.
         roots.push(upstream.join("prusa-profiles").join(vendor));
+    }
+    // What a packaged Mica ships (the Orca subset) or downloaded (the Prusa bundle's assets).
+    if let Some(orca) = mica_profiles::vendor_profiles::bundled_orca() {
+        roots.push(orca.join(vendor));
+    }
+    if vendor == mica_profiles::vendor_profiles::prusa::VENDOR {
+        roots.push(mica_profiles::vendor_profiles::prusa::cache_dir());
     }
     let home = mica_core::user_data::home();
     if let Some(home) = &home {

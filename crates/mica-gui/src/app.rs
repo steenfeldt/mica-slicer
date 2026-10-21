@@ -447,6 +447,8 @@ pub struct App {
     pub(crate) native_menu: Option<crate::menu::native::NativeMenu>,
     /// Check for Updates and the daily check (`updater.rs`); off in headless runs.
     pub(crate) updater: crate::updater::Updater,
+    /// The Prusa printer profiles, downloaded from Prusa once (`prusa_download.rs`).
+    pub(crate) prusa_download: crate::prusa_download::PrusaDownload,
     /// An opened G-code file shown read-only in Preview over the scene (`gcode_doc`).
     pub(crate) gcode: Option<crate::gcode_doc::Doc>,
     /// A G-code file being opened (on its thread).
@@ -504,6 +506,7 @@ impl App {
         }
         app.init_native_menu(&cc.egui_ctx);
         app.startup_update_check(&cc.egui_ctx);
+        app.startup_prusa_download(&cc.egui_ctx);
         let dev = mica_update::is_dev_build(&std::env::current_exe().unwrap_or_default());
         app.launch_windows(prefs_existed, dev, launch.welcome, launch.whats_new);
         app
@@ -733,6 +736,7 @@ impl App {
             } else {
                 crate::updater::Updater::for_this_build()
             },
+            prusa_download: Default::default(),
             gcode: None,
             gcode_loading: None,
             mixes: Default::default(),
@@ -4095,6 +4099,7 @@ impl App {
         self.poll(&ctx);
         self.poll_mcp(&ctx);
         self.poll_updater(&ctx);
+        self.poll_prusa_download(&ctx);
         self.library_frame(&ctx);
         self.shortcuts(&ctx);
         let dropped = ctx.input(|i| {

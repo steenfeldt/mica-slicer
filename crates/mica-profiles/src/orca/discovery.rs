@@ -10,6 +10,7 @@
 // Changes: The home folder comes from mica_core::user_data (none in tests and test tools).
 // Changes: preset_vendors maps preset names to vendor indexes for importing user presets (original).
 // Changes: Checkout fallback via mica_core::user_data::upstream_dir (not packaged; first in tests).
+// Changes: Checkout first, then the subset a packaged Mica ships, then installed OrcaSlicer.
 
 use std::path::{Path, PathBuf};
 
@@ -87,8 +88,9 @@ pub fn preset_vendors(root: &Path) -> std::collections::BTreeMap<(Kind, String),
     out
 }
 
-/// Installed resources first, then a development checkout's pinned copy (first in an isolated
-/// process: tests). Portable installs can use an explicit root.
+/// A development checkout's pinned copy (never in a packaged build), then the profiles shipped
+/// with a packaged Mica (`vendor_profiles::bundled_orca`), then an installed OrcaSlicer.
+/// Portable installs can use an explicit root.
 pub fn find_profiles(explicit: Option<&Path>, vendor: &str) -> Result<PathBuf, Error> {
     let vendor = vendor_index(vendor);
     if !is_index_name(vendor) {
@@ -102,9 +104,17 @@ pub fn find_profiles(explicit: Option<&Path>, vendor: &str) -> Result<PathBuf, E
             Err(Error(format!("{} has no {index}", path.display())))
         };
     }
-    let mut paths = vec![PathBuf::from(
+    let mut paths = vec![];
+    // A development checkout's pinned copy (never in a packaged build): tests, test tools and
+    // `cargo run` slice with the pinned profiles whatever OrcaSlicer happens to be installed.
+    if let Some(upstream) = mica_core::user_data::upstream_dir() {
+        paths.push(upstream.join("orca/resources/profiles"));
+    }
+    // The subset a packaged Mica ships (the same pinned OrcaSlicer profiles).
+    paths.extend(crate::vendor_profiles::bundled_orca());
+    paths.push(PathBuf::from(
         "/Applications/OrcaSlicer.app/Contents/Resources/profiles",
-    )];
+    ));
     for prefix in [
         "/usr/local/share/OrcaSlicer",
         "/usr/share/OrcaSlicer",
@@ -154,23 +164,12 @@ pub fn find_profiles(explicit: Option<&Path>, vendor: &str) -> Result<PathBuf, E
             }
         }
     }
-    // A development checkout's pinned copy (never in a packaged build). Tests and test tools
-    // (isolated processes) use it first, so they slice with the pinned profiles whatever
-    // OrcaSlicer happens to be installed.
-    if let Some(upstream) = mica_core::user_data::upstream_dir() {
-        let pinned = upstream.join("orca/resources/profiles");
-        if mica_core::user_data::isolated() {
-            paths.insert(0, pinned);
-        } else {
-            paths.push(pinned);
-        }
-    }
     paths
         .into_iter()
         .find(|p| p.join(&index).is_file())
         .ok_or_else(|| {
             Error(format!(
-                "no Orca {vendor} profiles found; install OrcaSlicer or pass --profiles-dir"
+                "no Orca {vendor} profiles found: Mica ships only some vendors; install OrcaSlicer or pass --profiles-dir"
             ))
         })
 }

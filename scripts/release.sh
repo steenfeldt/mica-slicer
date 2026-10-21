@@ -85,8 +85,9 @@ need() { command -v "$1" >/dev/null 2>&1 || die "$1 is not installed ($2)"; }
 skipped=""
 
 export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
-# Packaged binaries read profiles only from installed slicers, never from this checkout's
-# upstream/ (mica_core::user_data::upstream_dir).
+# Packaged binaries never read this checkout's upstream/ (mica_core::user_data::upstream_dir):
+# they read the OrcaSlicer profiles shipped inside the package (cargo xtask bundle-profiles,
+# below), the Prusa profiles they download from Prusa, and installed slicers.
 export MICA_PACKAGED=1
 [ $dry_run = 1 ] && [ $publish = 1 ] && die "--dry-run packages are never published; drop one of --dry-run and --publish"
 [ $prebuilt = 1 ] && [ -n "$new_version" ] && die "--prebuilt publishes the current version; set the version when building"
@@ -229,6 +230,16 @@ fi
 profile_dir() { if [ "$1" = dev ]; then echo debug; else echo "$1"; fi; }
 pdir="$(profile_dir "$profile")"
 
+# The OrcaSlicer vendor profiles every package ships (AGPL-3.0, from the pinned upstream/orca;
+# the vendor list is mica_profiles::vendor_profiles::SHIPPED_ORCA_VENDORS). cargo-packager takes
+# them from here (crates/mica-gui/Cargo.toml `resources`), the AppImage script copies them.
+bundled_profiles="$root/target/bundled-profiles"
+if [ $prebuilt = 0 ]; then
+  say "Shipped OrcaSlicer profiles"
+  cargo xtask bundle-profiles "$bundled_profiles" || die "cargo xtask bundle-profiles failed (scripts/fetch-upstream.sh orca)"
+  echo "$(du -sh "$bundled_profiles/orca" | cut -f1) on disk in $bundled_profiles/orca"
+fi
+
 # No OpenH264 in a shipped binary (the H.264 patent licence covers only Cisco's binaries).
 check_no_openh264() {
   if grep -a -q -i -E 'openh264|WelsCreateDecoder|WelsDecoder' "$1"; then
@@ -279,6 +290,8 @@ build_macos() {
     --profile "$profile" --target aarch64-apple-darwin --out-dir "$out")
   local app="$out/Mica Slicer.app"
   [ -d "$app" ] || die "cargo-packager made no app bundle"
+  [ -f "$app/Contents/Resources/profiles/orca/Snapmaker.json" ] \
+    || die "the app bundle has no shipped profiles (Contents/Resources/profiles/orca)"
 
   if [ $dry_run = 1 ]; then
     codesign --force --deep --sign - "$app"

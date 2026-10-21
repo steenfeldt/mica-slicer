@@ -363,6 +363,10 @@ impl App {
                             ui.close();
                         }
                     }
+                    if self.profiles.prusa_missing {
+                        ui.separator();
+                        self.prusa_download_ui(ui);
+                    }
                     ui.separator();
                     if ui.button("Add printer…").clicked() {
                         open_add = true;
