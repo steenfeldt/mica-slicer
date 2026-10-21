@@ -1,0 +1,40 @@
+# Hand-written rows for Mica's own options, Orca options the generator does not cover and relabeled rows.
+# Same columns as option_text.tsv; an entry here replaces a generated one. The tooltip column stays empty: every setting's help text lives in help_text.tsv.
+mica_slicing_rules	Slicing rules	Slicing rules	Slicer				simple		prusaslicer=PrusaSlicer|orcaslicer=OrcaSlicer	mica
+z_hop_types	Z-hop type	Z-hop type	Z-Hop				simple		Auto Lift=Auto Lift|Normal Lift=Normal Lift|Slope Lift=Slope Lift|Spiral Lift=Spiral Lift	orca:z_hop_types
+gcode_label_objects	Label objects	Label objects	G-code output				advanced		disabled=Disabled|octoprint=OctoPrint comments|firmware=Firmware-specific	mica
+bridge_line_width	Bridge line width		Quality	mm or %	0	100	advanced			orca:bridge_line_width
+retract_layer_change	Retract on layer change	Retract on layer change					advanced			orca:retract_when_changing_layer
+filament_retract_layer_change	Retract on layer change	Retract on layer change	Filament overrides				advanced			orca:filament_retract_when_changing_layer
+support_material_auto	Automatic	Automatic supports	Support material				simple			orca-label:support_type
+mica_texture_skin	Texture	Texture	Texture				simple		none=Off|external=Outer walls|all=All outer walls	mica		
+mica_texture_skin_texture	Texture image	Texture image	Texture				simple			mica		
+mica_texture_skin_amplitude	Depth	Depth	Texture	mm	0	2	simple			mica		
+mica_texture_skin_direction	Direction	Direction	Texture				simple		outward=Outward|inward=Inward|both=Both ways	mica		
+mica_texture_skin_projection	Projection	Projection	Texture				simple		triplanar=Triplanar|cubic=Cubic|cylindrical=Cylindrical|spherical=Spherical|planar_xy=Planar from the top (XY)|planar_xz=Planar from the front (XZ)|planar_yz=Planar from the side (YZ)	mica		
+mica_texture_skin_scale	Tile size	Tile size	Texture	mm	0.1	1000	simple			mica		
+mica_texture_skin_scale_v	Tile height	Tile height	Texture	mm	0	1000	advanced			mica		
+mica_texture_skin_rotation	Rotation	Rotation	Texture	°	-360	360	simple			mica		
+mica_texture_skin_offset_u	Offset, across	Offset, across	Texture	mm	-1000	1000	advanced			mica		
+mica_texture_skin_offset_v	Offset, up	Offset, up	Texture	mm	-1000	1000	advanced			mica		
+mica_texture_skin_cylinder_axis	Cylinder axis	Cylinder axis	Texture				advanced		z=Z (upright)|x=X|y=Y	mica		
+mica_texture_skin_cap_angle	Cap angle	Cap angle	Texture	°	0	90	advanced			mica		
+mica_texture_skin_blend	Projection blend	Projection blend	Texture		0	1	advanced			mica		
+mica_texture_skin_smoothing	Smoothing	Smoothing	Texture	px	0	50	advanced			mica		
+mica_texture_skin_invert	Invert	Invert	Texture				advanced			mica		
+mica_texture_skin_pattern_ratio	Pattern proportion	Pattern proportion	Texture		0	1	advanced			mica		
+mica_texture_skin_pattern_softness	Pattern softness	Pattern softness	Texture		0	1	advanced			mica		
+mica_texture_skin_point_dist	Point distance	Point distance	Texture	mm	0.05	5	advanced			mica		
+mica_texture_skin_first_layer	Texture the first layer	Texture the first layer	Texture				simple			mica		
+mica_texture_skin_top_angle	Top angle limit	Top angle limit	Texture	°	0	90	advanced			mica		
+mica_texture_skin_bottom_angle	Bottom angle limit	Bottom angle limit	Texture	°	0	90	advanced			mica		
+mica_texture_skin_overhang_clamp	Gentle on overhangs	Gentle on overhangs	Texture				advanced			mica		
+mica_texture_skin_falloff	Soft border	Soft border	Texture	mm	0	50	advanced			mica		
+mica_texture_skin_falloff_curve	Soft border shape	Soft border shape	Texture				advanced		ease=Ease in|scurve=S-curve|linear=Linear	mica		
+mica_texture_skin_surfaces	Textured surfaces	Textured surfaces	Texture				simple		walls=Walls only (fast)|walls_and_tops=All surfaces	mica		
+mica_texture_paint_slots	Texture paint slots	Texture paint slots	Texture				advanced			mica		
+mica_brick_layers	Brick layers	Brick layers	Brick layers				simple			mica		
+mica_brick_layers_flow_ratio	Extra flow	Brick layers extra flow	Brick layers	%	100	150	simple			mica		
+mica_brick_layers_start_layer	First layer	Brick layers first layer	Brick layers		1	1000	advanced			mica		
+mica_brick_layers_end_margin_layers	Shell margin	Brick layers shell margin	Brick layers	layers	0	50	advanced			mica		
+mica_brick_layers_travel_lift	Travel lift	Brick layers travel lift	Brick layers	mm	0	5	advanced			mica		

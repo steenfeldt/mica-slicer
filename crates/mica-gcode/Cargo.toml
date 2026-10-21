@@ -1,0 +1,21 @@
+[package]
+name = "mica-gcode"
+description = "Mica Slicer G-code output: text (Klipper, Prusa) and Prusa binary G-code"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+flate2 = "1.1.10"
+jiff = "0.2.38"
+mica-core.workspace = true
+mica-template = { version = "0.0.1", path = "../mica-template" }
+
+[dev-dependencies]
+mica-testkit.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,425 @@
+# Mica's help text for every setting: the tooltip the editor shows. Hand-written, in Mica's own words.
+# Columns: key, help text, label (empty keeps the generated label), choice labels (value=Label|…, only the values listed are relabeled).
+# Rules: American English, 1–3 short sentences, at most 400 characters, no hex colors. Name the slicing rules only as "With PrusaSlicer rules" / "With Orca rules".
+# The upstream tooltips in option_text.tsv are reference data only; they are never shown.
+mica:support_mode	Off: no supports. Enforcers only: supports only where you paint or place them. Everywhere: automatic supports under every overhang flatter than the threshold angle. Build plate only: automatic, but never standing on the model.
+mica:top_bottom	Solid layers at the top and at the bottom of the model. Drag the left number for the top, the right one for the bottom, or click to type "5 / 3".
+brim_ears_max_angle	Ears go on corners sharper than this angle. Lower values put ears only on the pointiest corners; around 180° puts them almost everywhere except straight edges, and 0 adds none.
+brim_ears_detection_length	How much the outline is simplified before corners are looked for, so tiny wiggles don't count as corners. 0 uses the outline as it is.
+printer_notes	Your own notes about this printer. They are saved with the printer profile and don't affect the G-code.
+arc_fitting	Replaces runs of short straight moves along curves with G2/G3 arc moves, which makes the G-code smaller. Klipper splits arcs back into short lines, so it usually gains nothing there.		disabled=Off|emit_center=On (G2/G3 arcs)
+autoemit_temperature_commands	Adds the heat-up commands for nozzle, bed and chamber around the start G-code. If the start G-code already sets those temperatures itself, Mica leaves them out so your own order is kept. Turn off to leave all heating to the start G-code.
+automatic_extrusion_widths	Derives all line widths from the nozzle diameter. Mica keeps this value in profiles but does not apply it; set the line widths directly instead.
+automatic_infill_combination	Prints sparse infill only every few layers, as thicker lines, to save time. Mica keeps this value in profiles but does not apply it.
+automatic_infill_combination_max_layer_height	The thickest combined infill layer allowed by automatic infill combination, in mm or as a percentage of the nozzle. Mica keeps this value in profiles but does not apply it.
+avoid_crossing_curled_overhangs	Routes travels around areas where overhangs may have curled up, to avoid nozzle hits. Mica keeps this value in profiles but does not apply it.
+avoid_crossing_perimeters	Routes travels around walls instead of straight across them, which avoids small blobs and strings on visible surfaces. Travels get longer, so printing takes a bit more time.
+avoid_crossing_perimeters_max_detour	The longest detour allowed when avoiding walls, in mm or as a percentage of the direct travel. A longer detour is skipped and the travel goes straight. 0 means no limit.
+bed_custom_model	A 3D model file shown as the printer's bed in the viewport. It only changes how the bed looks.
+bed_custom_texture	An image shown on the bed surface in the viewport. It only changes how the bed looks.
+bed_shape	The printable area of the bed: the outline the nozzle can reach. Parts outside it can't be sliced.
+bed_temperature	Bed temperature for every layer after the first. 0 writes no bed temperature commands, so the start G-code or the printer decides.
+bed_temperature_extruder	With several filaments, which one sets the bed temperature. 0 takes the filament that prints first on the first and second layers.
+before_layer_gcode	Custom G-code run at every layer change, before the nozzle moves up to the new layer. Placeholders such as [layer_num] and [layer_z] are filled in.
+between_objects_gcode	Custom G-code run between objects when objects print one after another. If it sets temperatures itself (M104, M109, M140 or M190), Mica adds no temperature commands of its own there.
+binary_gcode	Turn on if the printer's firmware reads binary G-code (.bgcode). Exports are then binary files, which are smaller and transfer faster.
+bottom_fill_pattern	The line pattern of the bottom surface. Monotonic gives the most even look; Concentric follows the outline.		monotoniclines=Monotonic lines|alignedrectilinear=Aligned rectilinear|hilbertcurve=Hilbert curve|archimedeanchords=Archimedean chords|octagramspiral=Octagram spiral
+bottom_solid_layers	How many solid layers close the bottom of the model, counting the bottom surface. Mica adds layers when this is thinner than Bottom shell thickness.
+bottom_solid_min_thickness	The least total thickness of the bottom shell. Mica adds solid layers until this thickness is reached, which keeps thin layer heights from making weak floors. 0 turns this off.
+bridge_acceleration	Acceleration for bridges. Lower values keep long bridges from sagging or snapping. 0 uses the normal acceleration.
+bridge_angle	The direction of bridge lines over open air. 0 lets Mica pick the best direction for each bridge; any other angle forces that direction (180° means 0°).
+bridge_density	How closely the visible bridge lines are spaced. 100% lays them edge to edge; up to 125% gives a smoother underside but may overextrude, while lower values cool better but can sag.
+bridge_fan_speed	Part fan speed while printing bridges. Bridges need strong cooling, so 100% is common. With Orca rules, overhangs and bridges follow the filament profile's own overhang fan setting instead.
+bridge_flow_ratio	Scales how much material goes into visible bridges. Below 1 makes thinner lines that sag less; above 1 makes thicker lines that hold together better. It multiplies the filament's flow ratio.
+bridge_line_width	The line width of bridges over open air, in mm or as a percentage of the nozzle. 0 uses the solid infill width. Thinner bridge lines often sag less.
+bridge_speed	Speed for visible bridges and steep overhang walls. Slower bridges sag less; 20–50 mm/s is typical.
+brim_separation	A small gap between the brim and the part, so the brim snaps off more cleanly. 0 to 0.2 mm is typical.
+brim_type	Adds a brim, a flat ring of lines around the first layer, to help the part stick and resist warping. Outer brim only is the usual choice. With Orca rules, you can also pick Auto, automatic mouse ears, or ears you place yourself.	
+brim_width	How far the brim reaches out from the part. 3–8 mm suits most parts that need help sticking; 0 prints no brim.
+chamber_minimal_temperature	The chamber temperature the printer should wait for before printing, so it can start before the chamber is fully warm. Mica writes no chamber commands itself; custom G-code can use it as a placeholder.
+chamber_temperature	The chamber temperature this filament prints best at, for printers with a heated or monitored chamber. Mica writes no chamber commands itself; custom G-code can use it as a placeholder.
+color_change_gcode	Custom G-code for a color change you add on the layer slider. Usually M600, which pauses so you can swap the filament.
+complete_objects	Layer by layer: all objects grow together, one layer at a time. Object by object: each object is printed completely before the next starts, so a failure costs one object. The outline on the bed shows the room each needs; red means too close.
+cooling	Slows down layers that would print faster than the slowdown layer time, so each layer can cool before the next one. Helps small parts and thin tips. With PrusaSlicer rules, turning it off also turns off the automatic fan curve.
+cooling_perimeter_transition_distance	With Consistent surface, walls return to full speed gradually over this distance, so the change in speed doesn't leave a visible mark.
+cooling_slowdown_logic	How layers slow down to reach the layer time. Uniform cooling slows everything equally. Consistent surface first slows everything except the two outer walls, so the visible surface keeps an even look.
+cooling_tube_length	Length of the cooling tube of a single-nozzle multi-material printer, which limits how far the filament moves while cooling its tip. Mica keeps this value in profiles but does not apply it yet.
+cooling_tube_retraction	Distance from the nozzle tip to the middle of the cooling tube on a single-nozzle multi-material printer. Mica keeps this value in profiles but does not apply it yet.
+custom_parameters_filament	Extra parameters stored with the filament profile, usually as JSON, for tools that read them. Mica keeps them with the profile.
+custom_parameters_print	Extra parameters stored with the print profile, usually as JSON, for tools that read them. Mica keeps them with the profile.
+custom_parameters_printer	Extra parameters stored with the printer profile, usually as JSON, for tools that read them. Mica keeps them with the profile.
+default_acceleration	The acceleration for everything that has no acceleration of its own. 0 leaves acceleration to the printer's firmware.
+deretract_speed	How fast filament is pushed back into the nozzle after a retraction. 0 uses the retraction speed.	Deretraction speed
+disable_fan_first_layers	Keeps the part fan off for this many layers at the start, which helps the first layers stick to the bed. 1 is typical; more for materials that warp.
+dont_support_bridges	Leaves bridges without support, since they can usually span the gap on their own. Saves material and leaves cleaner undersides.
+draft_shield	Builds the skirt up as a thin wall around the parts to shield them from drafts, which helps ABS and ASA on open printers. Up to skirt height stops at Skirt height. Increase the skirt distance if it would touch a brim.		disabled=Off|limited=Up to skirt height|enabled=Full height
+elefant_foot_compensation	Shrinks the first layer slightly to cancel out elephant foot, where the first layer squishes wider than the rest. 0.1–0.2 mm is typical.
+enable_dynamic_fan_speeds	Raises the part fan on overhangs according to how much of each line hangs in the air, using the four overlap fan speeds.
+enable_dynamic_overhang_speeds	Slows down overhanging walls according to how much of each line hangs in the air, using the four overlap speeds.
+enable_extra_bridge_layer	Adds a second bridge layer on top of the first, which supports the solid infill above better and reduces pillowing on top surfaces. External bridge only is a good start.		disabled=Off|external_bridge_only=External bridges only|internal_bridge_only=Internal bridges only|apply_to_all=All bridges
+end_filament_gcode	Custom G-code run each time this filament finishes printing, before the next filament or the end of the print.
+end_gcode	Custom G-code run once at the very end of the print, typically to park the head, cool down and turn off motors.
+ensure_vertical_shell_thickness	Adds solid infill near sloped surfaces where the top or bottom shell would otherwise be too thin. Partial covers most models with less extra material; Enabled adds it everywhere it's needed.		disabled=Off
+external_perimeter_acceleration	Acceleration for the outer wall. Lower values give a cleaner surface with less ringing. 0 uses the normal acceleration.
+external_perimeter_extrusion_width	Line width of the outer wall, in mm or as a percentage of the layer height. 0 uses the default line width. Thinner lines give finer detail.
+external_perimeter_speed	Speed of the outer wall, the visible surface. Printing it slower than the inner walls improves surface quality. The filament's max volumetric speed can slow it further.
+external_perimeters_first	Prints the outer wall before the inner walls. Mica shows this choice as Walls printing order.
+extra_loading_move	Adjusts how far the filament is pushed when loading compared with how far it was pulled when unloading. Positive loads further, negative loads less. Mica keeps this value in profiles but does not apply it yet.
+extra_perimeters	Adds walls where steep slopes would otherwise leave gaps between layers. Mica keeps this value in profiles but does not apply it.
+extra_perimeters_on_overhangs	Adds extra wall lines over steep overhangs and unanchored bridges. Mica keeps this value in profiles but does not apply it.
+extruder_clearance_height	The height from the nozzle tip to the lowest part of the print head or gantry. When objects print one after another, finished objects must stay below this height.
+extruder_clearance_radius	The radius around the nozzle that the print head occupies. When objects print one after another, they are kept this far apart.
+extruder_colour	A color for this extruder in the viewport and preview. It doesn't affect the G-code.	Extruder color
+extruder_offset	The extruder's position relative to the first extruder, for printers whose firmware doesn't account for it.
+extrusion_multiplier	Scales all extrusion for this filament. Tune it if top surfaces show gaps (raise it) or ridges (lower it); 0.95–1.05 is typical. The flow calibration helps find it.
+extrusion_width	The default line width, in mm or as a percentage of the layer height. Line widths set to 0 use this. 0 here derives widths from the nozzle diameter.
+fan_always_on	Keeps the part fan running at least at its minimum speed after the first layers, instead of stopping it between layers. This avoids frequent stops and starts.
+fan_below_layer_time	Layers that print faster than this get extra fan: the fan ramps up from the minimum to the maximum speed as layer time drops toward the slowdown layer time. 30–60 s is typical.
+filament_abrasive	Marks the filament as abrasive, such as carbon or glass filled. It needs a hardened nozzle, and the printer can check that before it prints.
+filament_colour	The filament's color in the viewport, preview and filament lists. It doesn't affect the G-code.
+filament_cooling_final_speed	The speed the tip-cooling moves speed up to on a single-nozzle multi-material printer. Mica keeps this value in profiles but does not apply it yet.
+filament_cooling_initial_speed	The speed of the first tip-cooling move on a single-nozzle multi-material printer. Later moves speed up toward the final speed. Mica keeps this value in profiles but does not apply it yet.
+filament_cooling_moves	How many times the filament moves up and down in the cooling tube to shape its tip before unloading, on a single-nozzle multi-material printer. Mica keeps this value in profiles but does not apply it yet.
+filament_cost	Price per kilogram, used only to estimate the cost of a print.
+filament_density	The filament's density, used only to estimate the weight of a print. PLA is about 1.24 g/cm³, PETG about 1.27.
+filament_deretract_speed	Overrides the printer's deretraction speed for this filament. 0 uses the retraction speed.	Deretraction speed
+filament_diameter	The filament's diameter, used to work out how much to extrude. Measure it if prints look over- or underextruded; 1.75 mm is the common size.
+filament_flush_speed	Extrusion speed for flushing during a tool change. It's available to custom tool change G-code as a placeholder.
+filament_flush_volume	How much filament to flush during a tool change. It's available to custom tool change G-code as a placeholder.
+filament_infill_max_crossing_speed	The fastest this filament may print infill whose lines cross within a layer, such as Grid. 0 means no limit.
+filament_infill_max_speed	The fastest this filament may print infill whose lines don't cross within a layer. 0 means no limit.
+filament_load_time	How long the printer takes to load this filament during a tool change. It's added to the print time estimate.
+filament_loading_speed	Speed for loading the filament back into the nozzle at the prime tower during a tool change. Mica keeps this value in profiles but does not apply it yet.
+filament_loading_speed_start	Speed at the very start of loading the filament during a tool change. Mica keeps this value in profiles but does not apply it yet.
+filament_max_volumetric_speed	How much of this filament the hot end can melt per second. Any feature that would need more is slowed down to this flow. Use the max flow calibration to find it.
+filament_minimal_purge_on_wipe_tower	The least amount purged into the prime tower after a tool change, before any purging into infill or objects, so the new filament flows steadily.
+filament_multitool_ramming	Quickly pushes a little filament into the prime tower just before a tool change on printers with several tools, which shapes the tip. Needs the prime tower.
+filament_multitool_ramming_flow	The flow used for ramming before a tool change on printers with several tools.
+filament_multitool_ramming_volume	How much filament is rammed before a tool change on printers with several tools.
+filament_notes	Your own notes about this filament. They are saved with the filament profile and don't affect the G-code.
+filament_purge_multiplier	Scales the printer's purging volume for this filament, as a percentage. Raise it for filaments that need more purging to change color cleanly. Mica keeps this value in profiles but does not apply it yet.
+filament_ramming_parameters	The ramming settings for single-nozzle multi-material tool changes: how fast filament is pushed out to shape its tip before unloading. Mica keeps this value in profiles but does not apply it yet.
+filament_retract_before_travel	Overrides the printer's travel distance threshold for this filament: shorter travels don't retract.
+filament_retract_before_wipe	Overrides the printer's setting for this filament: how much of the retraction happens before the wipe, as a percentage of the retraction length.
+filament_retract_layer_change	Overrides the printer's setting for this filament. When off, with PrusaSlicer rules a layer change still retracts if the move is longer than the travel distance threshold; with Orca rules it doesn't retract.
+filament_retract_length	Overrides the printer's retraction length for this filament. 0 turns retraction off for this filament.
+filament_retract_length_toolchange	Overrides the printer's retraction length before a tool change for this filament. 0 turns it off.
+filament_retract_lift	Overrides the printer's Z-hop height for this filament: how far the nozzle lifts on travels.
+filament_retract_lift_above	Overrides the printer's setting for this filament: travels lift only above this height.
+filament_retract_lift_below	Overrides the printer's setting for this filament: travels lift only below this height. 0 means no upper limit.
+filament_retract_restart_extra	Overrides the printer's setting for this filament: extra filament pushed after a retraction is undone.
+filament_retract_restart_extra_toolchange	Overrides the printer's setting for this filament: extra filament pushed after a tool change.
+filament_retract_speed	Overrides the printer's retraction speed for this filament.	Retraction speed
+filament_seam_gap_distance	Overrides the seam gap for this filament: how much each wall loop is shortened (positive) or overlapped (negative) at its seam, in mm or as a percentage of the nozzle.
+filament_shrinkage_compensation_xy	Scales parts up in X and Y to make up for this filament shrinking as it cools. If a 100 mm part measures 99 mm, enter 1%. Mica keeps this value in profiles but does not apply it yet.
+filament_shrinkage_compensation_z	Scales parts up in Z to make up for this filament shrinking as it cools. If a 100 mm part measures 99 mm tall, enter 1%. Mica keeps this value in profiles but does not apply it yet.
+filament_soluble	Marks the filament as soluble, such as PVA. Soluble filaments are suited for supports and support interfaces that you dissolve away.
+filament_spool_weight	The weight of the empty spool, kept with the filament profile for your reference, for example to work out how much filament is left on a used spool.
+filament_stamping_distance	On a single-nozzle multi-material printer, how far the filament is pushed toward the nozzle between cooling moves to shape its tip. 0 turns it off. Mica keeps this value in profiles but does not apply it yet.
+filament_stamping_loading_speed	Speed of the stamping moves that shape the filament tip during a tool change. Mica keeps this value in profiles but does not apply it yet.
+filament_toolchange_delay	A pause after unloading the filament during a tool change. Flexible filaments may need time to return to their shape. Mica keeps this value in profiles but does not apply it yet.
+filament_travel_lift_before_obstacle	Overrides the printer's setting for this filament: makes the ramping lift steeper when the travel would pass close to printed parts.
+filament_travel_max_lift	Overrides the printer's setting for this filament: the highest the ramping lift may go.
+filament_travel_ramping_lift	Overrides the printer's setting for this filament: lifts the nozzle on a ramp while it starts to travel, instead of straight up. Helps against stringing.
+filament_travel_slope	Overrides the printer's setting for this filament: the angle of the lift ramp.
+filament_type	The kind of material. It labels the filament and lets Mica and the printer check temperatures and the needed nozzle.
+filament_unload_time	How long the printer takes to unload this filament during a tool change. It's added to the print time estimate.
+filament_unloading_speed	Speed for pulling the filament out of the nozzle during a tool change, after the tip has been shaped. Mica keeps this value in profiles but does not apply it yet.
+filament_unloading_speed_start	Speed for the very first part of unloading, right after ramming. Mica keeps this value in profiles but does not apply it yet.
+filament_vendor	The filament's brand. It's for your reference and filament lists only.
+filament_wipe	Overrides the printer's setting for this filament: moves the nozzle back along the last line while retracting, which wipes off ooze.
+fill_angle	The direction of the sparse infill lines. Change it to line up infill with the forces a part has to carry.
+fill_density	How much of the inside is filled. 10–20% suits display pieces; 25–40% makes stronger parts. 0% leaves the inside hollow; 100% makes it solid.
+fill_pattern	The pattern inside the model. Gyroid and Cubic are strong in every direction, Grid and Rectilinear are quick, and Lightning uses the least material because it only holds up top surfaces.		alignedrectilinear=Aligned rectilinear|3dhoneycomb=3D honeycomb|hilbertcurve=Hilbert curve|archimedeanchords=Archimedean chords|octagramspiral=Octagram spiral|adaptivecubic=Adaptive cubic|supportcubic=Support cubic|crosshatch=Cross hatch
+filter_out_gap_fill	Skips gap fill lines shorter than this, which saves many tiny moves. 0 keeps every gap fill line.
+first_layer_acceleration	Acceleration on the first layer. Lower values help the first layer stick. 0 uses the normal acceleration.
+first_layer_acceleration_over_raft	Acceleration for the first layer of the object printed on top of a raft. 0 uses the normal acceleration. Mica keeps this value in profiles but does not apply it yet.
+first_layer_bed_temperature	Bed temperature for the first layer. A slightly hotter bed often helps the first layer stick. 0 writes no bed temperature commands.
+first_layer_extrusion_width	Line width on the first layer, in mm or as a percentage of the first layer height. Wider lines press into the bed and help adhesion. 0 uses the default line width.
+first_layer_height	Height of the first layer. A slightly thicker first layer is more forgiving of an uneven bed; 0.2–0.3 mm is typical for a 0.4 mm nozzle.
+first_layer_infill_speed	Speed of solid infill on the first layer. With Orca rules, it applies to everything on the first layer except walls.
+first_layer_speed	Speed of the first layer. Printing it slowly helps it stick; 20–50 mm/s is typical.
+first_layer_speed_over_raft	Speed of the first object layer on top of a raft, in mm/s, or as a percentage of the normal speeds. Mica keeps this value in profiles but does not apply it yet.
+first_layer_temperature	Nozzle temperature for the first layer. Often 5 °C hotter than the other layers, which helps the first layer stick.
+full_fan_speed_layer	The part fan ramps up gradually after the no-fan layers and reaches its full speed at this layer. 0 skips the ramp.
+fuzzy_skin	Adds small random bumps while printing walls, for a rough, textured surface that hides layer lines.	Fuzzy skin	external=Outer walls
+fuzzy_skin_point_dist	The average distance between the random bumps. Smaller values give a finer texture and larger G-code.
+fuzzy_skin_thickness	How far the bumps move in and out. Keep it below the outer wall's line width.
+gap_fill_enabled	Fills narrow gaps between walls, and between walls and infill, with extra lines. Turn off for faster prints with slightly weaker narrow areas.
+gap_fill_speed	Speed of gap fill. Gaps have uneven widths, so they print more reliably when slower.
+gcode_comments	Writes a comment explaining each G-code line. Mica keeps this value in profiles but does not apply it.
+gcode_flavor	The firmware the printer runs. It decides the form of commands such as limits, pressure advance and object labels. Mica writes Marlin 2 and Klipper.
+gcode_label_objects	Marks where each object starts and ends in the G-code, so the printer or its host can skip a failed object. Firmware-specific writes M486 on Marlin and EXCLUDE_OBJECT on Klipper; OctoPrint comments suit OctoPrint's Cancel Object plugin.		disabled=Off
+gcode_resolution	How far G-code paths may deviate from the exact outline when they are simplified. Smaller values give smoother curves but larger files that some printers can't process fast enough.
+gcode_substitutions	Find-and-replace rules applied to each line of the finished G-code. Mica keeps this value in profiles but does not apply it yet.
+high_current_on_filament_swap	Raises the extruder motor current during tool changes on single-nozzle multi-material printers. Mica keeps this value in profiles but does not apply it.
+idle_temperature	The nozzle temperature for this filament while its tool waits, on printers with several tools. 0 uses the print profile's temperature variation instead.
+infill_acceleration	Acceleration for sparse infill. Infill is hidden, so it can usually be high. 0 uses the normal acceleration.
+infill_anchor	How long the short wall segment is that ties the end of an infill line to the wall, in mm or as a percentage of the infill width. 0 leaves line ends free.
+infill_anchor_max	The longest a wall segment joining two infill lines may be. 0 connects infill lines the older way, without anchors.
+infill_every_layers	Prints sparse infill only every this many layers, as one thicker layer, which saves time. Walls keep the normal layer height.
+infill_extruder	The tool that prints sparse infill.
+infill_extrusion_width	Line width of sparse infill, in mm or as a percentage of the layer height. Wider lines make infill faster and stronger. 0 uses the default line width.
+infill_first	Prints the infill of each layer before its walls. Walls usually look better when they print first.
+infill_only_where_needed	Prints infill only where it's needed to hold up top surfaces. Mica keeps this value in profiles but does not apply it.
+infill_overlap	How far infill reaches into the walls, as a percentage of the infill line width, so they bond. 10–25% is typical; too much can show as ridges on top.
+infill_speed	Speed of sparse infill. It's hidden inside, so it's usually the fastest feature; the filament's max volumetric speed often sets the real limit.
+initial_layer_min_bead_width	The thinnest wall line allowed on the first layer, as a percentage of the nozzle. Keeping it near the nozzle size helps the first layer stick.
+interface_shells	Forces solid shells where different materials or parts touch. Mica keeps this value in profiles but does not apply it.
+interlocking_beam	Where two filaments touch, weaves small interlocking beams into both, so the materials hold together better. Useful for parts made of different materials.
+interlocking_beam_layer_count	The height of each interlocking beam, in layers. Fewer layers make a stronger link but more chance of defects.
+interlocking_beam_width	The width of each interlocking beam.
+interlocking_boundary_avoidance	Keeps interlocking beams away from the outside of the model, measured in cells, so they don't show on the surface.
+interlocking_depth	How far the interlocking beams reach into each material, measured in cells. Too few cells give a weak link.
+interlocking_orientation	The direction of the interlocking beams.
+internal_bridge_angle	The direction of bridge lines over sparse infill, under top surfaces. 0 lets Mica choose; any other angle forces that direction (180° means 0°).
+internal_bridge_density	How closely internal bridge lines over sparse infill are spaced. Above 100% gives more support for the top layers; below 100% saves material and can reduce pillowing.
+ironing	Runs the hot nozzle over top surfaces again with very little flow, which smooths them. Takes extra time.
+ironing_flowrate	How much material ironing adds, as a percentage of a normal line. 10–15% is typical; too much leaves ridges.
+ironing_spacing	The distance between ironing lines. Closer lines give a smoother finish but take longer; 0.1–0.15 mm is typical.
+ironing_speed	Speed of ironing. Slow ironing smooths best; 15–30 mm/s is typical.
+ironing_type	Which surfaces are ironed: every top surface, only the very top of the model, or every solid surface.	Ironing type
+layer_gcode	Custom G-code run at every layer change, after the nozzle has moved up to the new layer. Placeholders such as [layer_num] and [layer_z] are filled in.
+layer_height	The height of each layer. Thinner layers show finer detail and smoother slopes but take longer. 0.2 mm is a good default for a 0.4 mm nozzle; stay between 25% and 75% of the nozzle.
+machine_limits_usage	What Mica does with the motion limits: write them to the G-code so the printer uses them, use them only for the time estimate, or ignore them.		emit_to_gcode=Write to G-code|time_estimate_only=Time estimate only
+machine_max_acceleration_e	The highest acceleration of the extruder motor. Used for the time estimate and, if set to, written to the G-code.
+machine_max_acceleration_extruding	The highest acceleration while printing. Used for the time estimate and, if set to, written to the G-code.
+machine_max_acceleration_retracting	The highest acceleration during retractions. Used for the time estimate and, if set to, written to the G-code.
+machine_max_acceleration_travel	The highest acceleration for travel moves. Used for the time estimate and, if set to, written to the G-code.
+machine_max_acceleration_x	The highest acceleration on the X axis. Used for the time estimate and, if set to, written to the G-code.
+machine_max_acceleration_y	The highest acceleration on the Y axis. Used for the time estimate and, if set to, written to the G-code.
+machine_max_acceleration_z	The highest acceleration on the Z axis. Used for the time estimate and, if set to, written to the G-code.
+machine_max_feedrate_e	The highest speed of the extruder motor. Used for the time estimate and, if set to, written to the G-code.
+machine_max_feedrate_x	The highest speed on the X axis. Used for the time estimate and, if set to, written to the G-code.
+machine_max_feedrate_y	The highest speed on the Y axis. Used for the time estimate and, if set to, written to the G-code.
+machine_max_feedrate_z	The highest speed on the Z axis. Used for the time estimate and, if set to, written to the G-code.
+machine_max_jerk_e	The largest instant speed change of the extruder motor (jerk). Used for the time estimate and, if set to, written to the G-code.
+machine_max_jerk_x	The largest instant speed change on the X axis (jerk). Used for the time estimate and, if set to, written to the G-code.
+machine_max_jerk_y	The largest instant speed change on the Y axis (jerk). Used for the time estimate and, if set to, written to the G-code.
+machine_max_jerk_z	The largest instant speed change on the Z axis (jerk). Used for the time estimate and, if set to, written to the G-code.
+machine_max_junction_deviation	Marlin's junction deviation (M205 J), which replaces jerk when it's above 0. When set, the time estimate uses it instead of the jerk limits.
+machine_min_extruding_rate	The lowest speed the firmware allows while printing (M205 S).
+machine_min_travel_rate	The lowest speed the firmware allows for travel moves (M205 T).
+max_fan_speed	The highest part fan speed, used for layers that print faster than the slowdown layer time. Between the two layer times the fan scales between the minimum and this speed.
+max_layer_height	The thickest layer this extruder can print, which limits variable layer heights. About 75% of the nozzle diameter is typical.
+max_print_height	How tall a print can be on this printer.
+max_print_speed	A cap on print speeds that are set to 0 (automatic). Mica keeps this value in profiles but does not apply it yet.
+max_volumetric_extrusion_rate_slope_negative	Limits how quickly the flow may drop when the speed falls, in mm³/s per second, so pressure in the nozzle can follow. 0 means no limit.
+max_volumetric_extrusion_rate_slope_positive	Limits how quickly the flow may rise when the speed goes up, in mm³/s per second, so pressure in the nozzle can follow. 0 means no limit.
+max_volumetric_speed	A cap on flow for every feature of this print, in mm³/s, on top of the filament's own limit. 0 means no cap.
+min_bead_width	The line width used for thin features that are narrower than a normal wall, in mm or as a percentage of the nozzle. Features thinner than this are widened to it.
+min_fan_speed	The part fan speed for layers that take longer than the fan layer time, when Keep fan always on is set (otherwise the fan is off there). Between the two layer times the fan scales from here up toward the maximum.
+min_feature_size	Features thinner than this are not printed; thicker ones are widened to the minimum wall width. In mm or as a percentage of the nozzle.
+min_layer_height	The thinnest layer this extruder can print, which limits variable layer heights. About 0.05–0.07 mm for a 0.4 mm nozzle.
+min_print_speed	The slowest a layer may be slowed down to for cooling. If a layer still prints too fast at this speed, it's not slowed further.
+min_skirt_length	The least amount of filament the skirt must use, in mm. Mica adds loops until this is reached, which primes the nozzle well. 0 turns this off.
+mmu_segmented_region_interlocking_depth	How deep painted color regions reach into each other, so they lock together. Needs a maximum width above 0; 0 turns this off.
+mmu_segmented_region_max_width	How deep a painted color region reaches into the model from the surface. 0 paints the whole depth.
+multimaterial_purging	The volume purged into the prime tower at each tool change. Each filament can scale it with its own purge multiplier.
+notes	Your own notes about this print profile. They are written into the G-code header as comments.
+nozzle_diameter	The diameter of the nozzle, which must match the one installed. Line widths, layer height limits and flow all build on it.
+nozzle_high_flow	Marks the nozzle as a high flow nozzle, which melts filament faster and allows higher speeds. The printer can check it before it prints.
+only_one_perimeter_first_layer	Prints just one wall on the first layer, which leaves more room for the bottom pattern.
+only_retract_when_crossing_perimeters	Skips retraction when a travel stays inside the part. Mica keeps this value in profiles but does not apply it.
+ooze_prevention	Lowers the temperature of tools that are waiting, so they don't ooze, on printers with several tools.
+output_filename_format	A template for the name of exported files. Placeholders such as [input_filename_base] and [layer_height] are filled in. Mica keeps this value in profiles but does not apply it yet.
+over_bridge_speed	Speed for the solid infill printed right on top of bridges, in mm/s or as a percentage of the solid infill speed. 0 uses the solid infill speed. Mica keeps this value in profiles but does not apply it yet.
+overhang_fan_speed_0	The part fan speed for overhangs with no support below, such as bridges, when dynamic fan speeds are on.	Fan at 0% overlap (bridge)
+overhang_fan_speed_1	The part fan speed for overhangs with about a quarter of each line resting on the layer below, when dynamic fan speeds are on.	Fan at 25% overlap
+overhang_fan_speed_2	The part fan speed for overhangs with about half of each line resting on the layer below, when dynamic fan speeds are on.	Fan at 50% overlap
+overhang_fan_speed_3	The part fan speed for overhangs with about three quarters of each line resting on the layer below, when dynamic fan speeds are on.	Fan at 75% overlap
+overhang_reverse	On even layers, prints walls over an overhang in the opposite direction. Alternating directions often helps steep overhangs and can reduce warping.
+overhang_reverse_internal_only	Reverses only the inner walls, leaving the outer wall as it is. Spreads stresses to reduce warping while keeping the outer surface clean.
+overhang_reverse_threshold	How far a wall must overhang before it is reversed, in mm or as a percentage of the line width. 0 reverses on every even layer.
+overhang_speed_0	The speed for overhangs with no support below, such as bridges, when dynamic overhang speeds are on. In mm/s or as a percentage of the normal speed.	Speed at 0% overlap (bridge)
+overhang_speed_1	The speed for overhangs with about a quarter of each line resting on the layer below, when dynamic overhang speeds are on.	Speed at 25% overlap
+overhang_speed_2	The speed for overhangs with about half of each line resting on the layer below, when dynamic overhang speeds are on.	Speed at 50% overlap
+overhang_speed_3	The speed for overhangs with about three quarters of each line resting on the layer below, when dynamic overhang speeds are on.	Speed at 75% overlap
+overhangs	Treats walls over an overhang like bridges: bridge flow, bridge speed and the bridge fan.
+parking_pos_retraction	How far from the nozzle tip the filament is parked when unloaded, on a single-nozzle multi-material printer. Must match the firmware. Mica keeps this value in profiles but does not apply it yet.
+pause_print_gcode	Custom G-code for a pause you add on the layer slider. Usually M601 or PAUSE.
+perimeter_acceleration	Acceleration for the inner walls. 0 uses the normal acceleration.
+perimeter_extruder	The tool that prints walls and the brim.
+perimeter_extrusion_width	Line width of the inner walls, in mm or as a percentage of the layer height. 0 uses the default line width.
+perimeter_generator	How walls are laid out. Arachne varies the line width to fill thin and tapering areas neatly. Classic keeps every line the same width and fills leftover gaps separately.
+perimeter_speed	Speed of the inner walls. They are hidden, so they can print faster than the outer wall.
+perimeters	How many wall lines go around each layer's outline. More walls make parts stronger and stiffer; 2 suits display pieces, 3–4 functional parts.
+post_process	Scripts that run on the finished G-code, one per line, each given the file's path. They can change the file, for example to add printer-specific commands.	Post-processing scripts
+prefer_clockwise_movements	Prints wall loops clockwise instead of counterclockwise.
+raft_contact_distance	The gap between the raft and the part, so the part comes off more easily. Ignored when the support top Z distance is 0.
+raft_expansion	How far the raft reaches out past the part.
+raft_first_layer_density	How dense the first layer of the raft or support is. Lower values save material; higher values stick better.
+raft_first_layer_expansion	How far the first raft or support layer reaches out, which helps it stick to the bed.
+raft_layers	Lifts the part onto a raft of this many layers. A raft helps with warping materials and uneven beds. 0 prints no raft.
+remaining_times	Writes progress and remaining time (M73) into the G-code, so the printer's display shows an accurate countdown.
+resolution	How much model outlines are simplified before slicing. Smaller values keep more detail but slice slower and make larger G-code.
+retract_before_travel	Travels shorter than this don't retract. Raise it if retractions slow down small detailed parts; lower it if short travels string.
+retract_before_wipe	How much of the retraction happens before the wipe, as a percentage of the retraction length. The rest happens during the wipe.
+retract_layer_change	Retracts at every layer change. When off, with PrusaSlicer rules a layer change still retracts if the move is longer than the travel distance threshold; with Orca rules it doesn't retract.
+retract_length	How far filament is pulled back before a travel, so the nozzle doesn't ooze. About 0.5–1.5 mm for direct drive, 3–6 mm for Bowden. 0 turns retraction off.
+retract_length_toolchange	How far filament is pulled back before a tool change. 0 turns it off.
+retract_lift	How far the nozzle lifts on travels, so it doesn't drag across the print. 0.2–0.4 mm is typical; 0 turns lifting off. With PrusaSlicer rules the ramping lift settings shape the lift; with Orca rules Z-hop type does.
+retract_lift_above	Travels lift only when the nozzle is above this height. Use it to avoid lifting near the bed.
+retract_lift_below	Travels lift only when the nozzle is below this height. 0 means no upper limit.
+retract_restart_extra	Extra filament pushed after a retraction is undone, to make up for ooze during the travel. Rarely needed; usually 0.
+retract_restart_extra_toolchange	Extra filament pushed after a tool change.
+retract_speed	How fast filament is pulled back. Faster retractions string less but can grind soft filament; 30–60 mm/s is typical.	Retraction speed
+scarf_angle_threshold	For a conditional scarf: loops whose sharpest corner is wider than this angle get a scarf, since no corner can hide their seam.
+scarf_joint_flow_ratio	Scales the material in the scarf joint.
+scarf_joint_speed	Speed of the scarf joint, in mm/s or as a percentage of the wall speed. Slow scarfs look best; it never prints faster than the wall itself.
+scarf_overhang_threshold	For a conditional scarf: loops are scarfed only where less than this much of the line overhangs, as a percentage of the line width.
+scarf_seam_entire_loop	Ramps the scarf around the whole loop instead of a short stretch. Mica shows this choice as Scarf around entire wall.
+scarf_seam_length	The length of the scarf joint. Mica shows this choice as Scarf length.
+scarf_seam_max_segment_length	The longest straight piece of the scarf ramp. Mica shows this choice through Scarf steps.
+scarf_seam_on_inner_perimeters	Uses the scarf on inner walls too. Mica shows this choice as Scarf joint for inner walls.
+scarf_seam_only_on_smooth	Uses the scarf only on smooth loops. Mica shows this choice as Conditional scarf joint.
+scarf_seam_placement	Which loops get a scarf joint. Mica shows this choice as Scarf joint seam.
+scarf_seam_start_height	The height the scarf starts at, as a share of the layer height. Mica shows this choice as Scarf start height.
+seam_gap_distance	Stops each wall loop just short of its start, which makes the seam less visible. In mm or as a percentage of the nozzle; around 10% is typical.
+seam_position	Where each wall loop starts and ends, leaving a small seam. Aligned lines seams up in one column, Nearest keeps them close to the last move, Rear puts them at the back, and Random scatters them.
+seam_slope_conditional	Uses the scarf only on smooth loops, where a corner can't hide the seam. With Orca rules, the angle and overhang thresholds decide which loops count as smooth.
+seam_slope_entire_loop	Ramps the scarf around the whole loop instead of a short stretch.
+seam_slope_inner_walls	Uses the scarf on inner walls too, not only on the outer wall.
+seam_slope_min_length	The length of the scarf. Longer scarfs blend the seam more smoothly. 0 turns the scarf off.
+seam_slope_start_height	Where the scarf ramp starts, in mm or as a percentage of the layer height. 0 starts it right at the layer below.
+seam_slope_steps	How many steps the scarf ramp has. More steps make a smoother ramp. With PrusaSlicer rules, this sets the ramp's segment length, so the result is close but not exact.
+seam_slope_type	A scarf joint ramps the start and end of a wall loop over each other instead of meeting at one point, which hides the seam. Contour does outer walls; Contour and hole also does holes.	Scarf joint seam	none=Off
+silent_mode	Turn on if the printer's firmware has a quiet mode with its own motion limits. The time estimate then also covers that mode.
+single_extruder_multi_material	Turn on for printers that feed several filaments through one nozzle, such as with a filament changer. Mica's prime tower supports printers with separate tools only, so these printers can't use a prime tower yet.	Single extruder multi-material
+single_extruder_multi_material_priming	Primes every filament used at the front edge of the bed at the start of the print.
+skirt_distance	The gap between the skirt and the part or brim.
+skirt_height	How many layers tall the skirt is. Usually 1.
+skirts	How many loops the skirt has: lines around the parts that prime the nozzle and show the print area before the part starts. 0 prints no skirt.
+slice_closing_radius	Closes small cracks in the model while slicing: cracks narrower than twice this value are filled. Keep it small, since it can smooth away fine detail.
+slicing_mode	How the model's surfaces are turned into outlines. Regular works for almost every model.	Slicing mode
+slowdown_below_layer_time	Layers that would print faster than this are slowed down so they have time to cool, and the fan runs at its maximum speed. 5–10 s is typical.
+small_area_infill_flow_compensation	Lowers the flow for very short infill lines in small areas, which often come out overextruded.
+small_area_infill_flow_compensation_model	Pairs of line length and flow factor, one pair per line as "length, factor;", that set how much small-area flow compensation reduces the flow.	Flow compensation model
+small_perimeter_speed	Speed of small loops such as holes. In mm/s or as a percentage of the inner wall speed; 0 keeps the normal speed. With Orca rules, the percentage is of the outer wall speed and 0 means half of it.
+small_perimeter_threshold	Wall loops count as small when they are no longer than a circle of this radius. 0 turns small-loop speed off.
+solid_infill_acceleration	Acceleration for internal solid infill. 0 uses the sparse infill acceleration.
+solid_infill_below_area	Areas smaller than this are filled solid instead of with sparse infill, which makes small sections stronger.
+solid_infill_every_layers	Adds a solid layer every this many layers, which stiffens tall parts. 0 turns it off.
+solid_infill_extruder	The tool that prints solid infill.
+solid_infill_extrusion_width	Line width of internal solid infill, in mm or as a percentage of the layer height. 0 uses the default line width.
+solid_infill_speed	Speed of solid infill inside the part, which is not the visible top or bottom surface.
+spiral_vase	Prints the model as a single continuous wall that spirals upward, with a solid bottom and no seam. Ideal for vases and containers; the model gets no top and no infill.
+staggered_inner_seams	Shifts the seams of inner walls back step by step, in a zigzag, so they don't stack directly behind the outer seam.
+standby_temperature_delta	How much tools that are waiting cool down, when ooze prevention is on. A filament's own idle temperature takes precedence.
+start_filament_gcode	Custom G-code run each time this filament starts printing, after a tool change or at the start of the print.
+start_gcode	Custom G-code run once before the print starts: typically homing, heating, bed leveling and a purge line.
+support_interface_not_for_body	Prints the support body with the regular support filament when possible and saves the interface filament for the interface layers only.
+support_material	Turns supports on. They hold up overhangs and are removed after printing.
+support_material_angle	Rotates the support pattern.
+support_material_auto	On: supports are added under every overhang that needs one. Off: supports go only where you paint or place support enforcers. Style picks normal or tree supports.
+support_material_bottom_contact_distance	The gap between the support and the model where the support stands on the model. Same as top uses the top Z distance.
+support_material_bottom_interface_layers	How many dense layers the support has where it stands on the model. Same as top uses the top interface layer count.
+support_material_buildplate_only	Supports only stand on the bed, never on the model. Overhangs above other parts of the model stay unsupported.
+support_material_closing_radius	For snug supports: gaps narrower than twice this radius are closed, merging support areas into simpler shapes.
+support_material_contact_distance	The gap between the top of the support and the part. Larger gaps make support easier to remove but leave a rougher underside; 0.1–0.2 mm is typical, and 0 suits soluble supports.
+support_material_enforce_layers	Adds support under every overhang in this many layers from the bottom, regardless of the threshold angle. Helps small footprints stay put.
+support_material_extruder	The filament for the support body and raft. Default uses whichever filament is printing.
+support_material_extrusion_width	Line width of support, in mm or as a percentage of the layer height. 0 uses the default line width.
+support_material_interface_contact_loops	Covers the top interface layer of the support with loops.
+support_material_interface_extruder	The filament for support interfaces, the layers that touch the model. Default uses whichever filament is printing.
+support_material_interface_layers	How many dense layers the support has right under the model. They give overhangs a smoother underside; 2–3 is typical.
+support_material_interface_pattern	The pattern of the support interface layers. Automatic picks Rectilinear, or Concentric for soluble interfaces.		auto=Automatic
+support_material_interface_spacing	The gap between interface lines. 0 makes the interface solid. Closer lines give a smoother underside but are harder to remove.
+support_material_interface_speed	Speed of support interface layers.
+support_material_pattern	The pattern of the support body.
+support_material_spacing	The gap between support lines. Wider spacing saves material and removes more easily, but holds less.
+support_material_speed	Speed of the support body.
+support_material_style	The shape of the supports. Grid makes sturdy straight columns, Snug follows the overhang closely to save material, and Organic grows branches that are easy to remove.
+support_material_synchronize_layers	Prints support layers at the same heights as the model's layers. Useful when tool changes are slow; needs a top Z distance of 0.
+support_material_threshold	Surfaces flatter than this angle, measured from the bed, get support. A higher angle adds support under steeper overhangs; 40–55° is typical. 0 detects overhangs automatically.
+support_material_with_sheath	Adds a wall line around the support body. Supports become more reliable, but harder to remove.
+support_material_xy_spacing	The sideways gap between the support and the part.
+support_remove_small_overhang	Skips support for small overhangs that print fine without it.
+support_tree_angle	The steepest angle branches may lean to get around the model. Lower angles give more stable branches; higher angles reach further.
+support_tree_angle_slow	The angle branches prefer when they don't have to avoid the model. Lower angles are more stable; higher angles let branches merge sooner.	Preferred branch angle
+support_tree_branch_diameter	The diameter of the thinnest branches. Thicker branches are sturdier; branches grow thicker toward the bed.
+support_tree_branch_diameter_angle	How quickly branches thicken toward the bed. 0 keeps them the same thickness; a few degrees makes them more stable.	Branch diameter angle
+support_tree_branch_diameter_double_wall	Branches thicker than this diameter get two walls for strength. 0 gives every branch one wall.	Double-wall branch diameter
+support_tree_branch_distance	How far apart branch tips are where they touch the model. Closer tips hold overhangs better but are harder to remove.
+support_tree_tip_diameter	The diameter of the branch tips that touch the model.	Tip diameter
+support_tree_top_rate	How dense the support is around the branch tips. Higher values hold overhangs better but remove less easily; top interface layers are often the better choice.	Branch density
+temperature	Nozzle temperature for every layer after the first. Start in the range printed on the spool; the temperature calibration helps fine-tune it.
+template_custom_gcode	Custom G-code you can insert at a chosen layer from the layer slider.
+thick_bridges	Prints bridges with lines as tall as the nozzle is wide. Thick bridges span longer gaps more reliably, but look rougher than thin ones.
+thin_walls	Prints walls too thin for two lines as a single line, so they aren't left out. Mostly matters with the Classic wall generator.
+thumbnails	The preview image sizes stored in the G-code for the printer's display, as "width x height" pairs separated by commas, for example 16x16, 313x173.
+thumbnails_format	The image format of the stored previews. PNG gives the best quality; QOI is quick to decode for printers with little memory.
+toolchange_ordering	The order tools print within a layer. Optimized starts with the tool already loaded, saving tool changes. Cyclic always goes 1, 2, 3 and so on.
+toolchange_gcode	Custom G-code run at every filament or tool change. It usually contains the T command that switches the tool.
+top_fill_pattern	The line pattern of the top surface. Monotonic gives the most even look; Concentric follows the outline.		monotoniclines=Monotonic lines|alignedrectilinear=Aligned rectilinear|hilbertcurve=Hilbert curve|archimedeanchords=Archimedean chords|octagramspiral=Octagram spiral
+top_infill_extrusion_width	Line width of the top surface, in mm or as a percentage of the layer height. Thinner lines give a smoother top. 0 uses the default line width.
+top_one_perimeter_type	Prints only one wall around top surfaces, leaving more room for the top pattern. Applies to every top surface or only to the very top of the model.		none=Off
+top_solid_infill_acceleration	Acceleration for top surfaces. Lower values can give a smoother top. 0 uses the normal acceleration.
+top_solid_infill_speed	Speed of the top surface. Slower tops look smoother.
+top_solid_layers	How many solid layers close the top of the model, counting the top surface. More layers hide the infill below better; Mica adds layers when this is thinner than Top shell thickness.
+top_solid_min_thickness	The least total thickness of the top shell. Mica adds solid layers until it's reached, which keeps thin layer heights from leaving weak tops. 0 turns this off.
+travel_acceleration	Acceleration for travel moves. 0 uses the normal acceleration.
+travel_lift_before_obstacle	Makes the ramping lift steeper when the travel would pass close to printed parts, so the nozzle clears them.
+travel_max_lift	The highest the ramping lift may go. Short travels may not reach it.
+travel_ramping_lift	Lifts the nozzle on a ramp while it starts to travel, instead of straight up. Helps against stringing.
+travel_short_distance_acceleration	Acceleration for short travels, those shorter than the travel distance threshold.
+travel_slope	How steeply the nozzle rises when it lifts while traveling. With PrusaSlicer rules it shapes the ramping lift; with Orca rules, the Slope and Spiral Z-hop types. 90° lifts straight up.
+travel_speed	Speed of travel moves, when nothing is printed. Fast travels reduce oozing and save time.
+travel_speed_z	Speed of up and down travel moves. 0 uses the printer's own limit.
+use_firmware_retraction	Lets the firmware do retractions (G10 and G11). Mica keeps this value in profiles but does not apply it.
+use_relative_e_distances	Writes extrusion amounts relative to the last move instead of as a running total. Most printers work best with it on; Klipper and the prime tower need it.
+use_volumetric_e	Writes extrusion in cubic millimeters instead of millimeters of filament. The firmware must know the filament diameter, for example from M200 in the start G-code.
+variable_layer_height	Allows variable layer heights on this printer. Turn off if it has trouble with them. Mica keeps this value in profiles but does not apply it yet.
+wall_distribution_count	Over how many walls, counted from the inside, Arachne spreads width changes. Lower values keep the outer walls at a steady width.
+wall_sequence	The order walls print in. Inner/Outer gives the best overhangs. Inner/Outer/Inner gives the cleanest outer surface and is a good default with 3 or more walls. Outer/Inner is as accurate but makes the seam less consistent.
+wall_transition_angle	In wedge shapes, Arachne adds or removes a wall where the shape narrows. Above this angle no center wall is added. Lower values mean fewer center walls but may leave gaps.
+wall_transition_filter_deviation	How much Arachne may vary a wall's width before it adds or removes a wall, as a percentage of the nozzle. Higher values mean fewer transitions but more width variation.
+wall_transition_length	How much room Arachne uses to split or join walls where a part gets thinner, as a percentage of the nozzle.
+wipe	Moves the nozzle back along the line it just printed while retracting, which wipes off ooze and reduces blobs.
+wipe_tower	Prints a prime tower next to the parts. Each tool change purges the old filament into it, so the new one flows cleanly before it touches the part.
+wipe_tower_acceleration	Acceleration for the prime tower. 0 uses the normal acceleration.
+wipe_tower_bridging	The longest distance prime tower layers may bridge over sparse sections.
+wipe_tower_brim_width	The brim around the prime tower. A negative value picks the width from the tower's height.
+wipe_tower_cone_angle	Widens the prime tower toward the bed in a cone, which keeps tall towers from tipping. Larger angles give a wider base; 0 turns it off.
+wipe_tower_extra_flow	Extra flow for purge lines on the prime tower, which makes them thicker. The spacing adjusts to match.
+wipe_tower_extra_spacing	The spacing of purge lines on the prime tower, as a percentage of a normal gap.
+wipe_tower_extruder	The tool that prints the prime tower's outer wall. 0 uses whichever is available, preferring a non-soluble one.
+wipe_tower_no_sparse_layers	Prints the prime tower only on layers that have a tool change. The nozzle then moves down to the tower, so make sure nothing is in its way.
+wipe_tower_width	The width of the prime tower.
+xy_contour_compensation	Grows (positive) or shrinks (negative) the outside of parts, without changing holes. Use it to fine-tune fit.
+xy_hole_compensation	Grows (positive) or shrinks (negative) holes in parts. A small positive value helps holes come out true to size.
+xy_size_compensation	Grows (positive) or shrinks (negative) the whole outline of each layer, outside and holes alike. Use it to fine-tune dimensions.	XY size compensation
+z_hop_types	How the nozzle lifts before a travel. Normal lifts straight up, Slope lifts while it starts moving, Spiral lifts in a small helix, and Auto lifts only when the travel would cross printed parts.		Auto Lift=Auto|Normal Lift=Normal|Slope Lift=Slope|Spiral Lift=Spiral
+z_offset	Shifts every Z position in the G-code by this amount. Use it to fine-tune the first layer gap when the printer's own Z offset is off: negative moves the nozzle closer to the bed.
+mica_slicing_rules	Which slicer's behavior Mica follows for walls, seams, travel, cooling and tool changes. Profiles are tuned for one set of rules, so keep the one the profile came from. Firmware commands follow G-code flavor.
+mica_texture_skin	Gives the outer walls a surface texture from a grayscale image: white stands out, black stays low. Outer walls covers the part's outside; All outer walls also does the walls of holes. Faces painted with Texture painting get their slot's texture either way.\n\nInspired by CNC Kitchen's BumpMesh.
+mica_texture_skin_texture	The texture to use: one of Mica's patterns, a bundled image, or your own image, which is saved in the project. Picking one also sets its suggested tile size.
+mica_texture_skin_amplitude	How far the texture moves the surface. With Walls only, inward textures stop at half an outer wall, and deeper outward textures widen Arachne walls; Classic walls are limited to half the width. With All surfaces, Mica only keeps the surface from running into itself.
+mica_texture_skin_direction	Outward: white stands out by the depth and the part grows. Inward: black sinks in by the depth and the part keeps its size. Both ways: half out, half in.
+mica_texture_skin_projection	How the image is laid onto the part. Triplanar suits most parts. Cubic gives each side of a box its own projection. Cylindrical and Spherical wrap round parts with whole tiles, so there is no seam. Planar projects from one direction.
+mica_texture_skin_scale	The width of one repeat of the texture.
+mica_texture_skin_scale_v	The height of one repeat of the texture. 0 keeps the image's proportions.
+mica_texture_skin_rotation	Turns the texture on the part.
+mica_texture_skin_offset_u	Moves the texture sideways on the part.
+mica_texture_skin_offset_v	Moves the texture up or down on the part.
+mica_texture_skin_cylinder_axis	For cylindrical projection: the axis the texture wraps around.
+mica_texture_skin_cap_angle	For cylindrical projection: surfaces that face up or down more steeply than this take the image from above instead of around the sides (when Projection blend is above 0).
+mica_texture_skin_blend	For cubic projection: how softly neighboring sides blend (0 gives a sharp edge). For cylindrical projection: how softly the sides blend into the caps.
+mica_texture_skin_smoothing	Blurs the image first, in pixels of a 512 px image. Softens detail finer than the nozzle can print.
+mica_texture_skin_invert	Swaps black and white, so what stood out sinks in.
+mica_texture_skin_pattern_ratio	For Mica's patterns only: the pattern's own proportion, such as the flat land of knurling, the groove width of hexagons and diamonds, the size of dots or the height of waves.
+mica_texture_skin_pattern_softness	For Mica's patterns only: rounds the pattern's profile. 0 keeps sharp edges.
+mica_texture_skin_point_dist	The distance between the points of a textured wall. 0.2–0.3 mm suits a 0.4 mm nozzle; smaller values only make the G-code larger.
+mica_texture_skin_first_layer	Off keeps the first layer plain, for bed adhesion and elephant foot compensation.
+mica_texture_skin_top_angle	No texture on upward-facing surfaces flatter than this angle; the texture fades in over the next 10°. 0 turns the limit off, though walls flatter than about 8° never get a texture. With All surfaces, tops are textured and this limit does not apply.
+mica_texture_skin_bottom_angle	No texture on downward-facing surfaces flatter than this angle; the texture fades in over the next 10°.
+mica_texture_skin_overhang_clamp	Less outward texture on overhangs: full above 60°, none below 35°, so the texture adds no overhang of its own.
+mica_texture_skin_falloff	For Texture painting: the texture fades in over this distance from the edge of the painted area. 0 gives a hard edge.
+mica_texture_skin_falloff_curve	How the texture fades in at a painted area's edge: evenly (Linear), slowly at both ends (S-curve) or slowly at the edge (Ease in).
+mica_texture_skin_surfaces	Walls only moves the outer walls while slicing (fast). All surfaces textures the model's surface before slicing, so tops, slopes and bottoms get the texture too. Slower the first time; Mica reuses the result until the model, texture or paint changes.
+mica_texture_paint_slots	The texture of each Texture painting slot, as the paint card sets it.
+mica_brick_layers	Prints every other inner wall half a layer higher, so layer lines in the walls are staggered like bricks and no layer line runs straight through a wall. Parts get stronger across the layers. Top and bottom shells print as usual; multi-tool plates slice without it.\n\nInspired by GeekDetour's Brick Layers; strength tests by CNC Kitchen.
+mica_brick_layers_flow_ratio	Extra flow on the raised walls and the inner walls between them, so the staggered lines press into each other. 100% adds none; it's never less than 100%.
+mica_brick_layers_start_layer	The first layer, counted from 0, whose walls may be raised. Walls are never raised in the bottom shell or right above a bottom surface.
+mica_brick_layers_end_margin_layers	Layers kept on the normal grid between the raised walls and every top or bottom shell, in addition to the shell itself.
+mica_brick_layers_travel_lift	How far travels stay above raised walls. 0 uses the retraction lift, at least 0.2 mm.

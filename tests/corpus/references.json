@@ -1,0 +1,1687 @@
+{
+  "3DBenchy/core": {
+    "filament_mm": [
+      3865.8412300001164
+    ],
+    "model_sha256": "a0afa505090b6f16cb6bdcfad3b843ec5b3b540b8357c306d447d0b324b051bc",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 219.8248999999998,
+      "Inner wall": 1159.4928199999645,
+      "Internal solid infill": 667.7022799999968,
+      "Outer wall": 1097.2388899999946,
+      "Overhang perimeter": 5.228100000000005,
+      "Sparse infill": 583.860060000002,
+      "Top surface": 115.49417999999974
+    },
+    "source_file": "3DBenchy-core.gcode",
+    "source_sha256": "fadbfb0d007c23600f32e24c45e44275938f6008427e849901ad00b3daaaed35",
+    "validator_warnings": 9
+  },
+  "3DBenchy/mini": {
+    "filament_mm": [
+      4071.3541700001633
+    ],
+    "model_sha256": "a0afa505090b6f16cb6bdcfad3b843ec5b3b540b8357c306d447d0b324b051bc",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 219.01657999999944,
+      "Inner wall": 1159.4927699999646,
+      "Internal solid infill": 900.0572800000002,
+      "Outer wall": 1097.2388999999948,
+      "Overhang perimeter": 5.228100000000005,
+      "Sparse infill": 556.212119999997,
+      "Top surface": 116.10841999999975
+    },
+    "source_file": "3DBenchy-mini.gcode",
+    "source_sha256": "68ea7596f75c48d69b2233d17b0fb8a7ecdda424775f0df96a55a4e534338572",
+    "validator_warnings": 0
+  },
+  "3DBenchy/mk35": {
+    "filament_mm": [
+      3867.84123000012
+    ],
+    "model_sha256": "a0afa505090b6f16cb6bdcfad3b843ec5b3b540b8357c306d447d0b324b051bc",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 219.8248999999998,
+      "Inner wall": 1159.4928199999645,
+      "Internal solid infill": 667.702279999996,
+      "Outer wall": 1097.2388899999946,
+      "Overhang perimeter": 5.228100000000005,
+      "Sparse infill": 583.8600600000024,
+      "Top surface": 115.49417999999974
+    },
+    "source_file": "3DBenchy-mk35.gcode",
+    "source_sha256": "48c3f8ec1b2a153470f472f5a59bc6484bdb87648782a7e20193b8c64a3eee7b",
+    "validator_warnings": 0
+  },
+  "3DBenchy/u1": {
+    "filament_mm": [
+      3780.665670000103,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "a0afa505090b6f16cb6bdcfad3b843ec5b3b540b8357c306d447d0b324b051bc",
+    "profile_args": [
+      "--vendor",
+      "Snapmaker",
+      "--printer",
+      "Snapmaker U1 (0.4 nozzle)",
+      "--print",
+      "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+      "--filament",
+      "Snapmaker PLA @U1",
+      "--bed",
+      "High Temp Plate"
+    ],
+    "roles": {
+      "Bottom surface": 20.85105,
+      "Bridge": 47.867090000000026,
+      "Brim": 0.9601100000000002,
+      "Inner wall": 1146.0777899999828,
+      "Internal Bridge": 165.51681000000008,
+      "Internal solid infill": 702.4731099999996,
+      "Outer wall": 1006.4241200000067,
+      "Overhang wall": 5.945740000000003,
+      "Sparse infill": 564.0311599999961,
+      "Top surface": 105.51868999999998
+    },
+    "source_file": "plate_1.gcode",
+    "source_sha256": "8bf1a9cb63ffd82d6fc7e5c855cc2bd221464b86c6fabf854e9389885694dff1",
+    "validator_warnings": 352
+  },
+  "3DBenchy/xl": {
+    "filament_mm": [
+      3885.841180000117,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "a0afa505090b6f16cb6bdcfad3b843ec5b3b540b8357c306d447d0b324b051bc",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 219.8248999999998,
+      "Inner wall": 1159.4927699999646,
+      "Internal solid infill": 667.7022799999968,
+      "Outer wall": 1097.2388899999946,
+      "Overhang perimeter": 5.228100000000005,
+      "Sparse infill": 583.8600600000021,
+      "Top surface": 115.49417999999976
+    },
+    "source_file": "3DBenchy-xl.gcode",
+    "source_sha256": "c19a53b6e496d1232b9c67ea8cbf72fe7536e2bbf1204cc1fec969dc2b567317",
+    "validator_warnings": 9
+  },
+  "bridges/core": {
+    "filament_mm": [
+      570.2073299999931
+    ],
+    "model_sha256": "2225738e4db420585577cfc8c7ae1f0c274cd05f91c90a6f8ed1be3d34615a3b",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 53.45332000000001,
+      "Inner wall": 123.21635999999948,
+      "Internal solid infill": 129.84172999999944,
+      "Outer wall": 135.39595999999995,
+      "Overhang perimeter": 2.65372,
+      "Sparse infill": 84.06133000000077,
+      "Top surface": 24.58491000000001
+    },
+    "source_file": "bridges-core.gcode",
+    "source_sha256": "f40b61f53a514427c29066135d34fc742460144730e8e5edc8d029a6d8de4f9d",
+    "validator_warnings": 1
+  },
+  "bridges/mini": {
+    "filament_mm": [
+      594.9623999999936
+    ],
+    "model_sha256": "2225738e4db420585577cfc8c7ae1f0c274cd05f91c90a6f8ed1be3d34615a3b",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 53.45332000000001,
+      "Inner wall": 123.21635999999948,
+      "Internal solid infill": 154.69159999999928,
+      "Outer wall": 135.39595999999995,
+      "Overhang perimeter": 2.65372,
+      "Sparse infill": 82.96653000000079,
+      "Top surface": 24.58491000000001
+    },
+    "source_file": "bridges-mini.gcode",
+    "source_sha256": "5a1992784e6fe3530effb4439dd09d06a92d76a5b4c7371c604877619b2d1b37",
+    "validator_warnings": 0
+  },
+  "bridges/mk35": {
+    "filament_mm": [
+      572.2073299999929
+    ],
+    "model_sha256": "2225738e4db420585577cfc8c7ae1f0c274cd05f91c90a6f8ed1be3d34615a3b",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 53.45332000000001,
+      "Inner wall": 123.21635999999948,
+      "Internal solid infill": 129.84172999999944,
+      "Outer wall": 135.39595999999995,
+      "Overhang perimeter": 2.65372,
+      "Sparse infill": 84.06133000000074,
+      "Top surface": 24.58491000000001
+    },
+    "source_file": "bridges-mk35.gcode",
+    "source_sha256": "2248425b16ab0c4ffc2e04063f0d6dded244662169b502f755b8460f913abf42",
+    "validator_warnings": 0
+  },
+  "bridges/xl": {
+    "filament_mm": [
+      590.2073299999948,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "2225738e4db420585577cfc8c7ae1f0c274cd05f91c90a6f8ed1be3d34615a3b",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 53.45332000000001,
+      "Inner wall": 123.21635999999948,
+      "Internal solid infill": 129.84172999999944,
+      "Outer wall": 135.39595999999995,
+      "Overhang perimeter": 2.65372,
+      "Sparse infill": 84.06133000000077,
+      "Top surface": 24.58491000000001
+    },
+    "source_file": "bridges-xl.gcode",
+    "source_sha256": "660651817f02a18278dfb9bf3fdc90fe52eb05edde72cf2d57478f84e4b37f3f",
+    "validator_warnings": 1
+  },
+  "colormix_adjacent/xl": {
+    "filament_mm": [
+      2563.836950000012,
+      1444.3915000000165,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "layer_tools": {
+      "count": 100,
+      "sha256": "832db9dafccd5e13bbea453bc771cbea238e638814d294ec1c8fb43bd8b69d9e"
+    },
+    "model_sha256": "7b7cb504a26c61925b4a9eba0179fa4b4df55bb83be2c8040f6d18336c13afd8",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 80.73665999999992,
+      "Inner wall": 448.3015099999977,
+      "Internal solid infill": 350.04234999999807,
+      "Outer wall": 464.86133000000285,
+      "Sparse infill": 874.6387600000029,
+      "Top surface": 56.35684000000002,
+      "Wipe tower": 1657.291000000004
+    },
+    "source_file": "ref-adjacent.gcode",
+    "source_sha256": "912d89fcd68e717b48dc34608af4a43b735a3aef650ba2cb494441e4ad8e4e7a",
+    "tool_roles": [
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 321.56500999999906,
+        "Internal solid infill": 293.4613499999993,
+        "Outer wall": 332.6143000000012,
+        "Sparse infill": 657.1981400000011,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 853.4514000000039
+      },
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 126.73650000000012,
+        "Internal solid infill": 56.581000000000074,
+        "Outer wall": 132.2470299999999,
+        "Sparse infill": 217.44061999999997,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 803.8396000000038
+      },
+      {},
+      {},
+      {}
+    ],
+    "toolchanges": 103,
+    "validator_warnings": 2
+  },
+  "colormix_mix33/xl": {
+    "filament_mm": [
+      1058.264300000001,
+      964.4900100000033,
+      997.5244499999967,
+      0.0,
+      0.0
+    ],
+    "layer_tools": {
+      "count": 100,
+      "sha256": "1c92db7a6a79b8bc5c6ab39a850caf89e04f4fffb5f6952543e84d84bde7fb13"
+    },
+    "model_sha256": "e33d228c6c844088d3c01f1eb865c0114bfb08f9258e70b81253a9c8401ad790",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 170.3448999999992,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 490.64588999999194,
+      "Top surface": 28.178420000000013,
+      "Wipe tower": 1657.291000000004
+    },
+    "source_file": "ref-mix33.gcode",
+    "source_sha256": "5663f956f98b640ead8497b12c1da1bdc81bce47b75bcfe2b62f8c4f1c26adbd",
+    "tool_roles": [
+      {
+        "Inner wall": 86.40852999999996,
+        "Internal solid infill": 54.788220000000074,
+        "Outer wall": 90.18408999999993,
+        "Sparse infill": 165.50403999999983,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 596.201000000008
+      },
+      {
+        "Inner wall": 83.64608999999994,
+        "Internal solid infill": 59.014640000000064,
+        "Outer wall": 87.28272999999993,
+        "Sparse infill": 164.97664999999984,
+        "Wipe tower": 530.5698999999977
+      },
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 83.64608999999994,
+        "Internal solid infill": 56.54204000000008,
+        "Outer wall": 87.28268999999993,
+        "Sparse infill": 160.16519999999988,
+        "Wipe tower": 530.5201000000004
+      },
+      {},
+      {}
+    ],
+    "toolchanges": 105,
+    "validator_warnings": 1
+  },
+  "colormix_mix50/xl": {
+    "filament_mm": [
+      1508.7417300000088,
+      1472.5370300000209,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "layer_tools": {
+      "count": 100,
+      "sha256": "832db9dafccd5e13bbea453bc771cbea238e638814d294ec1c8fb43bd8b69d9e"
+    },
+    "model_sha256": "e3c145968ec42267ea65394dbf59c06e1ff9cab73a78dc669d62582bbeb28f8e",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 170.3448999999992,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 490.64588999999194,
+      "Top surface": 28.178420000000013,
+      "Wipe tower": 1657.291000000004
+    },
+    "source_file": "ref-mix50.gcode",
+    "source_sha256": "1d7e43c380df13ac1db8c59921e813518eeafe954699ac029f088f504433f35d",
+    "tool_roles": [
+      {
+        "Inner wall": 126.96421000000012,
+        "Internal solid infill": 113.76389999999952,
+        "Outer wall": 132.50296999999978,
+        "Sparse infill": 245.05924999999905,
+        "Wipe tower": 853.4514000000039
+      },
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 126.73650000000012,
+        "Internal solid infill": 56.581000000000074,
+        "Outer wall": 132.24653999999975,
+        "Sparse infill": 245.58663999999905,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 803.8396000000038
+      },
+      {},
+      {},
+      {}
+    ],
+    "toolchanges": 103,
+    "validator_warnings": 1
+  },
+  "colormix_mix75/xl": {
+    "filament_mm": [
+      1974.3217500000185,
+      745.4763100000015,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "layer_tools": {
+      "count": 100,
+      "sha256": "fb3afc072259e9f9a27650f752a3a0cd12ce14a6f84fb5a92021eaf29d886827"
+    },
+    "model_sha256": "84a8796bf51bd033b6f36811cee278f65a505b8ebe1b7ff83670add8114dbc49",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 170.3448999999992,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 490.64588999999194,
+      "Top surface": 28.178420000000013,
+      "Wipe tower": 1395.8103000000024
+    },
+    "source_file": "ref-mix75.gcode",
+    "source_sha256": "f32522af2191c66d7fd8fccdf386746ce3b19505554ce1c700e769e897688b69",
+    "tool_roles": [
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 190.33245999999934,
+        "Internal solid infill": 111.36921999999956,
+        "Outer wall": 198.62626000000017,
+        "Sparse infill": 368.37995999999544,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 1000.0671000000117
+      },
+      {
+        "Inner wall": 63.36824999999987,
+        "Internal solid infill": 58.97568000000007,
+        "Outer wall": 66.12325000000003,
+        "Sparse infill": 122.26593000000015,
+        "Wipe tower": 395.7431999999997
+      },
+      {},
+      {},
+      {}
+    ],
+    "toolchanges": 54,
+    "validator_warnings": 1
+  },
+  "colormix_mixed_plain/xl": {
+    "filament_mm": [
+      1470.5539300000162,
+      1771.4521300000035,
+      0.0,
+      1896.510660000021,
+      0.0
+    ],
+    "layer_tools": {
+      "count": 100,
+      "sha256": "783d213e276f770de4b6d558d76d35164c48b95726209d9654a814529abff406"
+    },
+    "model_sha256": "f38753d758acafc93896f9eb51488b3b506ce6f7461aaf354f6093c0552a4345",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 80.73665999999992,
+      "Inner wall": 507.4014199999953,
+      "Internal solid infill": 340.68979999999647,
+      "Outer wall": 529.4990200000052,
+      "Sparse infill": 981.2917800000015,
+      "Top surface": 56.35684000000002,
+      "Wipe tower": 2527.54120000001
+    },
+    "source_file": "ref-mixed_plain.gcode",
+    "source_sha256": "95f91f97ffdecd15b5bb31ac5470f06d8e205bfef0b02f1a02093875ac2f4c32",
+    "tool_roles": [
+      {
+        "Inner wall": 126.96421000000012,
+        "Internal solid infill": 113.76389999999951,
+        "Outer wall": 132.50296999999978,
+        "Sparse infill": 245.05924999999905,
+        "Wipe tower": 815.2635999999966
+      },
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 126.73650000000012,
+        "Internal solid infill": 56.581000000000074,
+        "Outer wall": 132.24653999999975,
+        "Sparse infill": 245.58663999999905,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 1102.7546999999995
+      },
+      {},
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 253.70070999999854,
+        "Internal solid infill": 170.3448999999992,
+        "Outer wall": 264.74951000000067,
+        "Sparse infill": 490.64588999999194,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 609.5229000000004
+      },
+      {}
+    ],
+    "toolchanges": 155,
+    "validator_warnings": 2
+  },
+  "colormix_painted_band/xl": {
+    "filament_mm": [
+      1673.627060000033,
+      570.1006999999984,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "layer_tools": {
+      "count": 100,
+      "sha256": "0b50bded8d7a82d991ec6da97b8ade3be5b6eceecb781d10b9ff983fda2c4a03"
+    },
+    "model_sha256": "62d89e1bf4f01915b517de3d4bce2b1d281910b983f129a4a223e0e6c20f4e7c",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 170.3448999999992,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 490.64588999999194,
+      "Top surface": 28.178420000000013,
+      "Wipe tower": 919.7400000000019
+    },
+    "source_file": "ref-painted_band.gcode",
+    "source_sha256": "d3424df5762298f4ec507bdac52b2296fb97665c69567d5846e0cfe47f54ed0c",
+    "tool_roles": [
+      {
+        "Bridge": 40.36833000000001,
+        "Inner wall": 203.00610999999918,
+        "Internal solid infill": 170.3448999999992,
+        "Outer wall": 211.85091000000025,
+        "Sparse infill": 383.86908999999525,
+        "Top surface": 28.178420000000013,
+        "Wipe tower": 599.0093000000019
+      },
+      {
+        "Inner wall": 50.69459999999992,
+        "Outer wall": 52.89860000000003,
+        "Sparse infill": 106.77680000000014,
+        "Wipe tower": 320.7306999999997
+      },
+      {},
+      {},
+      {}
+    ],
+    "toolchanges": 44,
+    "validator_warnings": 1
+  },
+  "cube20/core": {
+    "filament_mm": [
+      1264.9877600000152
+    ],
+    "model_sha256": "747f586aaf629af8b9455ae89ed33c64e46a70dfbfa595131f36d592dfad0ddc",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 170.3448999999992,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 490.6458899999895,
+      "Top surface": 28.178420000000013
+    },
+    "source_file": "cube20-core.gcode",
+    "source_sha256": "4b5b378b6aa0d439dbfaec5dac88740f439b462ee47cf342a6e14242eb4317f1",
+    "validator_warnings": 1
+  },
+  "cube20/mini": {
+    "filament_mm": [
+      1292.018860000019
+    ],
+    "model_sha256": "747f586aaf629af8b9455ae89ed33c64e46a70dfbfa595131f36d592dfad0ddc",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 198.63539999999904,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 488.38648999998946,
+      "Top surface": 28.178420000000013
+    },
+    "source_file": "cube20-mini.gcode",
+    "source_sha256": "56b1dca1aefa770a68d1379d11e98b76997acb255f1b4be515bf5a235b328bf5",
+    "validator_warnings": 0
+  },
+  "cube20/mk35": {
+    "filament_mm": [
+      1266.9877600000166
+    ],
+    "model_sha256": "747f586aaf629af8b9455ae89ed33c64e46a70dfbfa595131f36d592dfad0ddc",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 170.3448999999992,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 490.64588999999194,
+      "Top surface": 28.178420000000013
+    },
+    "source_file": "cube20-mk35.gcode",
+    "source_sha256": "fcc2306797d4cf3bd25c02343ef081d66bc4c367a71056915e1563dd3112eb9b",
+    "validator_warnings": 0
+  },
+  "cube20/u1": {
+    "filament_mm": [
+      1217.0192900000095,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "747f586aaf629af8b9455ae89ed33c64e46a70dfbfa595131f36d592dfad0ddc",
+    "profile_args": [
+      "--vendor",
+      "Snapmaker",
+      "--printer",
+      "Snapmaker U1 (0.4 nozzle)",
+      "--print",
+      "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+      "--filament",
+      "Snapmaker PLA @U1",
+      "--bed",
+      "High Temp Plate"
+    ],
+    "roles": {
+      "Bottom surface": 33.08436999999997,
+      "Inner wall": 247.03853000000126,
+      "Internal Bridge": 38.83761,
+      "Internal solid infill": 140.81011000000038,
+      "Outer wall": 241.6175300000012,
+      "Sparse infill": 470.1290600000046,
+      "Top surface": 30.502080000000003
+    },
+    "source_file": "plate_1.gcode",
+    "source_sha256": "62810c5c6a9f3b4761e062d5b0a5edabb8aae3da35fb763e17d610bd81a8d3d5",
+    "validator_warnings": 1
+  },
+  "cube20/xl": {
+    "filament_mm": [
+      1284.9877600000173,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "747f586aaf629af8b9455ae89ed33c64e46a70dfbfa595131f36d592dfad0ddc",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.36833000000001,
+      "Inner wall": 253.70070999999854,
+      "Internal solid infill": 170.3448999999992,
+      "Outer wall": 264.74951000000067,
+      "Sparse infill": 490.64588999999194,
+      "Top surface": 28.178420000000013
+    },
+    "source_file": "cube20-xl.gcode",
+    "source_sha256": "ad839e3eca49e32fbbe7ce1c158b398c725f5db5ceeb4f6e24aff402b47fc59a",
+    "validator_warnings": 1
+  },
+  "hole_block/core": {
+    "filament_mm": [
+      772.1263199999682
+    ],
+    "model_sha256": "a74007099ec0dbf8e50e2fa2346699bffe272e33a6749ca632da04b571583294",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 32.17072999999998,
+      "Inner wall": 176.1982200000013,
+      "Internal solid infill": 135.15248999999957,
+      "Outer wall": 177.41173000000012,
+      "Sparse infill": 211.98274999999865,
+      "Top surface": 22.210400000000003
+    },
+    "source_file": "hole_block-core.gcode",
+    "source_sha256": "6a38ee0680f5a175e01aab04007d870678a0c9c867b60fddc0195fbfda8b5713",
+    "validator_warnings": 1
+  },
+  "hole_block/mini": {
+    "filament_mm": [
+      793.0891799999641
+    ],
+    "model_sha256": "a74007099ec0dbf8e50e2fa2346699bffe272e33a6749ca632da04b571583294",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 32.17072999999998,
+      "Inner wall": 176.1982200000013,
+      "Internal solid infill": 157.5064499999996,
+      "Outer wall": 177.41173000000012,
+      "Sparse infill": 209.5916499999986,
+      "Top surface": 22.210400000000003
+    },
+    "source_file": "hole_block-mini.gcode",
+    "source_sha256": "5cfa453a4716f9e5522f4dde66676ac6148a838fa7ba3ded487a04fc21435aa3",
+    "validator_warnings": 0
+  },
+  "hole_block/mk35": {
+    "filament_mm": [
+      774.1263199999686
+    ],
+    "model_sha256": "a74007099ec0dbf8e50e2fa2346699bffe272e33a6749ca632da04b571583294",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 32.17072999999998,
+      "Inner wall": 176.1982200000013,
+      "Internal solid infill": 135.15248999999957,
+      "Outer wall": 177.41173000000012,
+      "Sparse infill": 211.98274999999865,
+      "Top surface": 22.210400000000003
+    },
+    "source_file": "hole_block-mk35.gcode",
+    "source_sha256": "8707c611eee4d9485177d528d6029e94f6441e2b490f674ebbb20da880ffda70",
+    "validator_warnings": 0
+  },
+  "hole_block/xl": {
+    "filament_mm": [
+      792.1263199999654,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "a74007099ec0dbf8e50e2fa2346699bffe272e33a6749ca632da04b571583294",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 32.17072999999998,
+      "Inner wall": 176.1982200000013,
+      "Internal solid infill": 135.15248999999957,
+      "Outer wall": 177.41173000000012,
+      "Sparse infill": 211.98274999999865,
+      "Top surface": 22.210400000000003
+    },
+    "source_file": "hole_block-xl.gcode",
+    "source_sha256": "6c7dd2024f67fd4d5f564377ef40786626dd94f157b1a89001d953c6f8c7935d",
+    "validator_warnings": 1
+  },
+  "organic_figure/core": {
+    "filament_mm": [
+      1488.95024000003
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 66.81936000000002,
+      "Inner wall": 380.6228800000019,
+      "Internal solid infill": 214.8952799999994,
+      "Outer wall": 414.74423000000075,
+      "Overhang perimeter": 8.337629999999999,
+      "Sparse infill": 358.7352200000009,
+      "Top surface": 27.79564000000002
+    },
+    "source_file": "organic_figure-core.gcode",
+    "source_sha256": "e8d89b9b41405578e8fdc972394e8acb247813df1912d728c2540673f8b2cbbb",
+    "validator_warnings": 1
+  },
+  "organic_figure/mini": {
+    "filament_mm": [
+      1539.398480000024
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 66.81936000000002,
+      "Inner wall": 380.6228800000019,
+      "Internal solid infill": 261.6093999999995,
+      "Outer wall": 414.74423000000075,
+      "Overhang perimeter": 8.337629999999999,
+      "Sparse infill": 361.4693399999994,
+      "Top surface": 27.79564000000002
+    },
+    "source_file": "organic_figure-mini.gcode",
+    "source_sha256": "9a8756acfd52651ce1e453158c8d81cad096d078d137736a289e623fc717916a",
+    "validator_warnings": 0
+  },
+  "organic_figure/mk35": {
+    "filament_mm": [
+      1490.9502400000251
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 66.81936000000002,
+      "Inner wall": 380.6228800000019,
+      "Internal solid infill": 214.8952799999993,
+      "Outer wall": 414.74423000000075,
+      "Overhang perimeter": 8.337629999999999,
+      "Sparse infill": 358.73522000000037,
+      "Top surface": 27.79564000000002
+    },
+    "source_file": "organic_figure-mk35.gcode",
+    "source_sha256": "5c1829cd89d5ac7cf01ec57323e96d0133d2bf2544a9b767bc87ffd93ed8882a",
+    "validator_warnings": 0
+  },
+  "organic_figure/xl": {
+    "filament_mm": [
+      1508.9502400000297,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 66.81936000000002,
+      "Inner wall": 380.6228800000019,
+      "Internal solid infill": 214.8952799999994,
+      "Outer wall": 414.74423000000075,
+      "Overhang perimeter": 8.337629999999999,
+      "Sparse infill": 358.7352200000008,
+      "Top surface": 27.79564000000002
+    },
+    "source_file": "organic_figure-xl.gcode",
+    "source_sha256": "ef97d2517a55ff949176f939f74315c591b44d57a1fec6a195782e1977ed7cdd",
+    "validator_warnings": 1
+  },
+  "overhang_staircase/core": {
+    "filament_mm": [
+      1595.6950000000033
+    ],
+    "model_sha256": "eb346c833b74a9992034a759734e2833ecb11b45eab205234ebb61529175d4c0",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 98.49270999999985,
+      "Inner wall": 344.3508600000018,
+      "Internal solid infill": 242.65381999999803,
+      "Outer wall": 351.8278500000015,
+      "Overhang perimeter": 24.397619999999975,
+      "Sparse infill": 464.59435999999977,
+      "Top surface": 52.37778000000004
+    },
+    "source_file": "overhang_staircase-core.gcode",
+    "source_sha256": "14dc5838fd89dcb212b525b9749cab590c469b5d30506c674192d940d889f708",
+    "validator_warnings": 1
+  },
+  "overhang_staircase/mini": {
+    "filament_mm": [
+      1643.4586199999878
+    ],
+    "model_sha256": "eb346c833b74a9992034a759734e2833ecb11b45eab205234ebb61529175d4c0",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 97.29996000000033,
+      "Inner wall": 344.3507400000018,
+      "Internal solid infill": 294.8734399999963,
+      "Outer wall": 351.8278500000015,
+      "Overhang perimeter": 24.397539999999978,
+      "Sparse infill": 460.3313099999977,
+      "Top surface": 52.37778000000004
+    },
+    "source_file": "overhang_staircase-mini.gcode",
+    "source_sha256": "14dd70c8851afb5f107f7002fe58a598171eab27f0d8aabed9c8b93aac623e0f",
+    "validator_warnings": 0
+  },
+  "overhang_staircase/mk35": {
+    "filament_mm": [
+      1597.6950000000047
+    ],
+    "model_sha256": "eb346c833b74a9992034a759734e2833ecb11b45eab205234ebb61529175d4c0",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 98.49270999999985,
+      "Inner wall": 344.3508600000018,
+      "Internal solid infill": 242.65381999999812,
+      "Outer wall": 351.8278500000015,
+      "Overhang perimeter": 24.397619999999975,
+      "Sparse infill": 464.5943599999997,
+      "Top surface": 52.37778000000004
+    },
+    "source_file": "overhang_staircase-mk35.gcode",
+    "source_sha256": "e7655de5474ecc5f2446ffb39057c7de2e9f52bada1b21512817632ad8239829",
+    "validator_warnings": 0
+  },
+  "overhang_staircase/xl": {
+    "filament_mm": [
+      1615.6949400000017,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "eb346c833b74a9992034a759734e2833ecb11b45eab205234ebb61529175d4c0",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 98.49266999999986,
+      "Inner wall": 344.3508000000018,
+      "Internal solid infill": 242.65397999999786,
+      "Outer wall": 351.8278500000015,
+      "Overhang perimeter": 24.397539999999978,
+      "Sparse infill": 464.59431999999975,
+      "Top surface": 52.37778000000004
+    },
+    "source_file": "overhang_staircase-xl.gcode",
+    "source_sha256": "08b1ff5400e3ccffcd698ef400369662f9d6b4d0b03cfdc8fa0fc925ce7a6385",
+    "validator_warnings": 1
+  },
+  "sequential_cubes/core": {
+    "filament_mm": [
+      3760.9632800001295
+    ],
+    "model_sha256": "36e5dab9abb782e726e215bdf8e93b1a118603dcbccde9efefa827895e2ef933",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 121.1049899999997,
+      "Inner wall": 761.1021299999921,
+      "Internal solid infill": 511.0346999999936,
+      "Outer wall": 794.2485300000087,
+      "Sparse infill": 1471.9376700000307,
+      "Top surface": 84.53526000000002
+    },
+    "source_file": "ref_core_corpus.gcode",
+    "source_sha256": "b7a4b932bafe9af6c208b466e2aefb7b5201840f556daf252eda02213e99cde8",
+    "validator_warnings": 3
+  },
+  "sequential_cubes/mk35": {
+    "filament_mm": [
+      3762.9632800001295
+    ],
+    "model_sha256": "36e5dab9abb782e726e215bdf8e93b1a118603dcbccde9efefa827895e2ef933",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 121.1049899999997,
+      "Inner wall": 761.1021299999921,
+      "Internal solid infill": 511.0346999999936,
+      "Outer wall": 794.2485300000087,
+      "Sparse infill": 1471.937670000031,
+      "Top surface": 84.53526000000002
+    },
+    "source_file": "sequential_cubes-mk35.gcode",
+    "source_sha256": "02e0570e9847a9734071de4eeeb36f25bdcde2e362af15743458f2dc26bf686a",
+    "validator_warnings": 0
+  },
+  "sequential_cubes/u1": {
+    "filament_mm": [
+      3621.057869999516,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "36e5dab9abb782e726e215bdf8e93b1a118603dcbccde9efefa827895e2ef933",
+    "profile_args": [
+      "--vendor",
+      "Snapmaker",
+      "--printer",
+      "Snapmaker U1 (0.4 nozzle)",
+      "--print",
+      "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+      "--filament",
+      "Snapmaker PLA @U1",
+      "--bed",
+      "High Temp Plate"
+    ],
+    "roles": {
+      "Bottom surface": 99.2531099999999,
+      "Inner wall": 741.1155900000028,
+      "Internal Bridge": 116.51282999999978,
+      "Internal solid infill": 422.430330000001,
+      "Outer wall": 724.8525899999889,
+      "Sparse infill": 1410.3871800000732,
+      "Top surface": 91.50624
+    },
+    "source_file": "plate_1.gcode",
+    "source_sha256": "6f1d0ef89a7576e03ded4f95ae8b6b4b7505eacf6eb25bf9ccf655d984751188",
+    "validator_warnings": 3
+  },
+  "sequential_cubes/xl": {
+    "filament_mm": [
+      3780.9632800001314,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "36e5dab9abb782e726e215bdf8e93b1a118603dcbccde9efefa827895e2ef933",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 121.1049899999997,
+      "Inner wall": 761.1021299999921,
+      "Internal solid infill": 511.0346999999936,
+      "Outer wall": 794.2485300000087,
+      "Sparse infill": 1471.9376700000307,
+      "Top surface": 84.53526000000002
+    },
+    "source_file": "ref_xl_corpus.gcode",
+    "source_sha256": "459215228d38e36b9213ac8c002ce9a9c7187b98d17945e02aece777f6d6402e",
+    "validator_warnings": 3
+  },
+  "sequential_cubes_small/mini": {
+    "filament_mm": [
+      3840.0565800001427
+    ],
+    "model_sha256": "c89455a33e0428f1e89d5525642fd42e86400baec44097dddbd4e24984a72e3a",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 121.1049899999997,
+      "Inner wall": 761.1021299999921,
+      "Internal solid infill": 595.9061999999929,
+      "Outer wall": 794.2485300000087,
+      "Sparse infill": 1465.1594700000371,
+      "Top surface": 84.53526000000002
+    },
+    "source_file": "sequential_cubes_small-mini.gcode",
+    "source_sha256": "d4cddd02dee776330efdee11241578318d8c0156d6298e8f5a658f9ffae3c9dc",
+    "validator_warnings": 0
+  },
+  "support_orca_interface/u1": {
+    "filament_mm": [
+      3392.27496999914,
+      61.74998999999987,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--vendor",
+      "Snapmaker",
+      "--printer",
+      "Snapmaker U1 (0.4 nozzle)",
+      "--print",
+      "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+      "--filament",
+      "Snapmaker PLA @U1",
+      "--bed",
+      "High Temp Plate"
+    ],
+    "roles": {
+      "Bottom surface": 3.673160000000001,
+      "Bridge": 25.273509999999995,
+      "Brim": 39.61506000000007,
+      "Inner wall": 370.6121900000025,
+      "Internal Bridge": 45.79034000000001,
+      "Internal solid infill": 207.64920000000012,
+      "Outer wall": 377.99051000000594,
+      "Overhang wall": 7.9998,
+      "Prime tower": 1194.519309999019,
+      "Sparse infill": 368.7748300000023,
+      "Support": 747.9305599999989,
+      "Support interface": 18.361190000000004,
+      "Top surface": 30.83529999999996
+    },
+    "source_file": "UA-ref.gcode",
+    "source_sha256": "d6451c478c7c406c6db0e5bad7ac7bc1e8a3ba760599e1f3d84cf31802deb7e5",
+    "tool_roles": [
+      {
+        "Bottom surface": 3.673160000000001,
+        "Bridge": 25.273509999999995,
+        "Brim": 39.61506000000007,
+        "Inner wall": 370.6121900000025,
+        "Internal Bridge": 45.79034000000001,
+        "Internal solid infill": 207.64920000000012,
+        "Outer wall": 377.99051000000594,
+        "Overhang wall": 7.9998,
+        "Prime tower": 1151.130509999054,
+        "Sparse infill": 368.7748300000023,
+        "Support": 747.9305599999989,
+        "Top surface": 30.83529999999996
+      },
+      {
+        "Prime tower": 43.38879999999988,
+        "Support interface": 18.361190000000004
+      },
+      {},
+      {}
+    ],
+    "toolchanges": 8,
+    "validator_warnings": 3
+  },
+  "support_orca_normal/u1": {
+    "filament_mm": [
+      4036.0453199995854,
+      268.38758000001366,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--vendor",
+      "Snapmaker",
+      "--printer",
+      "Snapmaker U1 (0.4 nozzle)",
+      "--print",
+      "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+      "--filament",
+      "Snapmaker PLA @U1",
+      "--bed",
+      "High Temp Plate"
+    ],
+    "roles": {
+      "Bottom surface": 3.673160000000001,
+      "Bridge": 25.273509999999995,
+      "Brim": 10.494630000000017,
+      "Inner wall": 370.6124300000026,
+      "Internal Bridge": 45.79034000000001,
+      "Internal solid infill": 207.64920000000012,
+      "Outer wall": 377.99051000000594,
+      "Overhang wall": 7.9998,
+      "Prime tower": 1285.0377499990327,
+      "Sparse infill": 368.7748300000023,
+      "Support": 1449.6218400000284,
+      "Support interface": 105.67960000000046,
+      "Top surface": 30.83529999999996
+    },
+    "source_file": "UD-ref.gcode",
+    "source_sha256": "82bff191030bc5eaf7a95701fa9898f9b7167201563bcb61dc1e7a11fea2234b",
+    "tool_roles": [
+      {
+        "Bottom surface": 3.673160000000001,
+        "Bridge": 25.273509999999995,
+        "Brim": 10.494630000000017,
+        "Inner wall": 370.6124300000026,
+        "Internal Bridge": 45.79034000000001,
+        "Internal solid infill": 207.64920000000012,
+        "Outer wall": 377.99051000000594,
+        "Overhang wall": 7.9998,
+        "Prime tower": 1122.3297699991672,
+        "Sparse infill": 368.7748300000023,
+        "Support": 1449.6218400000284,
+        "Top surface": 30.83529999999996
+      },
+      {
+        "Prime tower": 162.70798000000966,
+        "Support interface": 105.67960000000046
+      },
+      {},
+      {}
+    ],
+    "toolchanges": 30,
+    "validator_warnings": 3
+  },
+  "support_soluble_all/xl": {
+    "filament_mm": [
+      3378.4246499999504,
+      1805.1069800000173,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.66641000000001,
+      "Inner wall": 384.298500000002,
+      "Internal solid infill": 241.0013699999999,
+      "Outer wall": 419.406310000001,
+      "Sparse infill": 358.7352200000008,
+      "Support": 744.9792500000067,
+      "Support interface": 69.93673000000001,
+      "Top surface": 27.79564000000002,
+      "Wipe tower": 2820.712200000027
+    },
+    "source_file": "B-ref.gcode",
+    "source_sha256": "54fafa359c13d3dac08e3f5327f54295a26d0631c7087301e24fc81978e9f8e2",
+    "tool_roles": [
+      {
+        "Bridge": 40.66641000000001,
+        "Inner wall": 384.298500000002,
+        "Internal solid infill": 241.0013699999999,
+        "Outer wall": 419.406310000001,
+        "Sparse infill": 358.7352200000008,
+        "Top surface": 27.79564000000002,
+        "Wipe tower": 1867.521200000009
+      },
+      {
+        "Support": 744.9792500000067,
+        "Support interface": 69.93673000000001,
+        "Wipe tower": 953.1909999999988
+      },
+      {},
+      {},
+      {}
+    ],
+    "toolchanges": 174,
+    "validator_warnings": 1
+  },
+  "support_soluble_grid/xl": {
+    "filament_mm": [
+      3710.698749999891,
+      2650.2081900000126,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.66641000000001,
+      "Inner wall": 384.298500000002,
+      "Internal solid infill": 241.00136999999987,
+      "Outer wall": 419.406310000001,
+      "Sparse infill": 358.7352200000008,
+      "Support": 1388.7550999999971,
+      "Support interface": 103.78558999999997,
+      "Top surface": 27.79564000000002,
+      "Wipe tower": 3320.462799999982
+    },
+    "source_file": "F-ref.gcode",
+    "source_sha256": "0d296e6d10f23c8e7e3f682b38e46d91bb60b8f499b8d3d61b7f68c3c2ae6659",
+    "tool_roles": [
+      {
+        "Bridge": 40.66641000000001,
+        "Inner wall": 384.298500000002,
+        "Internal solid infill": 241.00136999999987,
+        "Outer wall": 419.406310000001,
+        "Sparse infill": 358.7352200000008,
+        "Top surface": 27.79564000000002,
+        "Wipe tower": 2199.7953000000066
+      },
+      {
+        "Support": 1388.7550999999971,
+        "Support interface": 103.78558999999997,
+        "Wipe tower": 1120.667499999998
+      },
+      {},
+      {},
+      {}
+    ],
+    "toolchanges": 204,
+    "validator_warnings": 1
+  },
+  "support_soluble_interface/xl": {
+    "filament_mm": [
+      4192.561409999935,
+      141.65978000000004,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "1ded7a1d1733b3c2a3cb4a8c015501e4e8475c169445c2ed9f28ae2226c794a5",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 40.66641000000001,
+      "Inner wall": 384.298500000002,
+      "Internal solid infill": 241.0013699999999,
+      "Outer wall": 419.406310000001,
+      "Sparse infill": 358.7352200000008,
+      "Support": 767.5712600000109,
+      "Support interface": 47.32888000000003,
+      "Top surface": 27.79564000000002,
+      "Wipe tower": 1971.417599999962
+    },
+    "source_file": "A-ref.gcode",
+    "source_sha256": "132edac2f262870ad8bce07a957b9941c35b752a4f7929370a1d92d2ba435502",
+    "tool_roles": [
+      {
+        "Bridge": 40.66641000000001,
+        "Inner wall": 384.298500000002,
+        "Internal solid infill": 241.0013699999999,
+        "Outer wall": 419.406310000001,
+        "Sparse infill": 358.7352200000008,
+        "Support": 767.5712600000109,
+        "Top surface": 27.79564000000002,
+        "Wipe tower": 1916.0866999999653
+      },
+      {
+        "Support interface": 47.32888000000003,
+        "Wipe tower": 55.33090000000001
+      },
+      {},
+      {},
+      {}
+    ],
+    "toolchanges": 14,
+    "validator_warnings": 1
+  },
+  "tall_tower/core": {
+    "filament_mm": [
+      523.3795499999748
+    ],
+    "model_sha256": "50f7b1c6982525a025893a8a0df64d3eee33c083b911aa4c72b3351e209b556e",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Inner wall": 147.32562999999806,
+      "Internal solid infill": 3.318979999999999,
+      "Outer wall": 191.43438999999864,
+      "Skirt/Brim": 11.166990000000004,
+      "Sparse infill": 152.66439999999693,
+      "Top surface": 0.4691600000000001
+    },
+    "source_file": "tall_tower-core.gcode",
+    "source_sha256": "7c7de5a25b5887b1c5968e84de819940920147218e8eea397c90985a61d8298d",
+    "validator_warnings": 0
+  },
+  "tall_tower/mini": {
+    "filament_mm": [
+      524.4998499999751
+    ],
+    "model_sha256": "50f7b1c6982525a025893a8a0df64d3eee33c083b911aa4c72b3351e209b556e",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Inner wall": 147.32562999999806,
+      "Internal solid infill": 3.8287099999999983,
+      "Outer wall": 191.43438999999864,
+      "Skirt/Brim": 11.167009999999998,
+      "Sparse infill": 152.27494999999698,
+      "Top surface": 0.4691600000000001
+    },
+    "source_file": "tall_tower-mini.gcode",
+    "source_sha256": "a7b85ee2597fd9c464e295722694d1856b659fbf10af898c3dd6a912c66572be",
+    "validator_warnings": 0
+  },
+  "tall_tower/mk35": {
+    "filament_mm": [
+      525.3795499999752
+    ],
+    "model_sha256": "50f7b1c6982525a025893a8a0df64d3eee33c083b911aa4c72b3351e209b556e",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Inner wall": 147.32562999999806,
+      "Internal solid infill": 3.318979999999999,
+      "Outer wall": 191.43438999999864,
+      "Skirt/Brim": 11.166989999999998,
+      "Sparse infill": 152.66439999999693,
+      "Top surface": 0.4691600000000001
+    },
+    "source_file": "tall_tower-mk35.gcode",
+    "source_sha256": "58a13a552270beff26538917ce1011da3f65168894c3a15bc40f20f0ba91e695",
+    "validator_warnings": 0
+  },
+  "tall_tower/xl": {
+    "filament_mm": [
+      543.3795699999794,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "50f7b1c6982525a025893a8a0df64d3eee33c083b911aa4c72b3351e209b556e",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Inner wall": 147.32562999999806,
+      "Internal solid infill": 3.318979999999999,
+      "Outer wall": 191.43438999999864,
+      "Skirt/Brim": 11.167009999999998,
+      "Sparse infill": 152.66439999999693,
+      "Top surface": 0.4691600000000001
+    },
+    "source_file": "tall_tower-xl.gcode",
+    "source_sha256": "a05138be524a3eb34d0ddf55a746819341575a91d185c5db1e0ae2b2d250460b",
+    "validator_warnings": 0
+  },
+  "thin_features/core": {
+    "filament_mm": [
+      545.9571199999956
+    ],
+    "model_sha256": "a9d0cb3d4099f568fd18a45edd28800b92646bff77711f07ff5203c4c50b7403",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Bridge": 26.425820000000044,
+      "Inner wall": 133.93438000000006,
+      "Internal solid infill": 117.20730999999905,
+      "Outer wall": 167.6415300000001,
+      "Sparse infill": 64.58999999999989,
+      "Top surface": 19.15808000000002
+    },
+    "source_file": "thin_features-core.gcode",
+    "source_sha256": "9c723add201030b3d8d6167bfb0a87b1492db8ebdea036721a8ebc608d3db6ea",
+    "validator_warnings": 2
+  },
+  "thin_features/mini": {
+    "filament_mm": [
+      563.0056899999963
+    ],
+    "model_sha256": "a9d0cb3d4099f568fd18a45edd28800b92646bff77711f07ff5203c4c50b7403",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "roles": {
+      "Bridge": 26.425820000000044,
+      "Inner wall": 133.93438000000006,
+      "Internal solid infill": 136.50370999999907,
+      "Outer wall": 167.6415300000001,
+      "Sparse infill": 61.342169999999854,
+      "Top surface": 19.15808000000002
+    },
+    "source_file": "thin_features-mini.gcode",
+    "source_sha256": "f620563081e5ab049ef4b89df8dc073993326908838f9c3cb21868cb3d124316",
+    "validator_warnings": 0
+  },
+  "thin_features/mk35": {
+    "filament_mm": [
+      547.9571199999963
+    ],
+    "model_sha256": "a9d0cb3d4099f568fd18a45edd28800b92646bff77711f07ff5203c4c50b7403",
+    "profile_args": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ],
+    "roles": {
+      "Bridge": 26.425820000000044,
+      "Inner wall": 133.93438000000006,
+      "Internal solid infill": 117.20730999999903,
+      "Outer wall": 167.6415300000001,
+      "Sparse infill": 64.58999999999989,
+      "Top surface": 19.15808000000002
+    },
+    "source_file": "thin_features-mk35.gcode",
+    "source_sha256": "97a6b26a882710e1be2116cbadfae458445ed791a3118473f3c8e596853b315b",
+    "validator_warnings": 0
+  },
+  "thin_features/xl": {
+    "filament_mm": [
+      565.9573599999968,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "a9d0cb3d4099f568fd18a45edd28800b92646bff77711f07ff5203c4c50b7403",
+    "profile_args": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "roles": {
+      "Bridge": 26.425820000000044,
+      "Inner wall": 133.93438000000006,
+      "Internal solid infill": 117.20754999999905,
+      "Outer wall": 167.6415300000001,
+      "Sparse infill": 64.58999999999989,
+      "Top surface": 19.15808000000002
+    },
+    "source_file": "thin_features-xl.gcode",
+    "source_sha256": "12fd06451ede6e1ffd8c05d7d05ac6663f3dac22194d44815c90ba0386a27e12",
+    "validator_warnings": 2
+  }
+}

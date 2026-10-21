@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Mica Slicer
+Comment=Slicer for 3D printers
+Exec=mica-gui %F
+Icon=mica-slicer
+Terminal=false
+Categories=Graphics;3DGraphics;Engineering;
+MimeType=model/3mf;model/stl;
+StartupWMClass=mica-gui

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Keys merged into the Info.plist cargo-packager writes (see docs/release.md). -->
+<plist version="1.0">
+<dict>
+	<!-- macOS 15+ asks before an app talks to the local network (printers, mDNS discovery). -->
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>Mica Slicer finds your printers on the local network, sends them prints and shows their status and cameras.</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_snapmaker._tcp</string>
+		<string>_moonraker._tcp</string>
+		<string>_octoprint._tcp</string>
+		<string>_prusa-link._tcp</string>
+		<string>_http._tcp</string>
+	</array>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.graphics-design</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 Rene Steenfeldt. Licensed under the GNU AGPL-3.0.</string>
+</dict>
+</plist>

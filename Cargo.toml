@@ -1,0 +1,42 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2024"
+license = "AGPL-3.0-only"
+repository = "https://github.com/steenfeldt/mica-slicer"
+authors = ["Rene Steenfeldt <5940465+steenfeldt@users.noreply.github.com>"]
+rust-version = "1.99"
+
+[workspace.dependencies]
+mica-core = { path = "crates/mica-core" }
+mica-gcode = { path = "crates/mica-gcode" }
+mica-profiles = { path = "crates/mica-profiles" }
+# Test helpers (fixture paths, the skip rule); a dev-dependency only.
+mica-testkit = { path = "crates/mica-testkit" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+
+[profile.profiling]
+inherits = "release"
+debug = true
+
+# Development builds of the release binaries: no LTO, parallel codegen. Same G-code as
+# `release` (Rust does no fast-math), a fraction of the build time. Used by the quick merge
+# checks via `MICA_PROFILE=fast cargo xtask …`; `release` stays the shipping profile.
+[profile.fast]
+inherits = "release"
+lto = false
+codegen-units = 16
+incremental = true

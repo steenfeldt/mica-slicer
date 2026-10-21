@@ -1,0 +1,966 @@
+{
+  "wall-cube-classic": {
+    "roles": {
+      "Inner wall": {
+        "orca": 484.46443000000255,
+        "mica": 484.4719699999954,
+        "delta_percent": 0.0015563578099619946
+      },
+      "Internal Bridge": {
+        "orca": 35.66872999999998,
+        "mica": 35.66826000000003,
+        "delta_percent": -0.0013176807807546709
+      },
+      "Internal solid infill": {
+        "orca": 159.35335000000023,
+        "mica": 159.3613499999995,
+        "delta_percent": 0.00502028981459457
+      },
+      "Outer wall": {
+        "orca": 241.6175400000012,
+        "mica": 241.6175400000012,
+        "delta_percent": 0.0
+      },
+      "Sparse infill": {
+        "orca": 437.17321000000277,
+        "mica": 437.6421499999912,
+        "delta_percent": 0.10726640820200029
+      },
+      "Top surface": {
+        "orca": 30.502090000000006,
+        "mica": 30.502439999999996,
+        "delta_percent": 0.0011474623541785078
+      }
+    },
+    "structural_properties": {
+      "exact_wall_role_sequences": 100,
+      "layers": [
+        100,
+        100
+      ],
+      "three_wall_layers": 99,
+      "three_wall_sequence_matches": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "wall-benchy-classic": {
+    "roles": {
+      "Bridge": {
+        "orca": 53.27172000000003,
+        "mica": 53.28843999999996,
+        "delta_percent": 0.031386258975540926
+      },
+      "Brim": {
+        "orca": 1.2298399999999998,
+        "mica": 1.19917,
+        "delta_percent": -2.4938203343524146
+      },
+      "Gap infill": {
+        "orca": 243.7860800000012,
+        "mica": 245.55253000000147,
+        "delta_percent": 0.724590181687268
+      },
+      "Inner wall": {
+        "orca": 1493.045060000007,
+        "mica": 1495.396499999989,
+        "delta_percent": 0.1574929024568128
+      },
+      "Internal Bridge": {
+        "orca": 139.75806999999986,
+        "mica": 139.89319000000032,
+        "delta_percent": 0.0966813580070669
+      },
+      "Internal solid infill": {
+        "orca": 591.9323600000002,
+        "mica": 596.4459600000001,
+        "delta_percent": 0.7625195554437747
+      },
+      "Outer wall": {
+        "orca": 1012.0095100000219,
+        "mica": 1011.8542200000151,
+        "delta_percent": -0.015344717462872914
+      },
+      "Overhang wall": {
+        "orca": 6.240109999999999,
+        "mica": 6.206180000000001,
+        "delta_percent": -0.5437404148323943
+      },
+      "Sparse infill": {
+        "orca": 491.05482000000274,
+        "mica": 491.21468999999547,
+        "delta_percent": 0.0325564465476047
+      },
+      "Top surface": {
+        "orca": 105.0344499999998,
+        "mica": 105.09182000000014,
+        "delta_percent": 0.054620174619235407
+      }
+    },
+    "structural_properties": {
+      "exact_wall_role_sequences": 125,
+      "layers": [
+        240,
+        240
+      ]
+    },
+    "structural_gate": false,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "reverse-classic": {
+    "roles": {
+      "Bridge": {
+        "orca": 22.418189999999992,
+        "mica": 22.41839999999998,
+        "delta_percent": 0.0009367393174475325
+      },
+      "Inner wall": {
+        "orca": 333.77273999999994,
+        "mica": 333.77328999999963,
+        "delta_percent": 0.00016478277995446433
+      },
+      "Internal Bridge": {
+        "orca": 65.08160999999996,
+        "mica": 65.08004999999989,
+        "delta_percent": -0.002396990486353001
+      },
+      "Internal solid infill": {
+        "orca": 235.83270000000144,
+        "mica": 235.83667000000148,
+        "delta_percent": 0.0016833967469542799
+      },
+      "Outer wall": {
+        "orca": 321.25026999999875,
+        "mica": 321.2497399999992,
+        "delta_percent": -0.00016498040594781216
+      },
+      "Overhang wall": {
+        "orca": 20.704150000000023,
+        "mica": 20.704250000000034,
+        "delta_percent": 0.00048299495516435087
+      },
+      "Sparse infill": {
+        "orca": 491.0154199999973,
+        "mica": 489.6538199999894,
+        "delta_percent": -0.2773029001834293
+      },
+      "Top surface": {
+        "orca": 58.78845999999988,
+        "mica": 58.78916000000002,
+        "delta_percent": 0.0011907098776520186
+      }
+    },
+    "structural_properties": {
+      "reversed_layers": [
+        [
+          71,
+          73,
+          75,
+          77,
+          79,
+          81,
+          83,
+          85,
+          87,
+          89,
+          91,
+          93,
+          95,
+          97,
+          99,
+          101,
+          103,
+          105,
+          107,
+          109,
+          111,
+          113,
+          115,
+          117,
+          119,
+          121,
+          123,
+          125,
+          127,
+          129,
+          131,
+          133,
+          135,
+          137,
+          139,
+          141,
+          143,
+          145,
+          147,
+          149
+        ],
+        [
+          71,
+          73,
+          75,
+          77,
+          79,
+          81,
+          83,
+          85,
+          87,
+          89,
+          91,
+          93,
+          95,
+          97,
+          99,
+          101,
+          103,
+          105,
+          107,
+          109,
+          111,
+          113,
+          115,
+          117,
+          119,
+          121,
+          123,
+          125,
+          127,
+          129,
+          131,
+          133,
+          135,
+          137,
+          139,
+          141,
+          143,
+          145,
+          147,
+          149
+        ]
+      ],
+      "direction_matches": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "wall-cube-arachne": {
+    "roles": {
+      "Inner wall": {
+        "orca": 484.4604100000023,
+        "mica": 484.4684399999982,
+        "delta_percent": 0.0016575141807528837
+      },
+      "Internal Bridge": {
+        "orca": 35.68688999999996,
+        "mica": 35.65100000000003,
+        "delta_percent": -0.10056914457923227
+      },
+      "Internal solid infill": {
+        "orca": 159.41458000000023,
+        "mica": 159.29544999999968,
+        "delta_percent": -0.07472967654561513
+      },
+      "Outer wall": {
+        "orca": 241.6175300000012,
+        "mica": 241.6175200000012,
+        "delta_percent": -4.138772546902203e-06
+      },
+      "Sparse infill": {
+        "orca": 436.1415800000053,
+        "mica": 436.73961999998807,
+        "delta_percent": 0.1371206111517198
+      },
+      "Top surface": {
+        "orca": 30.502080000000003,
+        "mica": 30.502459999999996,
+        "delta_percent": 0.0012458166787077118
+      }
+    },
+    "structural_properties": {
+      "exact_wall_role_sequences": 100,
+      "layers": [
+        100,
+        100
+      ],
+      "three_wall_layers": 99,
+      "three_wall_sequence_matches": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "wall-benchy-arachne": {
+    "roles": {
+      "Bridge": {
+        "orca": 51.82678,
+        "mica": 51.753589999999924,
+        "delta_percent": -0.14122042696859127
+      },
+      "Brim": {
+        "orca": 1.2298399999999998,
+        "mica": 1.19917,
+        "delta_percent": -2.4938203343524146
+      },
+      "Inner wall": {
+        "orca": 1733.6222999999775,
+        "mica": 1733.0902499999954,
+        "delta_percent": -0.030690075916883774
+      },
+      "Internal Bridge": {
+        "orca": 144.59624999999986,
+        "mica": 143.16102000000035,
+        "delta_percent": -0.9925776083401283
+      },
+      "Internal solid infill": {
+        "orca": 563.2977100000003,
+        "mica": 568.3282100000017,
+        "delta_percent": 0.8930446388644819
+      },
+      "Outer wall": {
+        "orca": 1006.4798700000042,
+        "mica": 1006.2481000000099,
+        "delta_percent": -0.023027782959461618
+      },
+      "Overhang wall": {
+        "orca": 6.568189999999997,
+        "mica": 6.544129999999998,
+        "delta_percent": -0.3663109623807892
+      },
+      "Sparse infill": {
+        "orca": 509.9532100000023,
+        "mica": 508.55062999999694,
+        "delta_percent": -0.27504091993172386
+      },
+      "Top surface": {
+        "orca": 105.41766000000008,
+        "mica": 104.7977799999999,
+        "delta_percent": -0.5880229176024043
+      }
+    },
+    "structural_properties": {
+      "exact_wall_role_sequences": 76,
+      "layers": [
+        240,
+        240
+      ]
+    },
+    "structural_gate": false,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "reverse-arachne": {
+    "roles": {
+      "Bridge": {
+        "orca": 23.128430000000026,
+        "mica": 22.80564999999997,
+        "delta_percent": -1.3955984042153036
+      },
+      "Inner wall": {
+        "orca": 334.56759999999895,
+        "mica": 334.5587900000005,
+        "delta_percent": -0.002633249602901344
+      },
+      "Internal Bridge": {
+        "orca": 65.40295000000015,
+        "mica": 65.33847999999996,
+        "delta_percent": -0.09857353529189039
+      },
+      "Internal solid infill": {
+        "orca": 236.89631000000173,
+        "mica": 237.02230999999827,
+        "delta_percent": 0.05318782719601067
+      },
+      "Outer wall": {
+        "orca": 321.24995999999896,
+        "mica": 321.2493799999994,
+        "delta_percent": -0.00018054476942364062
+      },
+      "Overhang wall": {
+        "orca": 22.441180000000028,
+        "mica": 22.44104000000001,
+        "delta_percent": -0.000623853112968753
+      },
+      "Sparse infill": {
+        "orca": 492.8695599999956,
+        "mica": 491.3832899999882,
+        "delta_percent": -0.3015544315634777
+      },
+      "Top surface": {
+        "orca": 58.788469999999876,
+        "mica": 58.789180000000016,
+        "delta_percent": 0.0012077198133342293
+      }
+    },
+    "structural_properties": {
+      "reversed_layers": [
+        [
+          71,
+          73,
+          75,
+          77,
+          79,
+          81,
+          83,
+          85,
+          87,
+          89,
+          91,
+          93,
+          95,
+          97,
+          99,
+          101,
+          103,
+          105,
+          107,
+          109,
+          111,
+          113,
+          115,
+          117,
+          119,
+          121,
+          123,
+          125,
+          127,
+          129,
+          131,
+          133,
+          135,
+          137,
+          139,
+          141,
+          143,
+          145,
+          147,
+          149
+        ],
+        [
+          71,
+          73,
+          75,
+          77,
+          79,
+          81,
+          83,
+          85,
+          87,
+          89,
+          91,
+          93,
+          95,
+          97,
+          99,
+          101,
+          103,
+          105,
+          107,
+          109,
+          111,
+          113,
+          115,
+          117,
+          119,
+          121,
+          123,
+          125,
+          127,
+          129,
+          131,
+          133,
+          135,
+          137,
+          139,
+          141,
+          143,
+          145,
+          147,
+          149
+        ]
+      ],
+      "direction_matches": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "bridge-external_bridge_only-pillars_0": {
+    "roles": {
+      "Bridge": {
+        "orca": 29.144739999999985,
+        "mica": 29.156319999999972,
+        "delta_percent": 0.039732727071806195
+      },
+      "Inner wall": {
+        "orca": 118.90942999999972,
+        "mica": 118.89780000000022,
+        "delta_percent": -0.009780553148308613
+      },
+      "Internal Bridge": {
+        "orca": 29.11001000000002,
+        "mica": 29.07522,
+        "delta_percent": -0.11951215406665883
+      },
+      "Internal solid infill": {
+        "orca": 127.17174000000051,
+        "mica": 127.01090999999903,
+        "delta_percent": -0.1264667763462901
+      },
+      "Outer wall": {
+        "orca": 124.07806000000002,
+        "mica": 124.07806000000004,
+        "delta_percent": 2.220446049250313e-14
+      },
+      "Overhang wall": {
+        "orca": 2.5048600000000003,
+        "mica": 2.5048399999999997,
+        "delta_percent": -0.0007984478174627441
+      },
+      "Sparse infill": {
+        "orca": 83.72053000000065,
+        "mica": 83.59322000000044,
+        "delta_percent": -0.1520654491797946
+      },
+      "Top surface": {
+        "orca": 27.138629999999996,
+        "mica": 27.138929999999984,
+        "delta_percent": 0.001105435314863179
+      }
+    },
+    "structural_properties": {
+      "bridge_layers": [
+        [
+          [
+            50,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            51,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            55,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ],
+        [
+          [
+            50,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            51,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            55,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ]
+      ],
+      "extra_bridge_layers_match": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "bridge-external_bridge_only-cavity": {
+    "roles": {
+      "Bridge": {
+        "orca": 118.48933999999981,
+        "mica": 118.52950000000007,
+        "delta_percent": 0.03389334432974955
+      },
+      "Inner wall": {
+        "orca": 513.3853999999995,
+        "mica": 513.3927799999962,
+        "delta_percent": 0.0014375165317437322
+      },
+      "Internal Bridge": {
+        "orca": 211.51700999999986,
+        "mica": 211.67704999999984,
+        "delta_percent": 0.07566294550021002
+      },
+      "Internal solid infill": {
+        "orca": 920.3307300000007,
+        "mica": 920.1437900000088,
+        "delta_percent": -0.020312263178678958
+      },
+      "Outer wall": {
+        "orca": 479.6583100000036,
+        "mica": 479.6418099999996,
+        "delta_percent": -0.0034399487426783892
+      },
+      "Sparse infill": {
+        "orca": 350.4370799999926,
+        "mica": 354.06786999999423,
+        "delta_percent": 1.0360747213170818
+      },
+      "Top surface": {
+        "orca": 165.06080999999995,
+        "mica": 164.9887999999999,
+        "delta_percent": -0.04362634595094228
+      }
+    },
+    "structural_properties": {
+      "bridge_layers": [
+        [
+          [
+            5,
+            [
+              "Internal Bridge"
+            ]
+          ],
+          [
+            60,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            61,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            65,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ],
+        [
+          [
+            5,
+            [
+              "Internal Bridge"
+            ]
+          ],
+          [
+            60,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            61,
+            [
+              "Bridge"
+            ]
+          ],
+          [
+            65,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ]
+      ],
+      "extra_bridge_layers_match": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "bridge-internal_bridge_only-internal_roof": {
+    "roles": {
+      "Inner wall": {
+        "orca": 344.5028199999998,
+        "mica": 344.4962599999996,
+        "delta_percent": -0.0019041934113062098
+      },
+      "Internal Bridge": {
+        "orca": 361.88179999999977,
+        "mica": 361.7234799999991,
+        "delta_percent": -0.04374909155439033
+      },
+      "Internal solid infill": {
+        "orca": 798.4155599999997,
+        "mica": 798.098220000008,
+        "delta_percent": -0.03974621937373746
+      },
+      "Outer wall": {
+        "orca": 331.24013000000025,
+        "mica": 331.24013000000025,
+        "delta_percent": 0.0
+      },
+      "Sparse infill": {
+        "orca": 1272.7929900000165,
+        "mica": 1273.433390000033,
+        "delta_percent": 0.0503145448669029
+      },
+      "Top surface": {
+        "orca": 158.25192,
+        "mica": 158.25283000000007,
+        "delta_percent": 0.0005750325178022209
+      }
+    },
+    "structural_properties": {
+      "bridge_layers": [
+        [
+          [
+            55,
+            [
+              "Internal Bridge"
+            ]
+          ],
+          [
+            56,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ],
+        [
+          [
+            55,
+            [
+              "Internal Bridge"
+            ]
+          ],
+          [
+            56,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ]
+      ],
+      "extra_bridge_layers_match": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "bridge-apply_to_all-internal_roof": {
+    "roles": {
+      "Inner wall": {
+        "orca": 344.5028199999998,
+        "mica": 344.4962599999996,
+        "delta_percent": -0.0019041934113062098
+      },
+      "Internal Bridge": {
+        "orca": 361.88179999999977,
+        "mica": 361.7234799999991,
+        "delta_percent": -0.04374909155439033
+      },
+      "Internal solid infill": {
+        "orca": 798.4155599999997,
+        "mica": 798.098220000008,
+        "delta_percent": -0.03974621937373746
+      },
+      "Outer wall": {
+        "orca": 331.24013000000025,
+        "mica": 331.24013000000025,
+        "delta_percent": 0.0
+      },
+      "Sparse infill": {
+        "orca": 1272.7929900000165,
+        "mica": 1273.433390000033,
+        "delta_percent": 0.0503145448669029
+      },
+      "Top surface": {
+        "orca": 158.25192,
+        "mica": 158.25283000000007,
+        "delta_percent": 0.0005750325178022209
+      }
+    },
+    "structural_properties": {
+      "bridge_layers": [
+        [
+          [
+            55,
+            [
+              "Internal Bridge"
+            ]
+          ],
+          [
+            56,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ],
+        [
+          [
+            55,
+            [
+              "Internal Bridge"
+            ]
+          ],
+          [
+            56,
+            [
+              "Internal Bridge"
+            ]
+          ]
+        ]
+      ],
+      "extra_bridge_layers_match": true
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "scarf-0": {
+    "roles": {
+      "Inner wall": {
+        "orca": 177.6651900000001,
+        "mica": 177.71705000000003,
+        "delta_percent": 0.029189736042223302
+      },
+      "Internal Bridge": {
+        "orca": 72.17976999999996,
+        "mica": 72.13976000000001,
+        "delta_percent": -0.05543104390600684
+      },
+      "Internal solid infill": {
+        "orca": 324.82968000000045,
+        "mica": 324.6625900000005,
+        "delta_percent": -0.051439265032671155
+      },
+      "Outer wall": {
+        "orca": 170.64855999999938,
+        "mica": 170.81342000001135,
+        "delta_percent": 0.09660790575201084
+      },
+      "Sparse infill": {
+        "orca": 428.03243000000566,
+        "mica": 427.8717700000007,
+        "delta_percent": -0.03753453914810967
+      },
+      "Top surface": {
+        "orca": 55.15404000000001,
+        "mica": 55.154180000000025,
+        "delta_percent": 0.00025383453328142735
+      }
+    },
+    "structural_properties": {
+      "second_layer_start_ramp": [
+        {
+          "segments": 14,
+          "xy_length": 9.920362224908468,
+          "speeds": [
+            100.0
+          ]
+        },
+        {
+          "segments": 14,
+          "xy_length": 9.997133647682636,
+          "speeds": [
+            100.0
+          ]
+        }
+      ]
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  },
+  "scarf-1": {
+    "roles": {
+      "Inner wall": {
+        "orca": 177.6651900000001,
+        "mica": 177.71705000000003,
+        "delta_percent": 0.029189736042223302
+      },
+      "Internal Bridge": {
+        "orca": 72.17976999999996,
+        "mica": 72.13976000000001,
+        "delta_percent": -0.05543104390600684
+      },
+      "Internal solid infill": {
+        "orca": 324.82968000000045,
+        "mica": 324.6625900000005,
+        "delta_percent": -0.051439265032671155
+      },
+      "Outer wall": {
+        "orca": 170.64855999999938,
+        "mica": 170.81342000001135,
+        "delta_percent": 0.09660790575201084
+      },
+      "Sparse infill": {
+        "orca": 428.03243000000566,
+        "mica": 427.8717700000007,
+        "delta_percent": -0.03753453914810967
+      },
+      "Top surface": {
+        "orca": 55.15404000000001,
+        "mica": 55.154180000000025,
+        "delta_percent": 0.00025383453328142735
+      }
+    },
+    "structural_properties": {
+      "second_layer_start_ramp": [
+        {
+          "segments": 14,
+          "xy_length": 9.920362224908468,
+          "speeds": [
+            100.0
+          ]
+        },
+        {
+          "segments": 14,
+          "xy_length": 9.997133647682636,
+          "speeds": [
+            100.0
+          ]
+        }
+      ]
+    },
+    "structural_gate": true,
+    "validation_errors": [
+      0,
+      0
+    ],
+    "role_gate": true
+  }
+}

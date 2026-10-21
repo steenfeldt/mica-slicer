@@ -1,0 +1,20 @@
+[package]
+name = "mica-printhost"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+ureq = { version = "3", default-features = false, features = ["rustls", "json"] }
+
+[dev-dependencies]
+# The mock printers' cameras (examples/mock_printer.rs): MJPEG, snapshots and RTSP/H.264.
+mica-camera = { path = "../mica-camera", features = ["mock", "openh264"] }
+
+[lints]
+workspace = true

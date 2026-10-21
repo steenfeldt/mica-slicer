@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Entitlements for the Developer ID build, signed with the hardened runtime (codesign
+  options=runtime), which notarization requires.
+
+  Mica does not enable the App Sandbox: it reads PrusaSlicer / OrcaSlicer profile folders and
+  its own settings folder, which a sandbox would forbid. Without the sandbox, network access
+  and files the user picks need no entitlement. The two sandbox keys below are listed so the
+  intent is on record and they apply if the sandbox is ever turned on; they change nothing
+  today. No hardened-runtime exceptions are needed: no JIT, no unsigned libraries, no
+  DYLD variables, and no camera or microphone (printer cameras arrive over the network).
+-->
+<plist version="1.0">
+<dict>
+	<key>com.apple.security.network.client</key>
+	<true/>
+	<key>com.apple.security.files.user-selected.read-write</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,613 @@
+{
+  "version": 1,
+  "printers": {
+    "core": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "xl": [
+      "--printer",
+      "Original Prusa XL - 5T Input Shaper 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @XLIS 0.4",
+      "--filament",
+      "Prusament PLA @XLIS"
+    ],
+    "u1": [
+      "--vendor",
+      "Snapmaker",
+      "--printer",
+      "Snapmaker U1 (0.4 nozzle)",
+      "--print",
+      "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+      "--filament",
+      "Snapmaker PLA @U1",
+      "--bed",
+      "High Temp Plate"
+    ],
+    "mini": [
+      "--printer",
+      "Original Prusa MINI & MINI+ Input Shaper",
+      "--print",
+      "0.20mm SPEED @MINIIS 0.4",
+      "--filament",
+      "Prusament PLA @MINIIS"
+    ],
+    "mk35": [
+      "--printer",
+      "Original Prusa MK3.5 & MK3.5S 0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @MK3.5 0.4",
+      "--filament",
+      "Prusament PLA @MK3.5"
+    ]
+  },
+  "cases": [
+    {
+      "id": "cube20",
+      "model": "tests/models/cube20.stl",
+      "quick": true
+    },
+    {
+      "id": "cube20_binary",
+      "model": "tests/models/cube20.stl",
+      "quick": true,
+      "printers": [
+        "core",
+        "xl",
+        "mini",
+        "mk35"
+      ],
+      "encoding": "bgcode",
+      "reference_case": "cube20"
+    },
+    {
+      "id": "3DBenchy",
+      "model": "tests/models/3DBenchy.stl"
+    },
+    {
+      "id": "hole_block",
+      "model": "tests/models/hole_block.stl",
+      "quick": true
+    },
+    {
+      "id": "thin_features",
+      "model": "tests/models/thin_features.stl",
+      "quick": true
+    },
+    {
+      "id": "overhang_staircase",
+      "generated": "overhang_staircase.stl"
+    },
+    {
+      "id": "bridges",
+      "generated": "pillars_0.stl"
+    },
+    {
+      "id": "tall_tower",
+      "generated": "tall_tower.stl",
+      "args": [
+        "--set",
+        "brim_width=5"
+      ]
+    },
+    {
+      "id": "sequential_cubes",
+      "generated": "sequential_cubes.3mf",
+      "quick": true,
+      "args": [
+        "--set",
+        "complete_objects=1"
+      ],
+      "validate_note": "three cubes printed one after another (complete_objects / Orca by object); references are PrusaSlicer 2.9.6 --complete-objects and OrcaSlicer by-object slices of the same placement",
+      "printers": [
+        "core",
+        "xl",
+        "u1",
+        "mk35"
+      ]
+    },
+    {
+      "id": "sequential_cubes_small",
+      "generated": "sequential_cubes_small.3mf",
+      "quick": true,
+      "printers": [
+        "mini"
+      ],
+      "args": [
+        "--set",
+        "complete_objects=1"
+      ],
+      "validate_note": "the three sequential cubes 60 mm apart for the MINI's 180 mm bed (sequential_cubes.py generate_small); the reference is PrusaSlicer 2.9.6 --complete-objects --dont-arrange of the same placement"
+    },
+    {
+      "id": "organic_figure",
+      "generated": "support_figurine.stl",
+      "args": [
+        "--set",
+        "support_material=1",
+        "--set",
+        "support_material_style=organic"
+      ]
+    },
+    {
+      "id": "painted_cube",
+      "model": "tests/models/painted-cube.3mf",
+      "printers": [
+        "xl"
+      ],
+      "args": [
+        "--set",
+        "wipe_tower=1"
+      ],
+      "min_tools": 2,
+      "require_role": "Wipe tower"
+    },
+    {
+      "id": "plates_orca",
+      "project_presets": true,
+      "model": "tests/models/plates-orca.3mf",
+      "printers": [
+        "u1"
+      ],
+      "args": [
+        "--plate",
+        "1",
+        "--set",
+        "wipe_tower=1",
+        "--object-extruder",
+        "2=4"
+      ],
+      "validate_note": "plates-orca.3mf assigns Generic PLA/PLA/PETG/PLA @System; the validator profile gets those per-tool temperatures (OrcaFilamentLibrary fdm_filament_pla/pet)",
+      "validate_args": [
+        "--set",
+        "temperature=220,220,255,220",
+        "--set",
+        "first_layer_temperature=220,220,255,220",
+        "--set",
+        "nozzle_temperature_range_low=190,190,220,190",
+        "--set",
+        "nozzle_temperature_range_high=240,240,260,240"
+      ],
+      "min_tools": 4,
+      "require_role": "Prime tower"
+    },
+    {
+      "id": "support_soluble_interface",
+      "generated": "support_figurine.stl",
+      "printers": [
+        "xl"
+      ],
+      "args": [
+        "--center",
+        "180,180",
+        "--set",
+        "support_material=1",
+        "--set",
+        "support_material_auto=1",
+        "--set",
+        "support_material_interface_extruder=2",
+        "--set",
+        "filament_soluble=0,1,0,0,0",
+        "--set",
+        "wipe_tower=1",
+        "--set",
+        "support_material_contact_distance=0",
+        "--set",
+        "temperature=225,240,225,225,225",
+        "--set",
+        "first_layer_temperature=230,240,230,230,230",
+        "--set",
+        "support_material_style=organic",
+        "--set",
+        "support_material_extruder=0"
+      ],
+      "validate_args": [
+        "--set",
+        "temperature=225,240,225,225,225",
+        "--set",
+        "first_layer_temperature=230,240,230,230,230"
+      ],
+      "validate_note": "supports in another filament on the XL 5T: body PLA on T1, a soluble interface on T2 (PETG temperatures, filament_soluble), wipe tower. References: PrusaSlicer 2.9.6 with the same overrides (--center 180,180; scripts/compare-support-tools.py compares tool order, purge, interface layers and temperatures); organic, support base Default (0)",
+      "min_tools": 2,
+      "require_role": "Wipe tower",
+      "tool_checks": true
+    },
+    {
+      "id": "support_soluble_all",
+      "generated": "support_figurine.stl",
+      "printers": [
+        "xl"
+      ],
+      "args": [
+        "--center",
+        "180,180",
+        "--set",
+        "support_material=1",
+        "--set",
+        "support_material_auto=1",
+        "--set",
+        "support_material_interface_extruder=2",
+        "--set",
+        "filament_soluble=0,1,0,0,0",
+        "--set",
+        "wipe_tower=1",
+        "--set",
+        "support_material_contact_distance=0",
+        "--set",
+        "temperature=225,240,225,225,225",
+        "--set",
+        "first_layer_temperature=230,240,230,230,230",
+        "--set",
+        "support_material_style=organic",
+        "--set",
+        "support_material_extruder=2"
+      ],
+      "validate_args": [
+        "--set",
+        "temperature=225,240,225,225,225",
+        "--set",
+        "first_layer_temperature=230,240,230,230,230"
+      ],
+      "validate_note": "supports in another filament on the XL 5T: body PLA on T1, a soluble interface on T2 (PETG temperatures, filament_soluble), wipe tower. References: PrusaSlicer 2.9.6 with the same overrides (--center 180,180; scripts/compare-support-tools.py compares tool order, purge, interface layers and temperatures); organic, base and interface on T2",
+      "min_tools": 2,
+      "require_role": "Wipe tower",
+      "tool_checks": true
+    },
+    {
+      "id": "support_soluble_grid",
+      "generated": "support_figurine.stl",
+      "printers": [
+        "xl"
+      ],
+      "args": [
+        "--center",
+        "180,180",
+        "--set",
+        "support_material=1",
+        "--set",
+        "support_material_auto=1",
+        "--set",
+        "support_material_interface_extruder=2",
+        "--set",
+        "filament_soluble=0,1,0,0,0",
+        "--set",
+        "wipe_tower=1",
+        "--set",
+        "support_material_contact_distance=0",
+        "--set",
+        "temperature=225,240,225,225,225",
+        "--set",
+        "first_layer_temperature=230,240,230,230,230",
+        "--set",
+        "support_material_style=grid",
+        "--set",
+        "support_material_extruder=2",
+        "--set",
+        "support_material_synchronize_layers=1"
+      ],
+      "validate_args": [
+        "--set",
+        "temperature=225,240,225,225,225",
+        "--set",
+        "first_layer_temperature=230,240,230,230,230"
+      ],
+      "validate_note": "supports in another filament on the XL 5T: body PLA on T1, a soluble interface on T2 (PETG temperatures, filament_soluble), wipe tower. References: PrusaSlicer 2.9.6 with the same overrides (--center 180,180; scripts/compare-support-tools.py compares tool order, purge, interface layers and temperatures); normal grid supports, synchronized layers, base and interface on T2",
+      "min_tools": 2,
+      "require_role": "Wipe tower",
+      "tool_checks": true
+    },
+    {
+      "id": "support_orca_interface",
+      "generated": "support_figurine.stl",
+      "printers": [
+        "u1"
+      ],
+      "args": [
+        "--center",
+        "135,135",
+        "--set",
+        "enable_prime_tower=1",
+        "--set",
+        "additional_cooling_fan_speed=70,50,70,70",
+        "--set",
+        "close_fan_the_first_x_layers=1,2,1,1",
+        "--set",
+        "enable_pressure_advance=1,0,1,1",
+        "--set",
+        "fan_min_speed=100,35,100,100",
+        "--set",
+        "filament_cooling_final_speed=60,3.4,60,60",
+        "--set",
+        "filament_cooling_initial_speed=35,2.2,35,35",
+        "--set",
+        "filament_cooling_moves=2,0,2,2",
+        "--set",
+        "filament_cost=60,100,60,60",
+        "--set",
+        "filament_density=1.24,1.32,1.24,1.24",
+        "--set",
+        "filament_deretraction_speed=nil,15,nil,nil",
+        "--set",
+        "filament_is_support=0,1,0,0",
+        "--set",
+        "filament_load_time=2,0,2,2",
+        "--set",
+        "filament_loading_speed=35,25,35,35",
+        "--set",
+        "filament_loading_speed_start=35,3,35,35",
+        "--set",
+        "filament_max_volumetric_speed=14,12,14,14",
+        "--set",
+        "filament_retraction_length=nil,1.8,nil,nil",
+        "--set",
+        "filament_retraction_speed=60,28,60,60",
+        "--set",
+        "filament_unload_time=2,0,2,2",
+        "--set",
+        "filament_unloading_speed=35,25,35,35",
+        "--set",
+        "filament_unloading_speed_start=35,3,35,35",
+        "--set",
+        "hot_plate_temp=55,65,55,55",
+        "--set",
+        "hot_plate_temp_initial_layer=55,70,55,55",
+        "--set",
+        "nozzle_temperature_initial_layer=220,230,220,220",
+        "--set",
+        "nozzle_temperature_range_low=190,200,190,190",
+        "--set",
+        "overhang_fan_threshold=0%,50%,0%,0%",
+        "--set",
+        "pressure_advance=0.02,0.04,0.02,0.02",
+        "--set",
+        "slow_down_min_speed=15,20,15,15",
+        "--set",
+        "temperature_vitrification=154,45,154,154",
+        "--set",
+        "flush_volumes_matrix=0,100,100,100,100,0,100,100,100,100,0,100,100,100,100,0",
+        "--set",
+        "flush_volumes_vector=140,140,140,140,140,140,140,140",
+        "--set",
+        "wipe_tower_x=15",
+        "--set",
+        "wipe_tower_y=220",
+        "--set",
+        "enable_support=1",
+        "--set",
+        "support_type=tree(auto)",
+        "--set",
+        "support_style=organic",
+        "--set",
+        "support_filament=0",
+        "--set",
+        "support_interface_filament=2",
+        "--set",
+        "support_top_z_distance=0"
+      ],
+      "validate_args": [
+        "--set",
+        "first_layer_temperature=220,230,220,220",
+        "--set",
+        "temperature=220,220,220,220",
+        "--set",
+        "nozzle_temperature_range_low=190,200,190,190"
+      ],
+      "validate_note": "supports in another filament on the U1: body Snapmaker PLA @U1 in slot 1, support interface Snapmaker Breakaway Support For PLA @U1 in slot 2 (its filament settings as per-slot --set values), prime tower, Orca rules. References: OrcaSlicer 2.4.1 with four flattened filament presets and the figurine placed at 135,135; with a zero top gap Orca prints the first layer over the supports as Bridge/Overhang wall, Mica as solid infill/walls (also with one filament)",
+      "min_tools": 2,
+      "require_role": "Prime tower",
+      "tool_checks": true,
+      "known_role_gaps": [
+        "Bridge",
+        "Overhang wall"
+      ]
+    },
+    {
+      "id": "support_orca_normal",
+      "generated": "support_figurine.stl",
+      "printers": [
+        "u1"
+      ],
+      "args": [
+        "--center",
+        "135,135",
+        "--set",
+        "enable_prime_tower=1",
+        "--set",
+        "additional_cooling_fan_speed=70,50,70,70",
+        "--set",
+        "close_fan_the_first_x_layers=1,2,1,1",
+        "--set",
+        "enable_pressure_advance=1,0,1,1",
+        "--set",
+        "fan_min_speed=100,35,100,100",
+        "--set",
+        "filament_cooling_final_speed=60,3.4,60,60",
+        "--set",
+        "filament_cooling_initial_speed=35,2.2,35,35",
+        "--set",
+        "filament_cooling_moves=2,0,2,2",
+        "--set",
+        "filament_cost=60,100,60,60",
+        "--set",
+        "filament_density=1.24,1.32,1.24,1.24",
+        "--set",
+        "filament_deretraction_speed=nil,15,nil,nil",
+        "--set",
+        "filament_is_support=0,1,0,0",
+        "--set",
+        "filament_load_time=2,0,2,2",
+        "--set",
+        "filament_loading_speed=35,25,35,35",
+        "--set",
+        "filament_loading_speed_start=35,3,35,35",
+        "--set",
+        "filament_max_volumetric_speed=14,12,14,14",
+        "--set",
+        "filament_retraction_length=nil,1.8,nil,nil",
+        "--set",
+        "filament_retraction_speed=60,28,60,60",
+        "--set",
+        "filament_unload_time=2,0,2,2",
+        "--set",
+        "filament_unloading_speed=35,25,35,35",
+        "--set",
+        "filament_unloading_speed_start=35,3,35,35",
+        "--set",
+        "hot_plate_temp=55,65,55,55",
+        "--set",
+        "hot_plate_temp_initial_layer=55,70,55,55",
+        "--set",
+        "nozzle_temperature_initial_layer=220,230,220,220",
+        "--set",
+        "nozzle_temperature_range_low=190,200,190,190",
+        "--set",
+        "overhang_fan_threshold=0%,50%,0%,0%",
+        "--set",
+        "pressure_advance=0.02,0.04,0.02,0.02",
+        "--set",
+        "slow_down_min_speed=15,20,15,15",
+        "--set",
+        "temperature_vitrification=154,45,154,154",
+        "--set",
+        "flush_volumes_matrix=0,100,100,100,100,0,100,100,100,100,0,100,100,100,100,0",
+        "--set",
+        "flush_volumes_vector=140,140,140,140,140,140,140,140",
+        "--set",
+        "wipe_tower_x=15",
+        "--set",
+        "wipe_tower_y=220",
+        "--set",
+        "enable_support=1",
+        "--set",
+        "support_type=normal(auto)",
+        "--set",
+        "support_style=default",
+        "--set",
+        "support_filament=0",
+        "--set",
+        "support_interface_filament=2"
+      ],
+      "validate_args": [
+        "--set",
+        "first_layer_temperature=220,230,220,220",
+        "--set",
+        "temperature=220,220,220,220",
+        "--set",
+        "nozzle_temperature_range_low=190,200,190,190"
+      ],
+      "validate_note": "supports in another filament on the U1: body Snapmaker PLA @U1 in slot 1, support interface Snapmaker Breakaway Support For PLA @U1 in slot 2 (its filament settings as per-slot --set values), prime tower, Orca rules. References: OrcaSlicer 2.4.1 with four flattened filament presets and the figurine placed at 135,135; normal supports synchronized by the prime tower. Mica prints fewer interface layers on the hanging sphere (also with one filament), hence fewer tool changes (23 vs 33); the tower on T1 follows the tool changes (35% role tolerance)",
+      "min_tools": 2,
+      "require_role": "Prime tower",
+      "tool_checks": true,
+      "toolchange_tolerance": 12,
+      "role_tolerance": 35
+    },
+    {
+      "id": "cat_plate1",
+      "printers": [
+        "xl",
+        "u1"
+      ],
+      "private_env": "MICA_CORPUS_CAT",
+      "private_default": "~/models/private/five-plates.3mf",
+      "args": [
+        "--plate",
+        "1"
+      ]
+    },
+    {
+      "id": "dense_painted",
+      "private_env": "MICA_CORPUS_DENSE_PAINTED",
+      "private_default": "~/models/private/dense-painted.3mf"
+    },
+    {
+      "id": "colormix_mix50",
+      "generated": "colormix_mix50.3mf",
+      "printers": [
+        "xl"
+      ],
+      "quick": true,
+      "min_tools": 2,
+      "tool_checks": true,
+      "require_role": "Wipe tower",
+      "validate_note": "Synthetic ColorMix virtual tool 6; exact 100-layer PrusaSlicer 2.9.6 sequence checked by tests/oracles/colormix.py.",
+      "layer_sequence_checks": true,
+      "filament_tolerance": 3
+    },
+    {
+      "id": "colormix_mix75",
+      "generated": "colormix_mix75.3mf",
+      "printers": [
+        "xl"
+      ],
+      "quick": true,
+      "min_tools": 2,
+      "tool_checks": true,
+      "require_role": "Wipe tower",
+      "validate_note": "Synthetic ColorMix virtual tool 6; exact 100-layer PrusaSlicer 2.9.6 sequence checked by tests/oracles/colormix.py.",
+      "layer_sequence_checks": true,
+      "filament_tolerance": 3
+    },
+    {
+      "id": "colormix_mix33",
+      "generated": "colormix_mix33.3mf",
+      "printers": [
+        "xl"
+      ],
+      "quick": true,
+      "min_tools": 3,
+      "tool_checks": true,
+      "require_role": "Wipe tower",
+      "validate_note": "Synthetic ColorMix virtual tool 6; exact 100-layer PrusaSlicer 2.9.6 sequence checked by tests/oracles/colormix.py.",
+      "layer_sequence_checks": true,
+      "filament_tolerance": 3
+    },
+    {
+      "id": "colormix_painted_band",
+      "generated": "colormix_painted_band.3mf",
+      "printers": [
+        "xl"
+      ],
+      "quick": true,
+      "min_tools": 2,
+      "tool_checks": true,
+      "require_role": "Wipe tower",
+      "validate_note": "Synthetic ColorMix virtual tool 6; exact 100-layer PrusaSlicer 2.9.6 sequence checked by tests/oracles/colormix.py.",
+      "layer_sequence_checks": true,
+      "filament_tolerance": 3
+    },
+    {
+      "id": "colormix_mixed_plain",
+      "generated": "colormix_mixed_plain.3mf",
+      "printers": [
+        "xl"
+      ],
+      "quick": true,
+      "min_tools": 3,
+      "tool_checks": true,
+      "require_role": "Wipe tower",
+      "validate_note": "Synthetic ColorMix virtual tool 6; exact 100-layer PrusaSlicer 2.9.6 sequence checked by tests/oracles/colormix.py.",
+      "layer_sequence_checks": true,
+      "filament_tolerance": 3
+    },
+    {
+      "id": "colormix_adjacent",
+      "generated": "colormix_adjacent.3mf",
+      "printers": [
+        "xl"
+      ],
+      "quick": true,
+      "min_tools": 2,
+      "tool_checks": true,
+      "require_role": "Wipe tower",
+      "validate_note": "Synthetic ColorMix virtual tool 6; exact 100-layer PrusaSlicer 2.9.6 sequence checked by tests/oracles/colormix.py.",
+      "layer_sequence_checks": true,
+      "filament_tolerance": 3
+    }
+  ]
+}

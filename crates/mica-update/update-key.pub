@@ -1,0 +1,15 @@
+# Mica Slicer update signing PUBLIC keys (minisign / Ed25519), embedded in every build.
+#
+# Add the public .pub lines from `cargo packager signer generate` below these comments
+# (one base64 line per key). First key line = main key; further lines = backup key(s).
+# Any listed key may sign an update. Blank lines and # comment lines are ignored.
+# MICA_UPDATE_PUBKEY at build time can override this list (newlines or commas).
+# See docs/release.md for creating the main and offline backup keys and rotating them.
+# Without keys here or a build override, packaged builds say "this build cannot verify
+# updates" and never install anything; `scripts/release.sh` (without --dry-run) refuses to build.
+#
+# Never put private keys here or anywhere in this repository.
+#
+# Main key (minisign key ID 38E6549228EFDF5F), then the offline backup key (BD1024C97F66901A).
+dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDM4RTY1NDkyMjhFRkRGNUYKUldSZjMrOG9rbFRtT0tPT3ZJUWtqbHVXRDQ4bm55UkdYbUxhdU4xRGdCeGpNUzFWSnJ5Z00ranMK
+dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJEMTAyNEM5N0Y2NjkwMUEKUldRYWtHWi95U1FRdmErS3d0QjhxU1lSaDNHRU44NGlXYkwvUGluZXFzbEJpY0cvcUlZaXVrQzgK

@@ -1,0 +1,37 @@
+[package]
+name = "mica-cli"
+description = "Mica Slicer command-line interface"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "mica"
+path = "src/main.rs"
+
+[dependencies]
+mica-printhost = { path = "../mica-printhost" }
+serde = { version = "1.0.229", features = ["derive"] }
+toml = "0.9"
+mica-core.workspace = true
+mica-gcode.workspace = true
+mica-profiles = { version = "0.0.1", path = "../mica-profiles" }
+# `mica mcp`: the Model Context Protocol server over stdio (the official Rust SDK; see
+# THIRD_PARTY.md and docs/mcp.md). No network transport features.
+rmcp = { version = "=3.5.1", default-features = false, features = ["server", "macros", "transport-io", "base64"] }
+schemars = "1.1.0"
+serde_json = "1.0.154"
+tokio = { version = "1.53.3", features = ["rt", "rt-multi-thread", "io-std", "macros"] }
+
+[dev-dependencies]
+mica-testkit.workspace = true
+# The reference hash test (tests/reference_hashes.rs).
+sha2 = "0.10.9"
+# The MCP integration tests drive the server through rmcp's own client.
+rmcp = { version = "=3.5.1", default-features = false, features = ["client", "server", "macros", "transport-io", "base64"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Provenance: adapted
+# Source: orca@8500fcdcca src/libslic3r/PrintConfig.cpp :: PrintConfigDef::init_fff_params
+# Changes: Optional source-named process options; no defaults injected into Prusa configs.
+# Optional Orca process controls. Absent from Config::defaults to preserve Prusa profiles.
+wall_sequence	Enum	0	print	inner wall/outer wall	
+overhang_reverse	Bool	0	print	0	
+overhang_reverse_internal_only	Bool	0	print	0	
+overhang_reverse_threshold	FloatOrPercent	0	print	50%	extrusion_width
+enable_extra_bridge_layer	Enum	0	print	disabled	
+internal_bridge_angle	Float	0	print	0	
+bridge_density	Percent	0	print	100%	
+internal_bridge_density	Percent	0	print	100%	
+seam_slope_type	Enum	0	print	none	
+seam_slope_conditional	Bool	0	print	0	
+seam_slope_entire_loop	Bool	0	print	0	
+seam_slope_inner_walls	Bool	0	print	0	
+seam_slope_min_length	Float	0	print	20	
+seam_slope_start_height	FloatOrPercent	0	print	0	layer_height
+seam_slope_steps	Int	0	print	10	
+scarf_angle_threshold	Int	0	print	155	
+scarf_overhang_threshold	Percent	0	print	40%	
+scarf_joint_speed	FloatOrPercent	0	print	100%	
+scarf_joint_flow_ratio	Float	0	print	1	
+support_remove_small_overhang	Bool	0	print	1	
+support_interface_not_for_body	Bool	0	print	1	
+bridge_line_width	FloatOrPercent	0	print	100%	nozzle_diameter
+z_hop_types	Enums	0	printer	Slope Lift	

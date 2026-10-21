@@ -1,0 +1,24 @@
+#!/bin/sh
+# AppImage entry point. $APPIMAGE (set by the AppImage runtime) tells Mica's updater which
+# file to replace.
+#
+# GStreamer: the system's when it is installed (its plugins, including the distribution's
+# H.264 decoder, need their own core libraries); otherwise the core + base libraries bundled
+# in usr/lib/fallback, so Mica still starts (H.264 cameras then say GStreamer is needed).
+here="$(dirname "$(readlink -f "$0")")"
+have_system_gstreamer() {
+  for ldconfig in /sbin/ldconfig /usr/sbin/ldconfig ldconfig; do
+    if command -v "$ldconfig" >/dev/null 2>&1; then
+      libs="$("$ldconfig" -p 2>/dev/null)"
+      for lib in libgstreamer-1.0.so.0 libgstbase-1.0.so.0 libgstapp-1.0.so.0 libgstvideo-1.0.so.0; do
+        case "$libs" in *"$lib "*) ;; *) return 1 ;; esac
+      done
+      return 0
+    fi
+  done
+  return 1
+}
+if ! have_system_gstreamer; then
+  export LD_LIBRARY_PATH="$here/usr/lib/fallback${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+fi
+exec "$here/usr/bin/mica-gui" "$@"

@@ -1,0 +1,35 @@
+# Mica's vendored fork of eadf's `boostvoronoi` 0.12.1 (BSL-1.0), a Rust port of Boost.Polygon's
+# segment Voronoi sweep line (the one PrusaSlicer and OrcaSlicer use). See THIRD_PARTY.md and the
+# `Changes:` header lines; the optional geo/glam/cgmath/mint/nalgebra/serde integrations and the
+# file/visualisation utilities were removed, and the extended-precision integer uses fixed storage.
+[package]
+name = "boostvoronoi"
+version = "0.12.1"
+edition = "2024"
+rust-version = "1.99"
+license = "BSL-1.0"
+description = "Vendored fork of boostvoronoi 0.12.1: Boost.Polygon's segment Voronoi diagram in Rust"
+repository = "https://codeberg.org/eadf/boostvoronoi_rs"
+publish = false
+
+[lints]
+workspace = true
+
+[features]
+console_debug = []
+ce_corruption_check = []
+
+[dependencies]
+approx = "0.5.1"
+arrayvec = "0.7"
+cpp_map = "0.2.0"
+libm = "0.2.15"
+num-traits = "0.2.19"
+ordered-float = "5.1.0"
+rustc-hash = "2.1"
+smallvec = "1.15.1"
+thiserror = "2.0.17"
+vob = "3.0.6"
+
+[dev-dependencies]
+regex = "1"

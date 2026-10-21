@@ -1,0 +1,515 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Provenance: original
+
+//! Opening G-code files: PrusaSlicer text and binary, Orca / Snapmaker U1 text, files without
+//! feature types, and input that is not G-code at all.
+
+use super::*;
+use crate::preview::{TOWER, TRAVEL};
+use mica_core::toolpath::Role;
+use std::sync::atomic::AtomicU64;
+
+static NEXT: AtomicU64 = AtomicU64::new(0);
+
+fn fixture(name: &str) -> PathBuf {
+    PathBuf::from(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../mica-gcode/tests/fixtures/"
+    ))
+    .join(name)
+}
+
+/// A file in a fresh temporary folder.
+fn temp_file(name: &str, bytes: &[u8]) -> PathBuf {
+    let dir = std::env::temp_dir().join(format!(
+        "mica-gcode-doc-{}-{}",
+        std::process::id(),
+        NEXT.fetch_add(1, Ordering::Relaxed)
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join(name);
+    std::fs::write(&path, bytes).unwrap();
+    path
+}
+
+fn open(path: &Path) -> Result<Doc, String> {
+    let loaded = load(
+        path,
+        &Config::defaults(),
+        &AtomicBool::new(false),
+        &|_, _| {},
+    )?;
+    Ok(loaded.into_doc(Restore {
+        preview: false,
+        view: Default::default(),
+    }))
+}
+
+fn digest(path: &Path) -> Vec<u8> {
+    std::fs::read(path).unwrap()
+}
+
+/// The roles with records, by slot.
+fn roles(doc: &Doc) -> Vec<usize> {
+    (0..16)
+        .filter(|&r| doc.finished.preview.stats.roles[r].count > 0)
+        .collect()
+}
+
+#[test]
+fn prusaslicer_text_opens_with_layers_features_printer_and_totals() {
+    let path = fixture("cube20_ps.gcode");
+    let before = digest(&path);
+    let doc = open(&path).unwrap();
+    let p = &doc.finished.preview;
+    // 20 mm at 0.2 mm layers.
+    assert_eq!(p.layers.len(), 100, "{:?}", p.layers.first());
+    assert!((p.layers[0].z - 0.2).abs() < 1e-4);
+    assert!((p.layers.last().unwrap().z - 20.).abs() < 1e-3);
+    assert!(
+        p.layers
+            .windows(2)
+            .all(|w| w[0].start + w[0].count == w[1].start)
+    );
+    let r = roles(&doc);
+    for role in [
+        Role::ExternalPerimeter,
+        Role::Perimeter,
+        Role::InternalInfill,
+        Role::SolidInfill,
+        Role::TopSolidInfill,
+    ] {
+        assert!(r.contains(&(role as usize)), "{role:?} missing: {r:?}");
+    }
+    assert!(r.contains(&(TRAVEL as usize)));
+    // The purge line is Custom: it shows in its own slot, named so.
+    let (slot, label) = p.relabel.expect("custom extrusions");
+    assert_eq!(label, "Custom");
+    assert!(r.contains(&slot));
+    assert_eq!(p.role_name(slot), "Custom");
+    assert_eq!(p.role_name(Role::ExternalPerimeter as usize), "Outer wall");
+    // Widths from ;WIDTH:, heights from ;HEIGHT:.
+    let s = p.segment_at(p.layers[5].start + 3).unwrap();
+    assert!(s.role() == TRAVEL || (s.size & 65535) > 300, "{s:?}");
+    // Times: the footer's 15 min total, layer times planned.
+    assert!(
+        (p.total_time() - doc.scan.file_time_s().unwrap()).abs() < 1.,
+        "{}",
+        p.total_time()
+    );
+    assert!(p.layers.iter().all(|l| l.time_s > 0.));
+    // Printer, colours, material and totals from the configuration block.
+    assert_eq!(
+        doc.origin.preset.as_deref(),
+        Some("Prusa CORE One HF0.4 nozzle")
+    );
+    assert_eq!(doc.origin.model.as_deref(), Some("COREONE"));
+    assert_eq!(doc.origin.vendor, Some("Prusa"));
+    assert!(
+        doc.origin
+            .generator
+            .as_deref()
+            .unwrap()
+            .starts_with("PrusaSlicer 2.9.6")
+    );
+    assert_eq!(doc.colours[0], [0xFF, 0x80, 0x00]);
+    assert_eq!(doc.materials.first().map(String::as_str), Some("PLA"));
+    assert!(!doc.finished.binary);
+    let s = &doc.finished.summary;
+    assert_eq!(s.layers, 100);
+    assert!(s.filament_mm > 1000., "{}", s.filament_mm);
+    assert!(s.grams > 1., "{}", s.grams);
+    assert_eq!(doc.used_tools(), vec![0]);
+    // Never written to.
+    assert_eq!(digest(&path), before);
+}
+
+#[test]
+fn prusaslicer_binary_matches_its_text_twin() {
+    let path = fixture("cube20_ps.bgcode");
+    let before = digest(&path);
+    let binary = open(&path).unwrap();
+    let text = open(&fixture("cube20_ps.gcode")).unwrap();
+    assert!(binary.finished.binary);
+    assert!(binary.scan.binary);
+    let (b, t) = (&binary.finished.preview, &text.finished.preview);
+    assert_eq!(b.layers.len(), t.layers.len());
+    assert_eq!(b.count, t.count);
+    assert_eq!(roles(&binary), roles(&text));
+    // The printer metadata block names the model.
+    assert_eq!(binary.origin.model.as_deref(), Some("COREONE"));
+    assert_eq!(binary.origin.vendor, Some("Prusa"));
+    assert_eq!(digest(&path), before);
+}
+
+/// Mica's own U1 output (Klipper, Orca feature names, Snapmaker's compatibility header) and a
+/// Snapmaker Orca configuration block.
+pub(super) const ORCA_U1: &str = "; HEADER_BLOCK_START
+; generated by Snapmaker Orca 2.4.0 (Mica Slicer 0.1 compatibility mode)
+; total layer number: 2
+; filament_density: 1.24,1.27
+; filament_diameter: 1.75,1.75
+; HEADER_BLOCK_END
+M73 P0 R3
+PRINT_START TOOL_TEMP=220 BED_TEMP=60
+M104 T0 S220
+M106 P2 S0
+G90
+M83
+SET_VELOCITY_LIMIT ACCEL=10000
+T0
+;LAYER_CHANGE
+;Z:.2
+;HEIGHT:.2
+G1 X10 Y10 Z.2 F12000
+;TYPE:Outer wall
+;WIDTH:.42
+G1 X30 Y10 E.8 F3000
+G1 X30 Y30 E.8
+G2 X30 Y50 I0 J10 E1.2
+;TYPE:Sparse infill
+G1 X12 Y12 F12000
+G1 X28 Y28 E.6 F6000
+;TYPE:Prime tower
+G1 X200 Y200 F12000
+G1 X210 Y200 E.4 F3000
+M106 S255
+T1
+M104 T1 S240
+;LAYER_CHANGE
+;Z:.4
+;HEIGHT:.2
+G1 Z.4 F600
+;TYPE:Inner wall
+G1 X10 Y10 F12000
+;WIDTH:.45
+G1 X30 Y10 E.8 F3000
+;WIPE_START
+G1 X25 Y10 E-.4
+;WIPE_END
+;TYPE:Internal Bridge
+G1 X10 Y20 F12000
+G1 X30 Y20 E.9 F2000
+PRINT_END
+M73 P100 R0
+; filament used [mm] = 6.5
+; filament used T0 [mm] = 4.6
+; filament used T1 [mm] = 1.9
+; filament used T0 [g] = 0.01
+; filament used T1 [g] = 0.005
+; estimated printing time (normal mode) = 2m 30s
+; CONFIG_BLOCK_START
+; printer_model = Snapmaker U1
+; printer_settings_id = Snapmaker U1 (0.4 nozzle)
+; printer_variant = 0.4
+; filament_colour = #FFFFFF;#41B4F0
+; filament_type = PLA;PETG
+; filament_settings_id = \"Snapmaker PLA @U1\";\"Snapmaker PETG @U1\"
+; CONFIG_BLOCK_END
+";
+
+#[test]
+fn orca_u1_text_maps_orca_features_tools_and_arcs() {
+    let path = temp_file("u1.gcode", ORCA_U1.as_bytes());
+    let doc = open(&path).unwrap();
+    let p = &doc.finished.preview;
+    assert_eq!(p.layers.len(), 2);
+    assert!((p.layers[0].z - 0.2).abs() < 1e-5);
+    assert!((p.layers[1].z - 0.4).abs() < 1e-5);
+    let r = roles(&doc);
+    for role in [
+        Role::ExternalPerimeter as usize,
+        Role::InternalInfill as usize,
+        Role::Perimeter as usize,
+        Role::InternalBridgeInfill as usize,
+        TOWER as usize,
+        TRAVEL as usize,
+    ] {
+        assert!(r.contains(&role), "{role} missing from {r:?}");
+    }
+    assert!(p.relabel.is_none(), "every extrusion has a type");
+    // The arc (half a circle of radius 10) is cut into chords that stay on the circle.
+    let mut arc = vec![];
+    p.read_batches(0..p.count, |b| {
+        arc.extend(
+            b.iter()
+                .filter(|s| s.role() == Role::ExternalPerimeter as u32 && s.a[1] >= 30.)
+                .copied(),
+        )
+    })
+    .unwrap();
+    assert!(arc.len() > 8, "{}", arc.len());
+    for s in &arc {
+        let d = ((s.b[0] - 30.).powi(2) + (s.b[1] - 40.).powi(2)).sqrt();
+        assert!((d - 10.).abs() < 0.01, "{s:?}");
+        // Clockwise from (30, 30) to (30, 50) around (30, 40) passes x < 30.
+        assert!(s.b[0] <= 30.001, "{s:?}");
+    }
+    // Two tools, each with its colour, material and weight.
+    assert_eq!(doc.used_tools(), vec![0, 1]);
+    assert_eq!(doc.colours[1], [0x41, 0xB4, 0xF0]);
+    assert_eq!(doc.materials, vec!["PLA", "PETG"]);
+    assert_eq!(doc.filament_names[1], "Snapmaker PETG @U1");
+    let s = &doc.finished.summary;
+    assert_eq!(s.tools.len(), 2);
+    assert!((s.tools[1].filament_mm - 1.9).abs() < 1e-9);
+    assert!((s.tools[0].grams - 0.01).abs() < 1e-9);
+    assert!((p.total_time() - 150.).abs() < 1e-6);
+    // Fan and temperatures follow the commands (the aux fan P2 is not the part fan).
+    let mut fans = vec![];
+    let mut temps = vec![];
+    p.read_batches_with_attrs(0..p.count, |b, a| {
+        for (s, a) in b.iter().zip(a) {
+            if s.role() != TRAVEL {
+                fans.push((s.meta >> 8) & 255);
+                temps.push(a.temp());
+            }
+        }
+    })
+    .unwrap();
+    assert_eq!(fans.first(), Some(&0));
+    assert_eq!(fans.last(), Some(&100));
+    assert_eq!(temps.first(), Some(&220.));
+    assert_eq!(temps.last(), Some(&240.));
+    // The wipe is travel, not extrusion.
+    assert_eq!(p.layers[1].count, {
+        let mut n = 0;
+        p.read_batches(
+            p.layers[1].start..p.layers[1].start + p.layers[1].count,
+            |b| n += b.len() as u64,
+        )
+        .unwrap();
+        n
+    });
+    // Printer.
+    assert_eq!(doc.origin.vendor, Some("Snapmaker"));
+    assert_eq!(doc.origin.model.as_deref(), Some("Snapmaker U1"));
+    assert_eq!(
+        doc.origin.preset.as_deref(),
+        Some("Snapmaker U1 (0.4 nozzle)")
+    );
+    assert_eq!(doc.origin.nozzle.as_deref(), Some("0.4"));
+}
+
+#[test]
+fn micas_own_u1_header_names_the_u1() {
+    let text = ORCA_U1
+        .split("; CONFIG_BLOCK_START")
+        .next()
+        .unwrap()
+        .to_string();
+    let path = temp_file("mica_u1.gcode", text.as_bytes());
+    let doc = open(&path).unwrap();
+    assert_eq!(doc.origin.model.as_deref(), Some("Snapmaker U1"));
+    assert_eq!(doc.origin.vendor, Some("Snapmaker"));
+    assert_eq!(doc.origin.preset, None);
+    // No colours in the file: the preview's defaults.
+    assert_eq!(doc.colours[0], legend::TOOLS[0]);
+}
+
+#[test]
+fn a_file_without_types_or_layer_tags_still_shows_as_unknown() {
+    let mut text = String::from("G28\nG90\nM82\nG92 E0\n");
+    let mut e = 0.;
+    for layer in 1..=5 {
+        let z = layer as f64 * 0.3;
+        text.push_str(&format!("G1 Z{z:.2} F600\nG1 X0 Y0 F6000\n"));
+        for (x, y) in [(20., 0.), (20., 20.), (0., 20.), (0., 0.)] {
+            e += 0.9;
+            text.push_str(&format!("G1 X{x} Y{y} E{e:.4} F1800\n"));
+        }
+        // A Z hop between layers is not a layer.
+        text.push_str(&format!("G1 Z{:.2}\nG1 Z{z:.2}\n", z + 0.4));
+    }
+    let path = temp_file("plain.g", text.as_bytes());
+    let doc = open(&path).unwrap();
+    let p = &doc.finished.preview;
+    assert_eq!(p.layers.len(), 5, "{:?}", p.layers);
+    assert!((p.layers[2].z - 0.9).abs() < 1e-5);
+    let (slot, label) = p.relabel.expect("unknown extrusions");
+    assert_eq!(label, "Unknown");
+    assert_eq!(roles(&doc), {
+        let mut r = vec![slot, TRAVEL as usize];
+        r.sort();
+        r
+    });
+    // Absolute E: 0.9 mm per side; the width comes from the flow (0.9 mm of 1.75 mm filament
+    // over 20 mm at 0.3 mm high ≈ 0.4 mm).
+    let s = p.segment_at(p.layers[1].start + 1).unwrap();
+    let w = (s.size & 65535) as f32 / 1000.;
+    assert!((0.3..0.5).contains(&w), "{w}");
+    assert!((doc.finished.summary.filament_mm - 18.).abs() < 1e-6);
+    // No time in the file: Mica's estimator times it.
+    assert!(doc.scan.file_time_s().is_none());
+    assert!(p.total_time() > 1., "{}", p.total_time());
+    // No printer named.
+    assert!(!doc.origin.known());
+    assert_eq!(doc.origin.vendor, None);
+}
+
+#[test]
+fn unknown_type_names_get_the_unknown_label() {
+    let text = ";LAYER_CHANGE\n;Z:0.2\nG1 X0 Y0 Z0.2 F6000\n;TYPE:Mystery feature\nG1 X10 E1 F1200\n;TYPE:External perimeter\nG1 Y10 E1\n";
+    let doc = open(&temp_file("m.gcode", text.as_bytes())).unwrap();
+    let (slot, label) = doc.finished.preview.relabel.unwrap();
+    assert_eq!(label, "Unknown");
+    assert_eq!(slot, Role::GapFill as usize);
+    // A file using gap fill puts unknown extrusions elsewhere.
+    let text = text.replace("External perimeter", "Gap fill");
+    let doc = open(&temp_file("m.gcode", text.as_bytes())).unwrap();
+    assert_eq!(
+        doc.finished.preview.relabel.unwrap().0,
+        Role::Ironing as usize
+    );
+}
+
+#[test]
+fn garbage_input_is_a_clear_error() {
+    let cases: Vec<(&str, Vec<u8>, &str)> = vec![
+        ("empty.gcode", vec![], "empty"),
+        (
+            "png.gcode",
+            b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR".to_vec(),
+            "not a G-code file",
+        ),
+        (
+            "prose.gcode",
+            "This is a letter.\nIt has many lines of prose, not commands.\n"
+                .repeat(200)
+                .into_bytes(),
+            "not a G-code file",
+        ),
+        (
+            "comments.gcode",
+            b"; just a comment\nM104 S200\n".to_vec(),
+            "no moves",
+        ),
+        (
+            "fake.bgcode",
+            b"G1 X1 Y1\n".to_vec(),
+            "not a binary G-code file",
+        ),
+        (
+            "broken.bgcode",
+            b"GCDE\x01\0\0\0\x01\0garbage".to_vec(),
+            "damaged",
+        ),
+        ("travel.gcode", b"G1 X10 Y10\nG1 X20\n".to_vec(), ""),
+    ];
+    for (name, bytes, expect) in cases {
+        let path = temp_file(name, &bytes);
+        match open(&path) {
+            Ok(doc) if expect.is_empty() => {
+                // Travel only still opens (the moves show as travel).
+                assert!(doc.finished.preview.count > 0);
+            }
+            Ok(_) => panic!("{name} opened"),
+            Err(e) => {
+                assert!(!expect.is_empty(), "{name}: {e}");
+                assert!(e.contains(expect), "{name}: {e}");
+            }
+        }
+        // Never changed.
+        assert_eq!(std::fs::read(&path).unwrap(), bytes, "{name}");
+    }
+    let missing = open(Path::new("/nonexistent/mica/file.gcode"))
+        .err()
+        .unwrap();
+    assert!(missing.contains("could not open"), "{missing}");
+}
+
+#[test]
+fn cancel_stops_a_load() {
+    let cancel = AtomicBool::new(true);
+    let e = load(
+        &fixture("cube20_ps.gcode"),
+        &Config::defaults(),
+        &cancel,
+        &|_, _| {},
+    )
+    .err()
+    .unwrap();
+    assert_eq!(e, "Canceled");
+}
+
+#[test]
+fn durations_and_footers_parse() {
+    assert_eq!(parse::parse_duration("3h 8m 31s"), Some(11311.));
+    assert_eq!(parse::parse_duration("1d 0h 1m 0s"), Some(86460.));
+    assert_eq!(parse::parse_duration("15m 0s"), Some(900.));
+    assert_eq!(parse::parse_duration("soon"), None);
+    assert_eq!(parse::role_of("Wipe tower"), Some(TOWER));
+    assert_eq!(parse::role_of("Prime tower"), Some(TOWER));
+    assert_eq!(
+        parse::role_of("Bottom surface"),
+        Some(Role::SolidInfill as u32)
+    );
+    assert_eq!(parse::role_of("Custom"), None);
+}
+
+/// Printer detection: the file's printer against My printers (profile links and reported
+/// models), with a warning for another model.
+#[test]
+fn the_files_printer_ranks_my_printers_and_warns_on_another_model() {
+    use crate::printhost::config::{Fit, Kind, Printer as Host};
+    let prusa = Origin {
+        vendor: Some("Prusa"),
+        preset: Some("Prusa CORE One HF0.4 nozzle".into()),
+        model: Some("COREONE".into()),
+        ..Default::default()
+    };
+    let resolved = Printer {
+        model_name: Some("Prusa CORE One".into()),
+        preset: Some((0, "Prusa CORE One HF0.4 nozzle".into())),
+    };
+    let host = |name: &str, kind, model: Option<&str>, profile: Option<&str>| {
+        let mut h = Host::new(kind);
+        h.name = name.into();
+        h.model = model.map(str::to_string);
+        h.profile = profile.map(str::to_string);
+        h
+    };
+    let linked = host(
+        "Desk",
+        Kind::PrusaLink,
+        None,
+        Some("Prusa/Prusa CORE One HF0.4 nozzle"),
+    );
+    let core = host("Core", Kind::PrusaLink, Some("Prusa CORE One"), None);
+    let xl = host("XL", Kind::PrusaLink, Some("Original Prusa XL 5T"), None);
+    let unknown = host("New", Kind::PrusaLink, None, None);
+    let u1 = host("U1", Kind::SnapmakerU1, None, None);
+    assert_eq!(fit(&linked, &prusa, &resolved), Some(Fit::Linked));
+    assert_eq!(fit(&core, &prusa, &resolved), Some(Fit::Model));
+    assert_eq!(fit(&xl, &prusa, &resolved), Some(Fit::Family));
+    assert_eq!(fit(&u1, &prusa, &resolved), Some(Fit::Other));
+    assert_eq!(mismatch(&linked, &prusa, &resolved), None);
+    assert_eq!(mismatch(&core, &prusa, &resolved), None);
+    assert_eq!(
+        mismatch(&unknown, &prusa, &resolved),
+        None,
+        "nothing to tell"
+    );
+    let w = mismatch(&xl, &prusa, &resolved).unwrap();
+    assert!(
+        w.contains("Prusa CORE One") && w.contains("Original Prusa XL 5T"),
+        "{w}"
+    );
+    let w = mismatch(&u1, &prusa, &resolved).unwrap();
+    assert!(w.contains("Snapmaker U1 printer"), "{w}");
+    // A U1 file fits a U1 by model, whatever it is called.
+    let snap = Origin {
+        vendor: Some("Snapmaker"),
+        model: Some("Snapmaker U1".into()),
+        ..Default::default()
+    };
+    let r = Printer {
+        model_name: Some("Snapmaker U1".into()),
+        preset: None,
+    };
+    assert_eq!(fit(&u1, &snap, &r), Some(Fit::Model));
+    assert_eq!(mismatch(&u1, &snap, &r), None);
+    assert!(mismatch(&core, &snap, &r).is_some());
+    // A file that names no printer warns about none.
+    assert_eq!(mismatch(&xl, &Origin::default(), &Printer::default()), None);
+}

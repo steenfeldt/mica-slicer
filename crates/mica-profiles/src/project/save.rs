@@ -1,0 +1,509 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Provenance: original
+// Changes: Records mica_slicing_rules (Orca projects: Mica's sidecar; Prusa projects: Slic3r_PE.config).
+// Changes: A PrusaSlicer project gets the PrusaSlicer counterparts of the merged settings (mica_core::merged) next to the Orca keys.
+// Changes: Orca projects get absolute values for PrusaSlicer percentages Orca has only in mm or mm/s (orca_absolutes).
+
+//! Project settings serialization shared by CLI export and GUI Save.
+use super::Changes;
+use mica_core::{
+    config::{Config, ConfigValue, Scope, option_defs, serialize_value},
+    threemf::{self, Flavour, Project, RawConfig, Settings},
+};
+
+/// An existing native configuration is authoritative while its project settings are in use.
+/// Only `edits` are written over it; resolved defaults never leak into a native project.
+pub struct SaveSettings<'a> {
+    pub config: &'a Config,
+    pub colours: &'a [String],
+    pub original: Option<&'a RawConfig>,
+    pub edits: &'a Changes,
+}
+
+impl SaveSettings<'_> {
+    /// `selected_orca` composes selected native presets only when source text cannot be used.
+    /// It returns any user-profile edits separately, so they are listed as project changes.
+    /// The slicing rules are recorded too: in Mica's sidecar for an Orca project, and in a
+    /// Prusa project when they are not PrusaSlicer's (a Prusa project's default).
+    pub fn write(
+        &self,
+        project: &mut Project,
+        flavour: Flavour,
+        selected_orca: impl FnOnce() -> Result<Option<(crate::orca::RawConfig, Changes)>, String>,
+    ) -> Result<(), String> {
+        self.write_settings(project, flavour, selected_orca)?;
+        use mica_core::rules::{KEY, Rules};
+        let rules = Rules::of(self.config);
+        match flavour {
+            Flavour::Orca => {
+                project
+                    .mica_settings
+                    .insert(KEY.into(), rules.name().into());
+            }
+            Flavour::Prusa if rules.is_orca() => {
+                let patch = Settings::from([(KEY.to_string(), rules.name().to_string())]);
+                project.update_settings(&patch).map_err(|e| e.to_string())?;
+            }
+            Flavour::Prusa => {}
+        }
+        Ok(())
+    }
+
+    fn write_settings(
+        &self,
+        project: &mut Project,
+        flavour: Flavour,
+        selected_orca: impl FnOnce() -> Result<Option<(crate::orca::RawConfig, Changes)>, String>,
+    ) -> Result<(), String> {
+        let original = self
+            .original
+            .filter(|c| c.path.ends_with("project_settings.config") == (flavour == Flavour::Orca));
+        if let Some(original) = original {
+            project.config = Some(original.clone());
+            if self.edits.count() > 0 {
+                if flavour == Flavour::Orca {
+                    apply_orca_edits(
+                        project,
+                        self.edits,
+                        &Changes::default(),
+                        self.config,
+                        self.colours,
+                    )?;
+                } else {
+                    // An edited merged setting writes both spellings: PrusaSlicer reads the
+                    // counterpart, Mica the Orca key.
+                    let patch: Settings = self
+                        .edits
+                        .process
+                        .keys()
+                        .chain(self.edits.printer.keys())
+                        .chain(self.edits.filaments.iter().flat_map(|f| f.keys()))
+                        .flat_map(|k| {
+                            let pair = mica_core::merged::by_orca(k)
+                                .or_else(|| mica_core::merged::by_prusa(k));
+                            match pair {
+                                Some(p) => vec![p.prusa.to_string(), p.orca.to_string()],
+                                None => vec![k.clone()],
+                            }
+                        })
+                        .filter_map(|k| {
+                            let v = if mica_core::merged::is_counterpart(&k) {
+                                mica_core::merged::prusa_raw(self.config, &k)
+                            } else {
+                                self.config.raw(&k)
+                            };
+                            v.map(|v| (k, v))
+                        })
+                        .collect();
+                    project.update_settings(&patch).map_err(|e| e.to_string())?;
+                }
+            }
+            return Ok(());
+        }
+        if flavour == Flavour::Prusa {
+            let mut config = self.config.clone();
+            mica_core::merged::project_to_prusa(&mut config);
+            let mut all = full_settings(&config);
+            all.insert(
+                "filament_colour".into(),
+                mica_core::config::escape_strings(self.colours),
+            );
+            let mut text = String::from("; generated by Mica Slicer\n");
+            for (k, v) in &all {
+                text.push_str(&format!("; {k} = {v}\n"));
+            }
+            project.config = Some(RawConfig {
+                path: "Metadata/Slic3r_PE.config".into(),
+                text,
+            });
+            return Ok(());
+        }
+        let user = if let Some((raw, user)) = selected_orca()? {
+            project.config = Some(RawConfig {
+                path: "Metadata/project_settings.config".into(),
+                text: serde_json::to_string(&raw).map_err(|e| e.to_string())?,
+            });
+            user
+        } else {
+            project.config = Some(RawConfig {
+                path: "Metadata/project_settings.config".into(),
+                text: "{}".into(),
+            });
+            let mut all = full_settings(self.config);
+            all.insert(
+                "filament_colour".into(),
+                mica_core::config::escape_strings(self.colours),
+            );
+            orca_absolutes(&mut all, self.config, crate::orca::Dialect::Orca242);
+            project.update_settings(&all).map_err(|e| e.to_string())?;
+            Changes::default()
+        };
+        apply_orca_edits(project, self.edits, &user, self.config, self.colours)
+    }
+}
+
+/// PrusaSlicer "mm/s or %" values whose OrcaSlicer option is a plain number (Orca's
+/// handle_legacy drops a percentage there, and the preset's value would apply) become the
+/// absolute value they slice with in `config`, which holds them. A percentage of nothing
+/// (`first_layer_speed`) has no absolute value and stays.
+pub fn orca_absolutes(settings: &mut Settings, config: &Config, dialect: crate::orca::Dialect) {
+    for (key, value) in settings.iter_mut() {
+        if !value.trim().ends_with('%') {
+            continue;
+        }
+        let single = Settings::from([(key.clone(), value.clone())]);
+        let numeric = threemf::translate(&single, Flavour::Prusa, Flavour::Orca)
+            .keys()
+            .any(|k| crate::orca::option_type(k, dialect).is_some_and(|t| !t.contains("Percent")));
+        if numeric && let Ok(v) = mica_core::resolve::absolute_value(config, key) {
+            *value = format!("{v}");
+        }
+    }
+}
+
+fn full_settings(config: &Config) -> Settings {
+    let mut out = Settings::new();
+    for (k, _) in config.values() {
+        if let Some(v) = config.raw(k) {
+            out.insert(k.to_string(), v);
+        }
+    }
+    for (k, v) in config.extras() {
+        out.insert(k.to_string(), v.to_string());
+    }
+    out
+}
+
+/// Orca reloads unlisted system-preset options from disk. Keep existing change lists and
+/// add only edited keys, with each filament/printer vector taken from the effective config.
+fn apply_orca_edits(
+    project: &mut Project,
+    edits: &Changes,
+    user: &Changes,
+    config: &Config,
+    colours: &[String],
+) -> Result<(), String> {
+    let source_tools = project
+        .config
+        .as_ref()
+        .and_then(|c| serde_json::from_str::<serde_json::Value>(&c.text).ok())
+        .and_then(|j| {
+            j.get("filament_settings_id")
+                .or_else(|| j.get("filament_colour"))
+                .and_then(|v| v.as_array())
+                .map(Vec::len)
+        })
+        .unwrap_or(0);
+    let tools = config
+        .vector_len("nozzle_diameter")
+        .max(colours.len())
+        .max(source_tools)
+        .max(1);
+    let value = |key: &str| -> Option<String> {
+        if key == "filament_colour" {
+            Some(mica_core::config::escape_strings(colours))
+        } else {
+            let filament = option_defs()
+                .get(key)
+                .map(|d| d.scope)
+                .or_else(|| crate::orca::option_scope(key, crate::orca::Dialect::Orca242))
+                == Some(Scope::Filament);
+            if filament
+                && let Some(ConfigValue::Vector(items)) = config.get(key)
+                && let Some(last) = items.last()
+            {
+                let mut items = items.clone();
+                items.resize(tools, last.clone());
+                return Some(serialize_value(&ConfigValue::Vector(items)));
+            }
+            config.raw(key)
+        }
+    };
+    let mut patch = Settings::new();
+    let mut collect = |keys: Vec<&String>| -> Vec<String> {
+        let mut out = Vec::new();
+        for k in keys {
+            if let Some(v) = value(k) {
+                patch.insert(k.clone(), v);
+                if !out.contains(k) {
+                    out.push(k.clone());
+                }
+            }
+        }
+        out
+    };
+    let process = collect(edits.process.keys().chain(user.process.keys()).collect());
+    let printer = collect(edits.printer.keys().chain(user.printer.keys()).collect());
+    let filaments: Vec<Vec<String>> = (0..tools)
+        .map(|t| {
+            collect(
+                edits
+                    .filaments
+                    .get(t)
+                    .into_iter()
+                    .flat_map(|o| o.keys())
+                    .chain(user.filaments.get(t).into_iter().flat_map(|o| o.keys()))
+                    .collect(),
+            )
+        })
+        .collect();
+    if patch.is_empty() {
+        return Ok(());
+    }
+    orca_absolutes(&mut patch, config, crate::orca::Dialect::Orca242);
+    project.update_settings(&patch).map_err(|e| e.to_string())?;
+    let orca_keys = |keys: &[String]| -> Vec<String> {
+        let s: Settings = keys.iter().map(|k| (k.clone(), String::new())).collect();
+        threemf::translate(&s, Flavour::Prusa, Flavour::Orca)
+            .into_keys()
+            .filter(|k| k != "filament_colour")
+            .collect()
+    };
+    let mut lists: Vec<Vec<String>> = Vec::with_capacity(tools + 2);
+    lists.push(orca_keys(&process));
+    for f in &filaments {
+        lists.push(orca_keys(f));
+    }
+    lists.push(orca_keys(&printer));
+    let Some(raw) = &mut project.config else {
+        return Ok(());
+    };
+    let mut json: serde_json::Value = serde_json::from_str(&raw.text).map_err(|e| e.to_string())?;
+    let Some(map) = json.as_object_mut() else {
+        return Err("project settings must be a JSON object".into());
+    };
+    let mut existing: Vec<String> = map
+        .get("different_settings_to_system")
+        .and_then(|v| v.as_array())
+        .map(|a| {
+            a.iter()
+                .map(|v| v.as_str().unwrap_or_default().to_string())
+                .collect()
+        })
+        .unwrap_or_default();
+    existing.resize(tools + 2, String::new());
+    for (slot, new) in existing.iter_mut().zip(&lists) {
+        let mut keys: Vec<String> = slot
+            .split(';')
+            .map(str::trim)
+            .filter(|k| !k.is_empty())
+            .map(str::to_string)
+            .collect();
+        for k in new {
+            if !keys.contains(k) {
+                keys.push(k.clone());
+            }
+        }
+        *slot = keys.join(";");
+    }
+    map.insert(
+        "different_settings_to_system".into(),
+        serde_json::Value::Array(
+            existing
+                .into_iter()
+                .map(serde_json::Value::String)
+                .collect(),
+        ),
+    );
+    raw.text = serde_json::to_string(&json).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Compose selected native Orca presets without round-tripping them through Mica's schema.
+pub fn selected_orca(
+    bundle: &crate::orca::Bundle,
+    printer: &str,
+    process: &str,
+    filaments: &[&str],
+    bed: &str,
+    colours: &[String],
+) -> Result<crate::orca::RawConfig, String> {
+    use serde_json::Value;
+    let state = crate::orca::RawConfig::from([
+        ("curr_bed_type".into(), Value::String(bed.into())),
+        (
+            "filament_colour".into(),
+            Value::Array(colours.iter().cloned().map(Value::String).collect()),
+        ),
+    ]);
+    let mut raw = bundle
+        .full_config_with_project(printer, process, filaments, &state)
+        .map_err(|e| e.to_string())?;
+    raw.insert("from".into(), Value::String("project".into()));
+    raw.insert("name".into(), Value::String("project_settings".into()));
+    Ok(raw)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{Value, json};
+
+    #[test]
+    fn newly_added_filament_option_is_a_full_slot_vector() {
+        let original = RawConfig {
+            path: "Metadata/project_settings.config".into(),
+            text: r#"{"filament_settings_id":["PLA","PLA","PLA","PLA"]}"#.into(),
+        };
+        let mut config = Config::defaults();
+        config
+            .set_raw("nozzle_diameter", "0.4,0.4,0.4,0.4")
+            .unwrap();
+        config.set_raw("temperature", "231").unwrap();
+        let edits = Changes {
+            filaments: vec![Settings::from([("temperature".into(), "231".into())]); 4],
+            ..Default::default()
+        };
+        let mut project = Project::default();
+        SaveSettings {
+            config: &config,
+            colours: &[],
+            original: Some(&original),
+            edits: &edits,
+        }
+        .write(&mut project, Flavour::Orca, || panic!("unused"))
+        .unwrap();
+        let saved: Value = serde_json::from_str(&project.config.unwrap().text).unwrap();
+        assert_eq!(
+            saved["nozzle_temperature"],
+            json!(["231", "231", "231", "231"])
+        );
+        assert_eq!(
+            saved["different_settings_to_system"],
+            json!([
+                "",
+                "nozzle_temperature",
+                "nozzle_temperature",
+                "nozzle_temperature",
+                "nozzle_temperature",
+                ""
+            ])
+        );
+    }
+
+    #[test]
+    fn orca_edits_touch_only_requested_keys_and_merge_scoped_lists() {
+        let original_json = json!({
+            "ensure_vertical_shell_thickness": "ensure_all", "bridge_acceleration": "50%",
+            "wall_loops": "2", "source_only": {"untouched": true},
+            "filament_colour": ["#112233", "#445566", "#778899", "#AABBCC"],
+            "filament_settings_id": ["PLA", "PLA", "PLA", "PLA"],
+            "nozzle_temperature": ["210", "215", "220", "225"],
+            "retraction_length": ["0.8", "0.8", "0.8", "0.8"],
+            "different_settings_to_system": ["sparse_infill_density", "old_filament_key", "", "", "", "old_machine_key"]
+        });
+        let original = RawConfig {
+            path: "Metadata/project_settings.config".into(),
+            text: serde_json::to_string_pretty(&original_json).unwrap(),
+        };
+        let mut config = Config::defaults();
+        config
+            .set_raw("nozzle_diameter", "0.4,0.4,0.4,0.4")
+            .unwrap();
+        config.set_raw("perimeters", "5").unwrap();
+        config.set_raw("temperature", "210,231,220,225").unwrap();
+        config.set_raw("retract_length", "1,1,1,1").unwrap();
+        let colours = vec![
+            "#112233".into(),
+            "#445566".into(),
+            "#778899".into(),
+            "#AABBCC".into(),
+        ];
+        let mut edits = Changes {
+            process: Settings::from([("perimeters".into(), "5".into())]),
+            printer: Settings::from([("retract_length".into(), "1,1,1,1".into())]),
+            filaments: vec![Settings::new(); 4],
+        };
+        edits.filaments[1].insert("temperature".into(), "231".into());
+        let mut project = Project::default();
+        SaveSettings {
+            config: &config,
+            colours: &colours,
+            original: Some(&original),
+            edits: &edits,
+        }
+        .write(&mut project, Flavour::Orca, || {
+            panic!("native source must bypass preset composition")
+        })
+        .unwrap();
+        let saved: Value = serde_json::from_str(&project.config.unwrap().text).unwrap();
+        let changed: Vec<&str> = saved
+            .as_object()
+            .unwrap()
+            .iter()
+            .filter(|(key, value)| original_json.get(key) != Some(*value))
+            .map(|(key, _)| key.as_str())
+            .collect();
+        assert_eq!(
+            changed,
+            [
+                "different_settings_to_system",
+                "nozzle_temperature",
+                "retraction_length",
+                "wall_loops"
+            ]
+        );
+        assert_eq!(
+            saved.as_object().unwrap().len(),
+            original_json.as_object().unwrap().len()
+        );
+        assert_eq!(saved["wall_loops"], "5");
+        assert_eq!(
+            saved["nozzle_temperature"],
+            json!(["210", "231", "220", "225"])
+        );
+        assert_eq!(saved["retraction_length"], json!(["1", "1", "1", "1"]));
+        assert_eq!(
+            saved["different_settings_to_system"],
+            json!([
+                "sparse_infill_density;wall_loops",
+                "old_filament_key",
+                "nozzle_temperature",
+                "",
+                "",
+                "old_machine_key;retraction_length"
+            ])
+        );
+    }
+
+    #[test]
+    fn native_prusa_settings_keep_source_values_and_skip_defaults() {
+        let original = RawConfig {
+            path: "Metadata/Slic3r_PE.config".into(),
+            text: "; source formatting\r\n; perimeters = 2\r\n; bridge_acceleration = 50%\r\n; unknown = verbatim\r\n".into(),
+        };
+        let config = Config::defaults();
+        let mut project = Project::default();
+        SaveSettings {
+            config: &config,
+            colours: &[],
+            original: Some(&original),
+            edits: &Changes::default(),
+        }
+        .write(&mut project, Flavour::Prusa, || panic!("unused"))
+        .unwrap();
+        assert_eq!(
+            project.config.as_ref().unwrap().text.as_bytes(),
+            original.text.as_bytes()
+        );
+        let mut config = config;
+        config.set_raw("perimeters", "5").unwrap();
+        let edits = Changes {
+            process: Settings::from([("perimeters".into(), "5".into())]),
+            ..Default::default()
+        };
+        SaveSettings {
+            config: &config,
+            colours: &[],
+            original: Some(&original),
+            edits: &edits,
+        }
+        .write(&mut project, Flavour::Prusa, || panic!("unused"))
+        .unwrap();
+        let saved = &project.config.unwrap().text;
+        assert!(saved.contains("; perimeters = 5\n"));
+        assert!(saved.contains("; bridge_acceleration = 50%\n"));
+        assert!(saved.contains("; unknown = verbatim\n"));
+        assert_eq!(saved.lines().count(), 3);
+    }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "mica-profiles"
+description = "Mica Slicer profiles: vendor bundle import (PrusaSlicer INI, Orca JSON), inheritance, user profiles"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mica-core.workspace = true
+mica-gcode = { version = "0.0.1", path = "../mica-gcode" }
+mica-template = { version = "0.0.1", path = "../mica-template" }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+toml = "0.9"
+
+[dev-dependencies]
+mica-testkit.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,29 @@
+[package]
+name = "mica-core"
+description = "Mica Slicer engine: mesh loading, slicing, regions, toolpaths"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dev-dependencies]
+mica-testkit.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+boostvoronoi = { path = "../boostvoronoi" }
+clipper2-rust = { path = "../clipper2", features = ["using_z"] }
+flate2 = "1.1.10"
+png = "0.18.1"
+quick-xml = "0.37"
+rayon = "1.12.0"
+sha2 = "0.10.9"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[features]
+# Benchmark-only: record every Clipper2 input to `MICA_CLIPPER_DUMP` (see examples/clipper_bench.rs).
+clipper-capture = ["clipper2-rust/capture"]

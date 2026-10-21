@@ -1,0 +1,19 @@
+# Pinned upstream sources Mica Slicer reads, ports from, or compares against.
+# These checkouts are reference material only: they are never compiled into Mica.
+# Every "Source:" line in a provenance header must name one of these ids and its commit.
+#
+# Fetch them with scripts/fetch-upstream.sh (they land in upstream/<id>/, which git ignores).
+# To move a pin: update the ref+commit here, re-fetch, and diff every ported file listed in
+# PROVENANCE.md against the old commit before bumping its "Source:" line.
+#
+# id            repo                                     ref                     commit                                    license
+orca            https://github.com/OrcaSlicer/OrcaSlicer   v2.4.2                  8500fcdccaa10b5099ac20d252af3a7c560046f1  AGPL-3.0
+prusaslicer     https://github.com/prusa3d/PrusaSlicer     version_2.9.6           b028299c770b8380ee81c921a2867d522f288123  AGPL-3.0
+snapmaker-orca  https://github.com/Snapmaker/OrcaSlicer    v2.4.0                  b1831e5dcb464172de33783142425aafda834fbc  AGPL-3.0
+libbgcode       https://github.com/prusa3d/libbgcode       main                    d4da9073616d70a43c151e8c1d7fbff879d2e08a  AGPL-3.0
+clipper2        https://github.com/AngusJohnson/Clipper2   Clipper2_2.0.1          21ebba05db8894f0c7217ad35ea518080f324946  BSL-1.0
+prusa-profiles  https://github.com/prusa3d/PrusaSlicer-settings-prusa-fff  main   c712aaf177a915da19acad20262ab9379010b3aa  none (see PROVENANCE.md)
+boostvoronoi    https://codeberg.org/eadf/boostvoronoi_rs  0.12.1                  4060736209b06919a08590f37480d88b429599ba  BSL-1.0
+clipper2-rust  https://github.com/larsbrubaker/clipper2-rust  1.2.0       32519f102e0113119823b9649739f311613ca042  BSL-1.0
+bumpmesh       https://github.com/CNCKitchen/stlTexturizer  main               a6d6d6e6dfcb120b057bdf25e24dbbf1b2b0bd72  AGPL-3.0
+bricklayers    https://github.com/GeekDetour/BrickLayers  main               59e581e3643c1aeacb8f10af4789f20e261ba4b5  GPL-3.0-or-later

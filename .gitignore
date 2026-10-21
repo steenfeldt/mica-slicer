@@ -1,0 +1,16 @@
+/target
+# Pinned upstream checkouts, or symlinks to them in worktrees; only the lock file is tracked.
+/upstream/*
+!/upstream/UPSTREAM.lock
+.DS_Store
+/out
+/.claude/
+/dist
+
+# Local-only files
+.env
+*.env
+tests/models/3DBenchy_U1_painted.3mf
+__pycache__/
+*.pyc
+/*.log

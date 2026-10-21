@@ -1,0 +1,184 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+// Provenance: original
+
+//! Test helpers shared by every Mica crate (a dev-dependency only, never part of a build):
+//! repo-relative paths to the pinned upstream data and the test fixtures, and the one rule
+//! for skipping a test whose fixture is missing.
+//!
+//! **The rule.** A test that needs data outside the repository (the pinned vendor profiles in
+//! `upstream/`, fetched with `scripts/fetch-upstream.sh`) checks for it up front with
+//! [`require_fixture`] (or one of the `require_*` shorthands) and returns when it is missing.
+//! Locally that prints `SKIP <test>: <why>` so the gap is visible; with
+//! `MICA_REQUIRE_FIXTURES=1` (set in CI, where the data is fetched) a missing fixture **fails**
+//! the test instead, so CI can never pass by skipping. Tests never decide to skip by matching
+//! an error message: a real failure must stay a failure.
+//!
+//! Tests that need data Mica cannot fetch (private models, the reference slicer apps) are
+//! `#[ignore = "…"]` instead and fail when run (`cargo test -- --ignored`) without it.
+
+use std::path::{Path, PathBuf};
+
+/// Set to `1` to turn every missing fixture into a test failure (CI does).
+pub const REQUIRE_VAR: &str = "MICA_REQUIRE_FIXTURES";
+
+/// The pinned PrusaSlicer vendor bundle Mica slices Prusa printers with.
+pub const PRUSA_BUNDLE: &str = "prusa-profiles/PrusaResearch/2.5.12.ini";
+
+/// The repository root (the workspace this crate belongs to).
+pub fn root() -> PathBuf {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    root.canonicalize().unwrap_or(root)
+}
+
+/// `upstream/<rel>`: pinned upstream data (present only after `scripts/fetch-upstream.sh`).
+pub fn upstream(rel: &str) -> PathBuf {
+    root().join("upstream").join(rel)
+}
+
+/// `tests/models/<name>`: the repository's own test models.
+pub fn model(name: &str) -> PathBuf {
+    root().join("tests/models").join(name)
+}
+
+/// The pinned PrusaSlicer vendor bundle (`upstream/prusa-profiles/PrusaResearch/2.5.12.ini`).
+pub fn prusa_bundle() -> PathBuf {
+    upstream(PRUSA_BUNDLE)
+}
+
+/// The pinned OrcaSlicer 2.4.2 `resources/profiles`.
+pub fn orca_profiles() -> PathBuf {
+    upstream("orca/resources/profiles")
+}
+
+/// The pinned Snapmaker Orca 2.4.0 `resources/profiles`.
+pub fn snapmaker_orca_profiles() -> PathBuf {
+    upstream("snapmaker-orca/resources/profiles")
+}
+
+/// Whether fixtures are required (`MICA_REQUIRE_FIXTURES=1`).
+pub fn fixtures_required() -> bool {
+    std::env::var(REQUIRE_VAR).is_ok_and(|v| v == "1")
+}
+
+/// `true` when `path` exists. Otherwise prints why the calling test skips and returns `false`,
+/// or panics when [`fixtures_required`].
+#[track_caller]
+pub fn require_fixture(path: impl AsRef<Path>, why: &str) -> bool {
+    let path = path.as_ref();
+    require(
+        path.exists(),
+        &format!("{} is missing", path.display()),
+        why,
+    )
+}
+
+/// [`require_fixture`] for a precondition that is not a single path: `available` says whether
+/// it holds, `what` names what is missing.
+#[track_caller]
+pub fn require(available: bool, what: &str, why: &str) -> bool {
+    if available {
+        return true;
+    }
+    let test = std::thread::current()
+        .name()
+        .unwrap_or("<unnamed test>")
+        .to_string();
+    let caller = std::panic::Location::caller();
+    if fixtures_required() {
+        panic!("{test}: {what} ({why}); {REQUIRE_VAR}=1 requires every fixture ({caller})");
+    }
+    eprintln!("SKIP {test}: {what} ({why}) at {caller}");
+    false
+}
+
+/// The pinned Prusa vendor bundle is present.
+#[track_caller]
+pub fn require_prusa_profiles() -> bool {
+    require_fixture(
+        prusa_bundle(),
+        "Prusa vendor profiles: scripts/fetch-upstream.sh prusa-profiles",
+    )
+}
+
+/// The pinned OrcaSlicer profiles (with the Snapmaker U1 and the filament library) are present.
+#[track_caller]
+pub fn require_orca_profiles() -> bool {
+    let root = orca_profiles();
+    require_fixture(
+        root.join("Snapmaker.json"),
+        "OrcaSlicer profiles: scripts/fetch-upstream.sh --profiles orca",
+    ) && require_fixture(
+        root.join("OrcaFilamentLibrary.json"),
+        "OrcaSlicer profiles: scripts/fetch-upstream.sh --profiles orca",
+    )
+}
+
+/// The pinned Snapmaker Orca profiles are present.
+#[track_caller]
+pub fn require_snapmaker_orca_profiles() -> bool {
+    require_fixture(
+        snapmaker_orca_profiles().join("Snapmaker.json"),
+        "Snapmaker Orca profiles: scripts/fetch-upstream.sh --profiles snapmaker-orca",
+    )
+}
+
+/// The profiles a Mica vendor name slices with: `Prusa` (and empty, the default) needs the
+/// Prusa bundle, every other vendor the OrcaSlicer profiles.
+#[track_caller]
+pub fn require_vendor(vendor: &str) -> bool {
+    if vendor.is_empty() || vendor == "Prusa" {
+        require_prusa_profiles()
+    } else {
+        require_orca_profiles()
+    }
+}
+
+/// The profiles a `mica slice` argument list needs: [`require_vendor`] of its `--vendor`
+/// (Prusa without one).
+#[track_caller]
+pub fn require_profiles_for<S: AsRef<str>>(args: &[S]) -> bool {
+    let vendor = args
+        .iter()
+        .position(|a| a.as_ref() == "--vendor")
+        .and_then(|i| args.get(i + 1))
+        .map_or("Prusa", |v| v.as_ref());
+    require_vendor(vendor)
+}
+
+/// A file only a developer's machine has (private models), for `#[ignore]`d tests: the path
+/// under `MICA_PRIVATE_MODELS` (default: `~/models/private`). Panics when it is missing, since an
+/// ignored test only runs when asked for.
+#[track_caller]
+pub fn private_file(rel: &str) -> PathBuf {
+    let base = std::env::var_os("MICA_PRIVATE_MODELS")
+        .filter(|v| !v.is_empty() && v != "1")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join("models/private")))
+        .expect("set MICA_PRIVATE_MODELS to the folder holding the private models");
+    let path = base.join(rel);
+    assert!(
+        path.is_file(),
+        "{} is missing (private model; MICA_PRIVATE_MODELS names the folder that holds {rel})",
+        path.display()
+    );
+    path
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn paths_are_inside_this_repository() {
+        assert!(root().join("Cargo.toml").is_file());
+        assert!(root().join("upstream/UPSTREAM.lock").is_file());
+        assert!(model("cube20.stl").is_file());
+        assert!(prusa_bundle().starts_with(root().join("upstream")));
+    }
+
+    #[test]
+    fn a_present_fixture_is_required_quietly() {
+        assert!(require_fixture(root().join("Cargo.toml"), "always there"));
+        assert!(require(true, "nothing", "always there"));
+    }
+}

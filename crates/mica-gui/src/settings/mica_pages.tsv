@@ -1,0 +1,34 @@
+# Hand-placed setting rows (Mica's own options, Orca options the generator does not place).
+# tab, page, group, label, key, then the key to insert after (empty: the group opens the page;
+# group:Name: a new group after the group Name).
+printer	Basic information	Slicer		mica_slicing_rules	
+print	Texture	Texture		mica_texture_skin	
+print	Texture	Texture		mica_texture_skin_surfaces	mica_texture_skin
+print	Texture	Texture		mica_texture_skin_texture	mica_texture_skin_surfaces
+print	Texture	Texture		mica_texture_skin_amplitude	mica_texture_skin_texture
+print	Texture	Texture		mica_texture_skin_direction	mica_texture_skin_amplitude
+print	Texture	Texture		mica_texture_skin_first_layer	mica_texture_skin_direction
+print	Texture	Texture placement		mica_texture_skin_projection	
+print	Texture	Texture placement		mica_texture_skin_scale	mica_texture_skin_projection
+print	Texture	Texture placement		mica_texture_skin_scale_v	mica_texture_skin_scale
+print	Texture	Texture placement		mica_texture_skin_rotation	mica_texture_skin_scale_v
+print	Texture	Texture placement		mica_texture_skin_offset_u	mica_texture_skin_rotation
+print	Texture	Texture placement		mica_texture_skin_offset_v	mica_texture_skin_offset_u
+print	Texture	Texture placement		mica_texture_skin_cylinder_axis	mica_texture_skin_offset_v
+print	Texture	Texture placement		mica_texture_skin_cap_angle	mica_texture_skin_cylinder_axis
+print	Texture	Texture placement		mica_texture_skin_blend	mica_texture_skin_cap_angle
+print	Texture	Texture detail		mica_texture_skin_smoothing	
+print	Texture	Texture detail		mica_texture_skin_invert	mica_texture_skin_smoothing
+print	Texture	Texture detail		mica_texture_skin_pattern_ratio	mica_texture_skin_invert
+print	Texture	Texture detail		mica_texture_skin_pattern_softness	mica_texture_skin_pattern_ratio
+print	Texture	Texture detail		mica_texture_skin_point_dist	mica_texture_skin_pattern_softness
+print	Texture	Texture limits		mica_texture_skin_top_angle	
+print	Texture	Texture limits		mica_texture_skin_bottom_angle	mica_texture_skin_top_angle
+print	Texture	Texture limits		mica_texture_skin_overhang_clamp	mica_texture_skin_bottom_angle
+print	Texture	Texture painting		mica_texture_skin_falloff	
+print	Texture	Texture painting		mica_texture_skin_falloff_curve	mica_texture_skin_falloff
+print	Strength	Brick layers		mica_brick_layers	group:Walls
+print	Strength	Brick layers		mica_brick_layers_flow_ratio	mica_brick_layers
+print	Strength	Brick layers		mica_brick_layers_start_layer	mica_brick_layers_flow_ratio
+print	Strength	Brick layers		mica_brick_layers_end_margin_layers	mica_brick_layers_start_layer
+print	Strength	Brick layers		mica_brick_layers_travel_lift	mica_brick_layers_end_margin_layers

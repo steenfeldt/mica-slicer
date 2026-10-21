@@ -1,0 +1,18 @@
+[package]
+name = "xtask"
+description = "Repository maintenance tasks for Mica Slicer (provenance checks)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+# `site-shots`: the screenshot manifest (site/screenshots.toml in the website repository) and
+# the web images.
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+toml = "0.9"
+
+[lints]
+workspace = true

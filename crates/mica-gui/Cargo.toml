@@ -1,0 +1,97 @@
+[package]
+name = "mica-gui"
+description = "Mica Slicer native desktop GUI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+bytemuck = { version = "1.25.2", features = ["derive"] }
+eframe = { version = "0.37.0", default-features = false, features = ["wgpu", "default_fonts", "accesskit", "wayland", "x11"] }
+egui-wgpu = "0.37.0"
+glam = "0.34.1"
+mica-core.workspace = true
+rayon = "1.12.0"
+mica-gcode.workspace = true
+mica-library = { path = "../mica-library" }
+mica-profiles.workspace = true
+mica-printhost = { path = "../mica-printhost" }
+mica-camera = { path = "../mica-camera" }
+# The in-app updater (signed manifests from the update server; see docs/release.md).
+mica-update = { path = "../mica-update" }
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+resvg = { version = "0.45.1", default-features = false }
+# Text / SVG emboss tool: font outlines, shaping and SVG parsing (already in the tree through
+# egui and resvg; see THIRD_PARTY.md).
+skrifa = "0.44.0"
+harfrust = "0.12.0"
+usvg = { version = "0.45.1", default-features = false }
+rfd = "0.17.2"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0.154"
+toml = "0.9"
+# Mica MCP live mode (`mcp_live.rs`): the window runs the same tools as `mica mcp` on its own
+# project, over the CLI's protocol and scene code. (The CLI/GUI byte-identity invariant,
+# `cli_parity_tests`, runs the CLI's code path too.)
+mica-cli = { path = "../mica-cli" }
+
+[features]
+# OpenH264 as the RTSP cameras' H.264 decoder, for development only (see mica-camera). Off by
+# default, so a plain `cargo build` and the packaged app contain no OpenH264 code.
+openh264 = ["mica-camera/openh264"]
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "=3.7.0"
+# The native menu bar (File / Edit / View … in the system menu bar); see `src/menu/native.rs`.
+muda = { version = "=0.19.3", default-features = false }
+# Pasting into a text field from the native Edit menu (already in the tree through egui-winit).
+arboard = { version = "3.7.0", default-features = false }
+
+[dev-dependencies]
+mica-testkit.workspace = true
+
+[lints]
+workspace = true
+
+# Packaging with cargo-packager, driven by scripts/release.sh (see docs/release.md), which
+# runs it from this folder: the paths below are relative to it. The version is the
+# workspace's.
+[package.metadata.packager]
+product-name = "Mica Slicer"
+# Changing the identifier after the first tester build breaks updates (macOS sees another
+# app), Keychain items and file associations: decide before shipping.
+identifier = "com.micaslicer.app"
+publisher = "Rene Steenfeldt"
+homepage = "https://micaslicer.com"
+copyright = "Copyright © 2026 Rene Steenfeldt"
+category = "GraphicsAndDesign"
+description = "Mica Slicer, a slicer for 3D printers"
+license-file = "../../LICENSE"
+icons = ["assets/icon/mica.icns", "assets/icon/mica.ico", "assets/icon/mica-512.png"]
+binaries = [{ path = "mica-gui", main = true }]
+
+[[package.metadata.packager.file-associations]]
+extensions = ["3mf"]
+mime-type = "model/3mf"
+description = "3MF project"
+name = "3MF project"
+role = "editor"
+
+[[package.metadata.packager.file-associations]]
+extensions = ["stl"]
+mime-type = "model/stl"
+description = "STL model"
+name = "STL model"
+role = "viewer"
+
+[package.metadata.packager.macos]
+minimum-system-version = "14.0"
+info-plist-path = "packaging/macos/Info.plist"
+entitlements = "packaging/macos/entitlements.plist"
+
+[package.metadata.packager.nsis]
+# Per-user install (no administrator prompt), so updates install without one too.
+installer-mode = "currentUser"

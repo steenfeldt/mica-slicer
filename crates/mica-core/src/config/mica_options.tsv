@@ -1,0 +1,38 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Provenance: original
+# Mica-only options (never written into OrcaSlicer files; PrusaSlicer ignores unknown INI keys).
+# Same columns as prusa_options.tsv. See docs/slicing-rules.md.
+mica_slicing_rules	Enum	0	printer	prusaslicer	
+mica_orca_values	Enum	0	printer	orca_profile	
+mica_gcode_identity	Enum	0	printer	mica
+mica_texture_skin	Enum	0	print	none	
+mica_texture_skin_texture	String	0	print	procedural:knurl_diamond	
+mica_texture_skin_projection	Enum	0	print	triplanar	
+mica_texture_skin_scale	Float	0	print	3	
+mica_texture_skin_scale_v	Float	0	print	0	
+mica_texture_skin_offset_u	Float	0	print	0	
+mica_texture_skin_offset_v	Float	0	print	0	
+mica_texture_skin_rotation	Float	0	print	0	
+mica_texture_skin_amplitude	Float	0	print	0.4	
+mica_texture_skin_direction	Enum	0	print	outward	
+mica_texture_skin_invert	Bool	0	print	0	
+mica_texture_skin_smoothing	Float	0	print	0	
+mica_texture_skin_blend	Float	0	print	1	
+mica_texture_skin_cylinder_axis	Enum	0	print	z	
+mica_texture_skin_cap_angle	Float	0	print	20	
+mica_texture_skin_top_angle	Float	0	print	10	
+mica_texture_skin_bottom_angle	Float	0	print	10	
+mica_texture_skin_overhang_clamp	Bool	0	print	1	
+mica_texture_skin_first_layer	Bool	0	print	0	
+mica_texture_skin_point_dist	Float	0	print	0.25	
+mica_texture_skin_pattern_ratio	Float	0	print	0.5	
+mica_texture_skin_pattern_softness	Float	0	print	0.3	
+mica_texture_skin_falloff	Float	0	print	1	
+mica_texture_skin_falloff_curve	Enum	0	print	ease	
+mica_texture_skin_surfaces	Enum	0	print	walls	
+mica_texture_paint_slots	String	0	print		
+mica_brick_layers	Bool	0	print	0	
+mica_brick_layers_start_layer	Int	0	print	2	
+mica_brick_layers_flow_ratio	Percent	0	print	105%	
+mica_brick_layers_travel_lift	Float	0	print	0	
+mica_brick_layers_end_margin_layers	Int	0	print	1	

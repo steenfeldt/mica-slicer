@@ -1,0 +1,27 @@
+# Mica's vendored fork of Lars Brubaker's `clipper2-rust` 1.2.0 (BSL-1.0), a Rust port of Angus
+# Johnson's Clipper2 (the polygon clipper PrusaSlicer and OrcaSlicer bundle). See THIRD_PARTY.md and
+# the `Changes:` header lines; the SVG/file/timer utilities, demo binary and examples were removed,
+# and the sweep's hot paths were tuned without changing any result.
+[package]
+name = "clipper2-rust"
+version = "1.2.0"
+edition = "2021"
+rust-version = "1.99"
+license = "BSL-1.0"
+description = "Vendored fork of clipper2-rust 1.2.0: Clipper2 polygon clipping and offsetting in Rust"
+repository = "https://github.com/larsbrubaker/clipper2-rust"
+publish = false
+
+[features]
+default = []
+# Mirrors the C++ USINGZ ifdef: adds a z field to Point<T> and z-callback support.
+using_z = []
+# Opt-in input capture for benchmarking (`MICA_CLIPPER_DUMP=<file>`); never enable for releases.
+capture = []
+
+[lib]
+name = "clipper2_rust"
+path = "src/lib.rs"
+
+[dependencies]
+num-traits = "0.2"

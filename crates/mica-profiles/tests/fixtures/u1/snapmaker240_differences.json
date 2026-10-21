@@ -1,0 +1,175 @@
+{
+  "adaptive_layer_height": {
+    "reason": "Obsolete profile key retained as an extra; upstream discards it.",
+    "resolved": "0"
+  },
+  "bbl_use_printhost": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": "0"
+  },
+  "bed_model": {
+    "reason": "Vendor-only model resource is retained; Orca normally removes this unknown option.",
+    "resolved": "Snapmaker U1_bed.stl"
+  },
+  "bed_texture": {
+    "reason": "Vendor-only texture resource is retained; Orca normally removes this unknown option.",
+    "resolved": "Snapmaker U1_bed.svg"
+  },
+  "chamber_temperatures": {
+    "reason": "Obsolete source key retained losslessly alongside migrated chamber_temperature.",
+    "resolved": [
+      "0",
+      "0",
+      "0",
+      "0"
+    ]
+  },
+  "compatible_machine_expression_group": {
+    "reason": "Saved project writes this all-empty vector unconditionally; PresetBundle::full_fff_config adds it only when some entry is nonempty.",
+    "resolved": null
+  },
+  "compatible_printers_condition": {
+    "reason": "CLI keeps the loaded preset's empty condition; PresetBundle::full_fff_config moves per-preset conditions into compatible_machine_expression_group.",
+    "resolved": null
+  },
+  "compatible_process_expression_group": {
+    "reason": "Saved project writes this all-empty vector unconditionally; PresetBundle::full_fff_config adds it only when some entry is nonempty.",
+    "resolved": null
+  },
+  "curr_bed_type": {
+    "reason": "Fresh project uses the U1 default_bed_type (Textured PEI); FullPrintConfig defaults to Cool Plate until project state is applied.",
+    "resolved": "Cool Plate"
+  },
+  "different_settings_to_system": {
+    "reason": "Saved project writes this all-empty vector unconditionally; PresetBundle::full_fff_config adds it only when some entry is nonempty.",
+    "resolved": null
+  },
+  "filament_flow_step_size": {
+    "reason": "Saved project keeps the single loaded entry; the composed config extends this per-filament vector to all four slots.",
+    "resolved": [
+      "1",
+      "1",
+      "1",
+      "1"
+    ]
+  },
+  "filament_ids": {
+    "reason": "CLI --load-filaments reads only a filament_id JSON key, which the stock Generic PLA chain lacks, so it saves empty IDs; the composed system preset resolves its setting_id GFSL991.",
+    "resolved": [
+      "GFSL991",
+      "GFSL991",
+      "GFSL991",
+      "GFSL991"
+    ]
+  },
+  "filament_self_index": {
+    "reason": "PresetBundle::full_fff_config supplies one-based filament indices, retained for full G-code settings export; the saved project omits them.",
+    "resolved": [
+      "1",
+      "2",
+      "3",
+      "4"
+    ]
+  },
+  "from": {
+    "reason": "Project save metadata, not a composed print option.",
+    "resolved": null
+  },
+  "inherits_group": {
+    "reason": "Saved project writes this all-empty vector unconditionally; PresetBundle::full_fff_config adds it only when some entry is nonempty.",
+    "resolved": null
+  },
+  "internal_bridge_support_thickness": {
+    "reason": "Obsolete profile key retained as an extra; upstream discards it.",
+    "resolved": "0.8"
+  },
+  "mica_gcode_identity": {
+    "reason": "Mica U1 printer-profile default for the legacy Moonraker parser; absent in upstream projects.",
+    "resolved": "orca_compatible"
+  },
+  "name": {
+    "reason": "Project save metadata, not a composed print option.",
+    "resolved": null
+  },
+  "nozzle_volume_type": {
+    "reason": "Saved project keeps the single loaded entry; the composed config extends this per-extruder vector to all four extruders.",
+    "resolved": [
+      "standard",
+      "standard",
+      "standard",
+      "standard"
+    ]
+  },
+  "overhang_totally_speed": {
+    "reason": "Obsolete profile key retained as an extra; upstream discards it.",
+    "resolved": "50"
+  },
+  "pellet_modded_printer": {
+    "reason": "Printer option outside FullPrintConfig: the CLI save fills only FullPrintConfig defaults, while the composed printer preset retains its default.",
+    "resolved": "0"
+  },
+  "print_host": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": ""
+  },
+  "print_host_webui": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": ""
+  },
+  "printhost_apikey": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": ""
+  },
+  "printhost_authorization_type": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": "key"
+  },
+  "printhost_cafile": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": ""
+  },
+  "printhost_password": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": ""
+  },
+  "printhost_port": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": ""
+  },
+  "printhost_ssl_ignore_revoke": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": "0"
+  },
+  "printhost_user": {
+    "reason": "Empty printer connection default is retained; it is a physical-printer option outside FullPrintConfig, so the saved project omits it.",
+    "resolved": ""
+  },
+  "project_schema_version": {
+    "reason": "Project save metadata (ProjectSchemaVersion.cpp), not a composed print option.",
+    "resolved": null
+  },
+  "smooth_coefficient": {
+    "reason": "Obsolete profile key retained as an extra; upstream discards it.",
+    "resolved": "150"
+  },
+  "thumbnails_format": {
+    "reason": "Printer option outside FullPrintConfig: the CLI save fills only FullPrintConfig defaults, while the composed printer preset retains its default.",
+    "resolved": "PNG"
+  },
+  "top_shell_thickness": {
+    "reason": "Equivalent number with different JSON formatting: 1 versus 1.0.",
+    "resolved": "1.0"
+  },
+  "upward_compatible_machine": {
+    "reason": "Printer option outside FullPrintConfig: the CLI save fills only FullPrintConfig defaults, while the composed printer preset retains its default.",
+    "resolved": []
+  },
+  "version": {
+    "reason": "Project save metadata (2.4.0), not a composed print option.",
+    "resolved": null
+  },
+  "wall_infill_order": {
+    "reason": "Obsolete source key retained losslessly alongside migrated wall_sequence.",
+    "resolved": "inner wall/outer wall/infill"
+  }
+}
