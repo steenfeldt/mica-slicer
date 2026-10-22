@@ -170,6 +170,55 @@ passes `--features` and fails if a built binary contains OpenH264 symbols.
 - Cleaner long-term alternative: load GStreamer at run time (dlopen) in `mica-videodec`;
   then the AppImage would need no fallback libraries.
 
+## Windows and Linux packages: building and checking them
+
+Both are built on the Mac. The first tested dry runs (October 2026, `--profile fast`, version
+0.0.1) and what was checked:
+
+```sh
+scripts/release.sh --dry-run --platforms linux --profile fast     # ~40 min the first time
+scripts/release.sh --dry-run --platforms windows --profile fast   # ~8 min
+```
+
+- **Linux** (`MicaSlicer_<v>_x86_64.AppImage`, ~42 MB; squashfs of ~100 MB: the binary, the
+  fallback GStreamer and 8,515 profile files). The container runs as `linux/amd64`, emulated
+  on Apple Silicon (OrbStack/Rosetta): a first build takes ~40 minutes, later ones reuse
+  `target/linux-container` and the `mica-release-*` volumes. Checked in an `ubuntu:22.04`
+  amd64 container with `--network none`, the AppImage extracted (`--appimage-extract`, no
+  FUSE in containers) under a folder with spaces and non-ASCII letters, a `MICA_CONFIG_DIR`
+  likewise: `AppRun --list-printers` uses the bundled fallback GStreamer (no unresolved
+  libraries), finds the shipped Orca profiles in `usr/share/mica-slicer/profiles/orca` (79
+  printers, all U1 variants) and says the Prusa profiles are not downloaded yet; a Linux
+  `mica` CLI copied next to `usr/bin/mica-gui` slices the U1 cube to the reference
+  `d86e39a8`; with the pinned Prusa bundle placed in the default settings folder
+  (`~/.config/mica-slicer/vendor-profiles/PrusaResearch/2.5.12.ini`, `$HOME` with spaces)
+  the CORE One cube gives the reference `d833d655`. The window itself was not opened (no
+  display in the container).
+- **Windows** (`MicaSlicer_<v>_x64-setup.exe`, ~28 MB; `mica-gui.exe` ~70 MB). The installer
+  (per user, `%LOCALAPPDATA%\Mica Slicer`) holds `mica-gui.exe` and `profiles\orca` with all
+  8,515 files (listed with `7z l`, e.g. from Ubuntu's `7zip` package in a container). The C
+  runtime is linked statically (`+crt-static`): the first build imported `VCRUNTIME140.dll`,
+  which the installer does not ship and a fresh Windows may lack; the script now fails if the
+  exe imports the Visual C++ runtime. The exe finds `profiles` next to itself
+  (`mica_profiles::vendor_profiles::bundled_root`, unit-tested for each package layout under
+  a path with spaces and non-ASCII letters). **Not run on Windows yet** (no Windows machine
+  or wine here): install, first start, window, profile list, slicing, the updater and the
+  uninstaller still need a real Windows check.
+
+Where packaged builds keep their data:
+
+| | Settings (incl. the downloaded Prusa profiles in `vendor-profiles/`) | Library index and thumbnails | Crash logs |
+|---|---|---|---|
+| macOS | `~/Library/Application Support/Mica Slicer` | same folder, `library/` | `~/Library/Logs/Mica Slicer` |
+| Windows | `%APPDATA%\Mica Slicer` | `%LOCALAPPDATA%\Mica Slicer\library` | `%LOCALAPPDATA%\Mica Slicer\Logs` |
+| Linux | `$XDG_CONFIG_HOME/mica-slicer` (`~/.config/mica-slicer`) | `$XDG_DATA_HOME/mica-slicer/library` | `~/.local/state/mica-slicer/logs` |
+
+`MICA_CONFIG_DIR` replaces the settings folder and holds the library too. The Prusa download
+stays in the settings folder rather than a cache folder on purpose: a cleaned cache would
+take the Prusa printers away offline. On Windows the home folder is `USERPROFILE` (`HOME` is
+normally unset there; before this, Windows builds found no PrusaSlicer/OrcaSlicer presets to
+import and wrote crash logs to the temporary folder).
+
 ## One-time setup (maintainer)
 
 None of these secrets ever goes into the repository; the script reads them at run time.
@@ -357,3 +406,12 @@ MICA_RELEASE_ASSET_BASE=http://127.0.0.1:8000 \
   resource step, e.g. `winresource` with `llvm-rc`, in the cross build).
 - Windows: cargo-packager's NSIS template closes a running Mica before installing (its
   `/P` passive mode); the updater runs the installer only after Mica has quit.
+- Windows N/KN editions without the Media Feature Pack lack `mfplat.dll`, which
+  `mica-gui.exe` imports directly (Media Foundation, for H.264 cameras): Mica would not start
+  there. Delay-loading it (`/DELAYLOAD:mfplat.dll`) and treating a failed load as "no H.264
+  decoder" would fix that; untested so far.
+- appimagetool 1.9.0 downloads its AppImage runtime from the `continuous` release of
+  `AppImage/type2-runtime` on every run (unpinned, needs network); passing a cached, checked
+  `--runtime-file` would make the Linux package reproducible.
+- Running the Linux and Windows dry runs at the same time works (separate target folders),
+  but each run rewrites `dist/<v>/latest.json` with only its own platforms.

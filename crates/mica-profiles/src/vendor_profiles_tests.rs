@@ -293,3 +293,41 @@ fn the_pinned_assets_and_hashes_are_well_formed() {
         }
     }
 }
+
+/// Each package's layout, installed under a folder with spaces and non-ASCII letters: the
+/// executable finds the shipped profiles relative to itself (macOS bundle, Windows install
+/// folder, AppImage), and an executable without them finds none.
+#[test]
+fn each_package_finds_its_profiles_beside_the_executable() {
+    let base = temp("layout").join("Zoë Ørsted's Apps");
+    let layouts = [
+        // macOS: Mica Slicer.app/Contents/MacOS/mica-gui, Contents/Resources/profiles
+        (
+            "Mica Slicer.app/Contents/MacOS/mica-gui",
+            "Mica Slicer.app/Contents/Resources/profiles",
+        ),
+        // Windows (NSIS): <install dir>\mica-gui.exe, <install dir>\profiles
+        ("Mica Slicer/mica-gui.exe", "Mica Slicer/profiles"),
+        // AppImage: usr/bin/mica-gui, usr/share/mica-slicer/profiles
+        (
+            "squashfs-root/usr/bin/mica-gui",
+            "squashfs-root/usr/share/mica-slicer/profiles",
+        ),
+    ];
+    for (exe, profiles) in layouts {
+        let (exe, profiles) = (base.join(exe), base.join(profiles));
+        std::fs::create_dir_all(exe.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(&profiles).unwrap();
+        let found = bundled_root_beside(&exe).expect("found");
+        assert_eq!(
+            found.canonicalize().unwrap(),
+            profiles.canonicalize().unwrap(),
+            "{}",
+            exe.display()
+        );
+    }
+    let bare = base.join("elsewhere/bin/mica-gui");
+    std::fs::create_dir_all(bare.parent().unwrap()).unwrap();
+    assert_eq!(bundled_root_beside(&bare), None);
+    let _ = std::fs::remove_dir_all(base.parent().unwrap());
+}

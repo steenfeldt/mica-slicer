@@ -734,7 +734,9 @@ fn webrtc_from_camera_streamer_plays_and_answers_its_keepalive() {
     );
 }
 
-/// Frames published in `secs` seconds after the first, and the camera's statistics.
+/// Frames published while the camera sends `secs` seconds of its 15 fps video after the
+/// first frame shown, and the camera's statistics. Measured against the frames the camera
+/// sent, not the clock: under load the mock camera itself sends fewer frames per second.
 fn lossy(lose_every: u32, secs: u64) -> (u64, usize, usize, Player, mock::CameraStreamer) {
     let cam = streamer(Some(lose_every), true);
     let p = Player::start(
@@ -748,12 +750,22 @@ fn lossy(lose_every: u32, secs: u64) -> (u64, usize, usize, Player, mock::Camera
     wait_frame(&p, Duration::from_secs(10))
         .unwrap_or_else(|| panic!("no WebRTC frame: {:?}", p.status()));
     let before = p.status().frames;
-    thread::sleep(Duration::from_secs(secs));
+    let sent_before = cam.stats.frames_sent.load(Ordering::Relaxed);
+    let want = sent_before + 15 * secs as usize;
+    assert!(
+        wait_until(Duration::from_secs(30 * secs), || cam
+            .stats
+            .frames_sent
+            .load(Ordering::Relaxed)
+            >= want),
+        "the camera stopped sending"
+    );
     let n = p.status().frames - before;
     let sent = cam.stats.frames_sent.load(Ordering::Relaxed);
     let plis = cam.stats.keyframe_requests.load(Ordering::Relaxed);
     eprintln!(
-        "WebRTC mock, every {lose_every}th packet lost: {n} frames shown in {secs} s ({sent} sent in all), {plis} key frame requests"
+        "WebRTC mock, every {lose_every}th packet lost: {n} frames shown while {} were sent ({sent} sent in all), {plis} key frame requests",
+        sent - sent_before
     );
     (n, sent, plis, p, cam)
 }
@@ -763,7 +775,7 @@ fn webrtc_light_packet_loss_is_repaired_by_nacks() {
     let (n, _, plis, p, _cam) = lossy(15, 3);
     assert!(
         n >= 25,
-        "{n} frames in 3 s at 15 fps with 1 in 15 packets lost"
+        "{n} frames shown of 45 sent (3 s at 15 fps) with 1 in 15 packets lost"
     );
     assert_eq!(plis, 0, "retransmissions repaired every gap");
     assert_eq!(
@@ -780,7 +792,7 @@ fn webrtc_heavy_packet_loss_waits_for_key_frames_and_keeps_playing() {
         plis >= 1,
         "a gap NACKs could not repair asks for a key frame"
     );
-    assert!(n >= 3, "{n} frames in 4 s");
+    assert!(n >= 3, "{n} frames shown of 60 sent (4 s at 15 fps)");
     assert!(p.status().error.is_none(), "{:?}", p.status());
 }
 

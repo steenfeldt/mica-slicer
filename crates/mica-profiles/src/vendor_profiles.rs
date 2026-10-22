@@ -55,7 +55,11 @@ pub fn bundled_root() -> Option<PathBuf> {
     if let Some(dir) = std::env::var_os(BUNDLED_VAR).filter(|d| !d.is_empty()) {
         return Some(PathBuf::from(dir));
     }
-    let exe = std::env::current_exe().ok()?;
+    bundled_root_beside(&std::env::current_exe().ok()?)
+}
+
+/// The shipped `profiles` folder of the executable `exe` (see [`bundled_root`]).
+fn bundled_root_beside(exe: &Path) -> Option<PathBuf> {
     let bin = exe.parent()?;
     [
         bin.join("../Resources/profiles"),

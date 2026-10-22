@@ -100,6 +100,9 @@ pub(crate) struct Shared {
     pub warning: Option<String>,
     /// Thumbnails rendered (or given up on) since the library was opened.
     pub rendered: u64,
+    /// The worker has seen the latest pause: no thumbnail render is running, and none
+    /// starts until the pause ends ([`Library::wait_paused`]).
+    pub pause_seen: bool,
 }
 
 /// The library: a handle to the background worker. Dropping it stops the worker.
@@ -111,7 +114,9 @@ pub struct Library {
     data_dir: PathBuf,
 }
 
-/// `~/Library/Application Support/Mica Slicer/library` (or `$MICA_CONFIG_DIR/library`).
+/// `~/Library/Application Support/Mica Slicer/library` on macOS,
+/// `%LOCALAPPDATA%\Mica Slicer\library` on Windows, `$XDG_DATA_HOME/mica-slicer/library`
+/// (`~/.local/share/…`) elsewhere; `$MICA_CONFIG_DIR/library` when that is set.
 pub fn default_data_dir() -> PathBuf {
     use mica_core::user_data;
     if std::env::var_os("MICA_CONFIG_DIR").is_some()
@@ -119,6 +124,12 @@ pub fn default_data_dir() -> PathBuf {
         || cfg!(target_os = "macos")
     {
         return user_data::config_dir().join("library");
+    }
+    // Windows: thumbnails are local data, not roaming settings (%LOCALAPPDATA%).
+    if cfg!(windows) {
+        return user_data::var_dir("LOCALAPPDATA")
+            .map(|d| d.join("Mica Slicer").join("library"))
+            .unwrap_or_else(|| user_data::config_dir().join("library"));
     }
     let home = user_data::home().unwrap_or_else(|| PathBuf::from("."));
     user_data::var_dir("XDG_DATA_HOME")
@@ -271,6 +282,21 @@ impl Library {
     /// While paused (Mica is slicing), the scanner waits between files.
     pub fn set_paused(&self, paused: bool) {
         self.paused.store(paused, Ordering::Relaxed);
+        self.lock().pause_seen = false;
+    }
+
+    /// After [`Library::set_paused`]`(true)`: waits until the worker has seen the pause, so a
+    /// thumbnail render already running when it was set has finished and no other starts
+    /// (tests). `false` on timeout or when the library is not paused.
+    pub fn wait_paused(&self, timeout: Duration) -> bool {
+        let start = Instant::now();
+        while start.elapsed() < timeout && self.paused.load(Ordering::Relaxed) {
+            if self.lock().pause_seen {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        false
     }
 
     fn update_user(&self, id: &str, f: impl FnOnce(&mut UserData)) {

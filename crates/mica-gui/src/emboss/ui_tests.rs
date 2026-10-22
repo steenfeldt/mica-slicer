@@ -549,7 +549,9 @@ fn typing_shows_as_it_goes_and_is_one_undo_step() {
 }
 
 /// Wrapped onto a detailed surface the rebuild runs in the background: the edit returns at
-/// once and the mesh lands a few frames later.
+/// once (before the mesh is rebuilt) and the mesh lands a few frames later. Deterministic
+/// under load: it checks the order of events, not the clock, and waits for the rebuild
+/// itself (the time limit only catches a rebuild that never ends).
 #[test]
 fn a_wrapped_text_rebuilds_in_the_background() {
     let mut u = Ui::models(&["3DBenchy.stl"]);
@@ -561,23 +563,26 @@ fn a_wrapped_text_rebuilds_in_the_background() {
     u.app.edit_emboss(|c| c.use_surface = true, false);
     u.app.finish_emboss_rebuild();
     let wrapped = u.volume(0, id).mesh.clone();
-    let t0 = std::time::Instant::now();
     set_text(&mut u.app, "Mica Slicer 2026");
-    assert!(
-        t0.elapsed() < std::time::Duration::from_millis(60),
-        "{:?}",
-        t0.elapsed()
-    );
+    // The edit returned without wrapping: the old mesh is still there, the rebuild pending.
     assert!(u.app.emboss.as_ref().unwrap().rebuild.is_some());
-    for _ in 0..400 {
+    assert!(
+        std::sync::Arc::ptr_eq(&u.volume(0, id).mesh, &wrapped),
+        "the edit itself does not rebuild the wrapped mesh"
+    );
+    // Frames apply the rebuild once it is done (the frame loop polls it, as the app does).
+    let hang = std::time::Instant::now() + std::time::Duration::from_secs(120);
+    while u.app.emboss.as_ref().unwrap().rebuild.is_some() {
+        assert!(
+            std::time::Instant::now() < hang,
+            "the rebuild never finished"
+        );
         u.frame(vec![]);
-        if u.app.emboss.as_ref().unwrap().rebuild.is_none() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(5));
+        std::thread::sleep(std::time::Duration::from_millis(2));
     }
     let v = u.volume(0, id);
     assert!(!std::sync::Arc::ptr_eq(&v.mesh, &wrapped), "landed");
+    assert_eq!(text_of(v), "Mica Slicer 2026");
     assert!(
         v.local_bounds.1[0] - v.local_bounds.0[0] > 40.,
         "{:?}",
