@@ -458,6 +458,8 @@ pub struct App {
     /// Mica MCP live mode: the local socket AI assistants reach this window on (`mcp_live`);
     /// off in headless runs.
     pub(crate) mcp: crate::mcp_live::Host,
+    /// The quick tour, while it runs (`tour.rs`).
+    pub(crate) tour: Option<crate::tour::Tour>,
 }
 
 impl App {
@@ -741,6 +743,7 @@ impl App {
             gcode_loading: None,
             mixes: Default::default(),
             mcp: Default::default(),
+            tour: None,
         };
         app.refresh_warnings();
         if !kept.names.is_empty() {
@@ -4091,6 +4094,14 @@ impl App {
     /// The whole window. Shared by the eframe app and the headless screenshot.
     pub fn show(&mut self, ui: &mut egui::Ui) {
         let ctx = ui.ctx().clone();
+        // The quick tour takes the keyboard first and draws over everything last.
+        let touring = self.tour_begin_frame(&ctx);
+        self.show_window(ui, touring);
+        self.tour_ui(&ctx);
+    }
+
+    fn show_window(&mut self, ui: &mut egui::Ui, touring: bool) {
+        let ctx = ui.ctx().clone();
         // Opaque window background, whatever the theme (panels only cover their own areas).
         ui.painter()
             .rect_filled(ui.max_rect(), 0., theme::of(ui).bg);
@@ -4101,7 +4112,9 @@ impl App {
         self.poll_updater(&ctx);
         self.poll_prusa_download(&ctx);
         self.library_frame(&ctx);
-        self.shortcuts(&ctx);
+        if !touring {
+            self.shortcuts(&ctx);
+        }
         let dropped = ctx.input(|i| {
             i.raw
                 .dropped_files

@@ -49,6 +49,9 @@ security-framework = "=3.7.0"
 muda = { version = "=0.19.3", default-features = false }
 # Pasting into a text field from the native Edit menu (already in the tree through egui-winit).
 arboard = { version = "3.7.0", default-features = false }
+# The system's Reduce motion setting for the quick tour (`tour.rs`; already in the tree
+# through winit and muda).
+objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
 
 [dev-dependencies]
 mica-testkit.workspace = true

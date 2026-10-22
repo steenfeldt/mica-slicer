@@ -62,6 +62,8 @@ pub enum Action {
     Welcome,
     /// This version's release notes (shown once after an update).
     WhatsNew,
+    /// The quick tour of the main window (`tour.rs`).
+    Tour,
 }
 
 impl Action {
@@ -406,6 +408,7 @@ pub fn menus(mac: bool) -> Vec<Menu> {
                 item("Keyboard shortcuts", A::Act(Act::ShowShortcuts)),
                 Sep,
                 item("Welcome to Mica…", A::Welcome),
+                item("Show quick tour", A::Tour),
                 item("What's new…", A::WhatsNew),
             ]
         } else {
@@ -414,6 +417,7 @@ pub fn menus(mac: bool) -> Vec<Menu> {
                 item("Keyboard shortcuts", A::Act(Act::ShowShortcuts)),
                 Sep,
                 item("Welcome to Mica…", A::Welcome),
+                item("Show quick tour", A::Tour),
                 item("What's new…", A::WhatsNew),
                 Sep,
                 item("Check for Updates…", A::CheckForUpdates),
@@ -495,6 +499,10 @@ impl App {
             checked,
             label: None,
         };
+        // The quick tour covers the window: only Quit works meanwhile.
+        if self.tour.is_some() && action != Action::Quit {
+            return on(false);
+        }
         if text_focus && action.text_edit() {
             return on(true);
         }
@@ -565,6 +573,7 @@ impl App {
             | Action::Quit
             | Action::About
             | Action::Welcome
+            | Action::Tour
             | Action::WhatsNew => on(true),
             Action::CheckForUpdates => on(!self.updater.working()),
         }
@@ -683,6 +692,7 @@ impl App {
             Action::About => self.open_about(crate::panels::about::AboutTab::About),
             Action::Welcome => self.open_welcome(),
             Action::WhatsNew => self.open_whats_new(),
+            Action::Tour => self.start_tour(ctx),
         }
     }
 

@@ -406,7 +406,7 @@ impl Viewport {
         let (level, pos, pivot) = self.toolbar_layout(ui, rect, scene);
         let slots = LAYOUTS[level];
         let mut pressed = None;
-        egui::Area::new(ui.scope_id().with("viewport toolbar"))
+        let bar = egui::Area::new(ui.scope_id().with("viewport toolbar"))
             .order(egui::Order::Middle)
             .fixed_pos(pos)
             .pivot(pivot)
@@ -461,6 +461,7 @@ impl Viewport {
                         });
                     });
             });
+        crate::tour::anchor(ui, crate::tour::Anchor::Toolbar, bar.response.rect);
         if let Some(icon) = pressed {
             self.press(icon, scene, actions);
         }

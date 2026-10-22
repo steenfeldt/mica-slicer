@@ -65,7 +65,7 @@ impl App {
                     Pos2::new(rect.center().x + 150., rect.top()),
                     Pos2::new(rect.right() - 12., rect.bottom()),
                 );
-                ui.scope_builder(
+                let cluster = ui.scope_builder(
                     egui::UiBuilder::new()
                         .max_rect(right)
                         .layout(egui::Layout::right_to_left(egui::Align::Center)),
@@ -104,6 +104,7 @@ impl App {
                         self.readout(ui, &ctx);
                     },
                 );
+                crate::tour::anchor(ui, crate::tour::Anchor::SliceExport, cluster.response.rect);
             });
     }
 
@@ -441,6 +442,7 @@ impl App {
             .collect();
         let total = widths.iter().sum::<f32>() + 6.;
         let outer = Rect::from_center_size(center, Vec2::new(total, seg.y + 6.));
+        crate::tour::anchor(ui, crate::tour::Anchor::Tabs, outer);
         painter.rect_filled(outer, 8., p.search_bg.gamma_multiply(1.6));
         painter.rect_stroke(
             outer,
@@ -469,6 +471,9 @@ impl App {
             let (label, w) = (&LABELS[i], widths[i]);
             let r = Rect::from_min_size(Pos2::new(x, outer.top() + 3.), Vec2::new(w, seg.y));
             x += w;
+            if i == 2 {
+                crate::tour::anchor(ui, crate::tour::Anchor::MachineTab, r);
+            }
             let active = i == current;
             let enabled = (i != 1 || can_preview || can_slice) && !(doc && i == 0);
             let response = ui.interact(
