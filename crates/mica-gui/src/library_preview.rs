@@ -18,6 +18,10 @@ use std::time::{Duration, Instant};
 
 /// Meshes with more triangles are simplified for the preview (it redraws while dragging).
 const PREVIEW_TRIANGLES: usize = 250_000;
+/// The picture's height to width (220 × 288 at the details panel's default width).
+const PICTURE_ASPECT: f32 = 220. / 288.;
+/// The largest picture side rendered, physical pixels (a wider panel scales it up).
+const MAX_PICTURE: u16 = 1600;
 /// Cells along the largest side when simplifying for the preview.
 const PREVIEW_CELLS: u32 = 400;
 
@@ -239,7 +243,7 @@ impl Preview {
         if self.facts().is_none() {
             return;
         }
-        let size = size.map(|v| v.clamp(16, 999));
+        let size = size.map(|v| v.clamp(16, MAX_PICTURE));
         let want = (self.view, size);
         if self.requested != Some(want) {
             self.requested = Some(want);
@@ -373,8 +377,9 @@ impl crate::app::App {
     pub(crate) fn library_detail_preview(&mut self, ui: &mut egui::Ui, m: &mica_library::Model) {
         let p = theme::of(ui);
         let ctx = ui.ctx().clone();
+        let w = ui.available_width();
         let (rect, resp) = ui.allocate_exact_size(
-            Vec2::new(ui.available_width(), 220.),
+            Vec2::new(w, (w * PICTURE_ASPECT).round()),
             Sense::click_and_drag(),
         );
         ui.painter().rect_filled(rect, 8., p.search_bg);
@@ -398,7 +403,11 @@ impl crate::app::App {
             if resp.double_clicked() {
                 pv.reset();
             }
-            pv.request(size);
+            // While the panel's edge is dragged the last picture scales; the new size renders
+            // once the drag ends.
+            if !self.library.detail_resizing || pv.texture().is_none() {
+                pv.request(size);
+            }
             if pv.texture().is_some() {
                 fade = pv.fade();
             }
@@ -436,7 +445,7 @@ impl crate::app::App {
                 && let Some(t) = pv.texture()
             {
                 let s = t.size_vec2() / ppp;
-                let k = (rect.width() / s.x).min(rect.height() / s.y).min(1.);
+                let k = (rect.width() / s.x).min(rect.height() / s.y);
                 ui.painter().image(
                     t.id(),
                     Rect::from_center_size(rect.center(), s * k),

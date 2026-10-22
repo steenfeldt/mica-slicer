@@ -1089,11 +1089,17 @@ pub fn spaced_upper(text: &str) -> String {
 
 /// Small, muted group title (`LAYERS`) with 12 px above.
 pub fn group_title(ui: &mut egui::Ui, text: &str) {
+    group_title_at(ui, text, LEFT);
+}
+
+/// [`group_title`] indented by `indent` (0: flush with the rows below, for panels whose
+/// content has no inner indent).
+pub fn group_title_at(ui: &mut egui::Ui, text: &str, indent: f32) {
     ui.add_space(10.);
     let p = theme::of(ui);
     let (rect, _) = ui.allocate_exact_size(Vec2::new(ui.available_width(), 16.), Sense::hover());
     ui.painter().text(
-        Pos2::new(rect.left() + LEFT, rect.center().y),
+        Pos2::new(rect.left() + indent, rect.center().y),
         Align2::LEFT_CENTER,
         spaced_upper(text),
         theme::semibold(10.5),

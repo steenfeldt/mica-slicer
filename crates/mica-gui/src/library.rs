@@ -97,6 +97,8 @@ pub struct LibraryView {
     textures: HashMap<String, Option<egui::TextureHandle>>,
     /// Further models picked with ⌘ or Shift-click (dragged together with the selected one).
     pub picked: std::collections::BTreeSet<String>,
+    /// The details panel's edge is being dragged (the preview scales its last picture).
+    pub detail_resizing: bool,
     /// The details panel's 3D preview of the selected model.
     pub preview: Option<crate::library_preview::Preview>,
     /// Models dropped on the plate, loading.
@@ -144,6 +146,7 @@ impl Default for LibraryView {
             tags: vec![],
             textures: HashMap::new(),
             picked: Default::default(),
+            detail_resizing: false,
             preview: None,
             drop: None,
             popover: None,

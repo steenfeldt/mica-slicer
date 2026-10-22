@@ -211,6 +211,8 @@ pub struct Window {
     pub sidebar_width: f32,
     /// Height of the object tree at the top of the sidebar (its list part).
     pub tree_height: f32,
+    /// Width of the Library's details panel (drag its left edge; at least 320).
+    pub library_detail_width: f32,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -230,6 +232,7 @@ impl Default for Window {
             height: 900.,
             sidebar_width: 370.,
             tree_height: 300.,
+            library_detail_width: 320.,
         }
     }
 }
@@ -662,6 +665,31 @@ mod tests {
         let again = Prefs::from_toml(&p.to_toml()).unwrap();
         assert!(again.auto_slice);
         assert!(!again.sidebar_right);
+    }
+
+    #[test]
+    fn library_detail_width_persists() {
+        assert_eq!(Prefs::default().window.library_detail_width, 320.);
+        let mut p = Prefs::default();
+        p.window.library_detail_width = 612.;
+        let text = p.to_toml();
+        assert!(text.contains("library_detail_width = 612"), "{text}");
+        assert_eq!(
+            Prefs::from_toml(&text).unwrap().window.library_detail_width,
+            612.
+        );
+        // Settings from before the panel was resizable start at the default width.
+        let old = Prefs::from_toml("[window]\nsidebar_width = 400.0\n").unwrap();
+        assert_eq!(old.window.library_detail_width, 320.);
+        assert_eq!(old.window.sidebar_width, 400.);
+        // Saving merges the key into the file on disk.
+        let dir = std::env::temp_dir().join(format!("mica-detail-width-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("mica.toml");
+        p.save_merged(&path, &mut Saved::default()).unwrap();
+        let back = Prefs::from_toml(&std::fs::read_to_string(&path).unwrap()).unwrap();
+        assert_eq!(back.window.library_detail_width, 612.);
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

@@ -16,7 +16,12 @@ use mica_library::{Colours, FolderState, FolderStatus, Grouping, Kind, Model, Sl
 use std::path::{Path, PathBuf};
 
 const LEFT_W: f32 = 270.;
-const DETAIL_W: f32 = 320.;
+/// The details panel's default and narrowest width (drag its left edge to widen it).
+pub(crate) const DETAIL_W: f32 = 320.;
+/// The card area's padding on either side.
+const MAIN_PAD_X: f32 = 18.;
+/// How far either side of the details panel's edge the resize handle reaches.
+const DIVIDER_GRAB: f32 = 4.;
 const CARD_W: f32 = 184.;
 const CARD_H: f32 = 214.;
 const THUMB_H: f32 = 140.;
@@ -24,6 +29,14 @@ const GAP: f32 = 12.;
 const ROW_H: f32 = 30.;
 /// A section header in the grid.
 const HEADER_H: f32 = 36.;
+
+/// The details panel's width for a `wanted` width in a Library view `total` points wide: at
+/// least [`DETAIL_W`], and narrow enough that the folders column and one card column stay.
+pub(crate) fn detail_width(wanted: f32, total: f32) -> f32 {
+    let widest = total - LEFT_W - 2. - 2. * MAIN_PAD_X - CARD_W - GAP;
+    let w = if wanted.is_finite() { wanted } else { DETAIL_W };
+    w.min(widest).max(DETAIL_W)
+}
 
 /// What a click in the view asks for; applied after drawing.
 #[derive(Clone, Debug, PartialEq)]
@@ -752,6 +765,81 @@ fn project_bar(
     muted(ui, facts.join(" · "), 11.5);
 }
 
+/// The width the grouping, sort and Grid / List controls take beside the search field.
+const CONTROLS_W: f32 = 470.;
+
+/// The grouping and sort dropdowns, the sort direction and the Grid / List switch.
+fn view_controls(ui: &mut egui::Ui, v: &mut crate::library::LibraryView) {
+    let items: Vec<(String, String)> = GroupBy::ALL
+        .iter()
+        .map(|g| (format!("{g:?}"), g.label().to_string()))
+        .collect();
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(140., 30.), Sense::hover());
+    if let Some(pick) = widgets::dropdown_with(
+        ui,
+        egui::Id::unique("lib-group"),
+        rect,
+        &format!("{:?}", v.group_by),
+        &format!("Group: {}", v.group_by.label()),
+        None,
+        &items,
+        true,
+        false,
+    ) && let Some(g) = GroupBy::ALL.iter().find(|g| format!("{g:?}") == pick)
+    {
+        v.group_by = *g;
+        v.open_project = None;
+    }
+    let items: Vec<(String, String)> = Sort::ALL
+        .iter()
+        .map(|s| (format!("{s:?}"), s.label().to_string()))
+        .collect();
+    let (rect, _) = ui.allocate_exact_size(Vec2::new(160., 30.), Sense::hover());
+    if let Some(pick) = widgets::dropdown_with(
+        ui,
+        egui::Id::unique("lib-sort"),
+        rect,
+        &format!("{:?}", v.sort),
+        &format!("Sort: {}", v.sort.label()),
+        None,
+        &items,
+        true,
+        false,
+    ) && let Some(s) = Sort::ALL.iter().find(|s| format!("{s:?}") == pick)
+    {
+        v.sort = *s;
+        v.descending = matches!(
+            s,
+            Sort::Modified | Sort::FileSize | Sort::PrintTime | Sort::Dimensions
+        );
+    }
+    if widgets::icon_button(
+        ui,
+        if v.descending {
+            widgets::Glyph::Down
+        } else {
+            widgets::Glyph::Up
+        },
+        if v.descending {
+            "Largest / newest first"
+        } else {
+            "Smallest / oldest / A first"
+        },
+        true,
+    )
+    .clicked()
+    {
+        v.descending = !v.descending;
+    }
+    // Wrapped (narrow): the Grid / List pair moves to the next row whole.
+    if ui.layout().main_wrap && ui.available_size_before_wrap().x < 100. {
+        ui.end_row();
+    }
+    if let Some(i) = pills(ui, &["Grid", "List"], usize::from(v.list)) {
+        v.list = i == 1;
+    }
+}
+
 impl App {
     pub(crate) fn library_view(&mut self, ui: &mut egui::Ui) {
         self.library.refresh();
@@ -779,8 +867,9 @@ impl App {
                 let show_detail = self.library.error.is_none()
                     && !self.library.loading()
                     && self.library.selected_model().is_some();
+                let detail_w = detail_width(self.prefs.window.library_detail_width, rect.width());
                 let right =
-                    Rect::from_min_max(Pos2::new(rect.right() - DETAIL_W, rect.top()), rect.max);
+                    Rect::from_min_max(Pos2::new(rect.right() - detail_w, rect.top()), rect.max);
                 let mut left_ui = ui.new_child(egui::UiBuilder::new().max_rect(left.shrink(14.)));
                 self.library_sidebar(&mut left_ui, &mut acts);
                 let main = Rect::from_min_max(
@@ -794,14 +883,21 @@ impl App {
                         rect.bottom(),
                     ),
                 );
-                let mut main_ui = ui
-                    .new_child(egui::UiBuilder::new().max_rect(main.shrink2(Vec2::new(18., 14.))));
+                let mut main_ui = ui.new_child(
+                    egui::UiBuilder::new().max_rect(main.shrink2(Vec2::new(MAIN_PAD_X, 14.))),
+                );
                 self.library_main(&mut main_ui, &mut acts);
+                self.library.detail_resizing = false;
                 if show_detail {
                     ui.painter().rect_filled(right, 0., p.panel);
+                    let hot = self.library_detail_divider(ui, rect, right.left());
                     ui.painter().line_segment(
                         [right.left_top(), right.left_bottom()],
-                        Stroke::new(1., p.border),
+                        if hot {
+                            Stroke::new(2., p.accent)
+                        } else {
+                            Stroke::new(1., p.border)
+                        },
                     );
                     let mut detail_ui =
                         ui.new_child(egui::UiBuilder::new().max_rect(right.shrink(16.)));
@@ -813,6 +909,38 @@ impl App {
         for a in acts {
             self.library_act(a, &ctx);
         }
+    }
+
+    /// The handle on the details panel's left edge (at `x` in the view `rect`): drag to
+    /// resize the panel, double-click for the default width. Whether it is hovered or dragged.
+    fn library_detail_divider(&mut self, ui: &mut egui::Ui, rect: Rect, x: f32) -> bool {
+        let handle = Rect::from_x_y_ranges(x - DIVIDER_GRAB..=x + DIVIDER_GRAB, rect.y_range());
+        let resp = ui
+            .interact(
+                handle,
+                ui.scope_id().with("lib-detail-divider"),
+                Sense::click_and_drag(),
+            )
+            .on_hover_text("Drag to resize the details, double-click for the default width");
+        let width = &mut self.prefs.window.library_detail_width;
+        if resp.double_clicked() {
+            *width = DETAIL_W;
+            self.prefs_dirty = true;
+        } else if resp.dragged()
+            && let Some(at) = resp.interact_pointer_pos()
+        {
+            let w = detail_width(rect.right() - at.x, rect.width());
+            if (w - *width).abs() > 0.5 {
+                *width = w;
+                self.prefs_dirty = true;
+            }
+            self.library.detail_resizing = true;
+        }
+        let hot = resp.hovered() || resp.dragged();
+        if hot {
+            ui.ctx().set_cursor_icon(egui::CursorIcon::ResizeHorizontal);
+        }
+        hot
     }
 
     fn library_sidebar(&mut self, ui: &mut egui::Ui, acts: &mut Vec<Act>) {
@@ -921,9 +1049,16 @@ impl App {
         } else {
             format!("{n} of {}", snap.models.len())
         };
+        // Too narrow for the search and the controls in one row (a wide details panel): the
+        // controls wrap onto the rows below.
+        let narrow = ui.available_width() < CONTROLS_W + 200.;
         ui.horizontal(|ui| {
             ui.spacing_mut().item_spacing.x = 8.;
-            let w = (ui.available_width() - 470.).max(200.);
+            let w = if narrow {
+                ui.available_width()
+            } else {
+                ui.available_width() - CONTROLS_W
+            };
             ui.allocate_ui_with_layout(Vec2::new(w, 34.), Layout::top_down(Align::Min), |ui| {
                 widgets::search_field(
                     ui,
@@ -933,71 +1068,16 @@ impl App {
                     &annotation,
                 );
             });
-            let items: Vec<(String, String)> = GroupBy::ALL
-                .iter()
-                .map(|g| (format!("{g:?}"), g.label().to_string()))
-                .collect();
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(140., 30.), Sense::hover());
-            if let Some(pick) = widgets::dropdown_with(
-                ui,
-                egui::Id::unique("lib-group"),
-                rect,
-                &format!("{:?}", v.group_by),
-                &format!("Group: {}", v.group_by.label()),
-                None,
-                &items,
-                true,
-                false,
-            ) && let Some(g) = GroupBy::ALL.iter().find(|g| format!("{g:?}") == pick)
-            {
-                v.group_by = *g;
-                v.open_project = None;
-            }
-            let items: Vec<(String, String)> = Sort::ALL
-                .iter()
-                .map(|s| (format!("{s:?}"), s.label().to_string()))
-                .collect();
-            let (rect, _) = ui.allocate_exact_size(Vec2::new(160., 30.), Sense::hover());
-            if let Some(pick) = widgets::dropdown_with(
-                ui,
-                egui::Id::unique("lib-sort"),
-                rect,
-                &format!("{:?}", v.sort),
-                &format!("Sort: {}", v.sort.label()),
-                None,
-                &items,
-                true,
-                false,
-            ) && let Some(s) = Sort::ALL.iter().find(|s| format!("{s:?}") == pick)
-            {
-                v.sort = *s;
-                v.descending = matches!(
-                    s,
-                    Sort::Modified | Sort::FileSize | Sort::PrintTime | Sort::Dimensions
-                );
-            }
-            if widgets::icon_button(
-                ui,
-                if v.descending {
-                    widgets::Glyph::Down
-                } else {
-                    widgets::Glyph::Up
-                },
-                if v.descending {
-                    "Largest / newest first"
-                } else {
-                    "Smallest / oldest / A first"
-                },
-                true,
-            )
-            .clicked()
-            {
-                v.descending = !v.descending;
-            }
-            if let Some(i) = pills(ui, &["Grid", "List"], usize::from(v.list)) {
-                v.list = i == 1;
+            if !narrow {
+                view_controls(ui, v);
             }
         });
+        if narrow {
+            ui.horizontal_wrapped(|ui| {
+                ui.spacing_mut().item_spacing = Vec2::new(8., 6.);
+                view_controls(ui, v);
+            });
+        }
         // Scan progress over every folder.
         let (done, total) = snap.progress();
         if snap.scanning() {
@@ -1599,7 +1679,15 @@ impl App {
         let ctx = ui.ctx().clone();
         let w = ui.available_width();
         // Name | Type | Size | Printer | Print time | Modified | Folder
-        let cols = [0.30, 0.09, 0.15, 0.17, 0.09, 0.09, 0.11];
+        let mut cols: [f32; 7] = [0.30, 0.09, 0.15, 0.17, 0.09, 0.09, 0.11];
+        // Narrower (a wide details panel): the less needed columns go, the rest share the row.
+        for (c, below) in [(6, 760.), (3, 640.), (4, 520.), (5, 420.), (2, 320.)] {
+            if w < below {
+                cols[c] = 0.;
+            }
+        }
+        let sum: f32 = cols.iter().sum();
+        cols.iter_mut().for_each(|c| *c /= sum);
         let heads = [
             ("Name", Some(Sort::Name)),
             ("Type", Some(Sort::Kind)),
@@ -1612,6 +1700,9 @@ impl App {
         let x = |i: usize| cols[..i].iter().sum::<f32>() * w;
         let (head, _) = ui.allocate_exact_size(Vec2::new(w, 24.), Sense::hover());
         for (i, (h, sort)) in heads.iter().enumerate() {
+            if cols[i] == 0. {
+                continue;
+            }
             let r = Rect::from_min_size(
                 Pos2::new(head.left() + x(i), head.top()),
                 Vec2::new(cols[i] * w, 24.),
@@ -1786,6 +1877,9 @@ impl App {
                         }
                     };
                     for (c, text) in cells.iter().enumerate() {
+                        if cols[c] == 0. {
+                            continue;
+                        }
                         let mut left = row.left() + x(c) + if c == 0 { ROW_H + 6. } else { 8. };
                         if c == 0 && fav {
                             star(
@@ -1937,7 +2031,7 @@ impl App {
                     muted(ui, e, 11.5);
                 }
                 // Facts.
-                widgets::group_title(ui, "Details");
+                widgets::group_title_at(ui, "Details", 0.);
                 let i = &m.info;
                 let mut facts: Vec<(&str, String)> = vec![("Type", m.kind.label().to_string())];
                 if let Some(s) = i.size_mm {
@@ -2013,7 +2107,7 @@ impl App {
                         }
                     });
                 // Where it is.
-                widgets::group_title(ui, "Location");
+                widgets::group_title_at(ui, "Location", 0.);
                 let loc = m.primary();
                 ui.add(
                     egui::Label::new(
@@ -2052,18 +2146,20 @@ impl App {
                     }
                 }
                 // Tags.
-                widgets::group_title(ui, "Tags");
-                ui.horizontal_wrapped(|ui| {
-                    ui.spacing_mut().item_spacing = Vec2::new(4., 4.);
-                    for t in &m.user.tags {
-                        if pill(ui, &format!("# {t}  ×"), true)
-                            .on_hover_text("Remove this tag")
-                            .clicked()
-                        {
-                            acts.push(Act::RemoveTag(m.id.clone(), t.clone()));
+                widgets::group_title_at(ui, "Tags", 0.);
+                if !m.user.tags.is_empty() {
+                    ui.horizontal_wrapped(|ui| {
+                        ui.spacing_mut().item_spacing = Vec2::new(4., 4.);
+                        for t in &m.user.tags {
+                            if pill(ui, &format!("# {t}  ×"), true)
+                                .on_hover_text("Remove this tag")
+                                .clicked()
+                            {
+                                acts.push(Act::RemoveTag(m.id.clone(), t.clone()));
+                            }
                         }
-                    }
-                });
+                    });
+                }
                 let r = ui.add(
                     egui::TextEdit::singleline(&mut self.library.tag_input)
                         .id(egui::Id::unique("lib-tag-input"))
@@ -2338,8 +2434,9 @@ pub struct DemoGuard {
 }
 
 /// `--library*` screenshot flags taking a value.
-pub const SHOT_VALUE_FLAGS: [&str; 10] = [
+pub const SHOT_VALUE_FLAGS: [&str; 11] = [
     "--library-group",
+    "--library-detail-width",
     "--library-folder",
     "--library-project",
     "--library-search",
@@ -2365,7 +2462,8 @@ pub const SHOT_VALUE_FLAGS: [&str; 10] = [
 /// `--library-drag N[,M]` drags models over Prepare (with `--pointer`); `--library-drop-part N`
 /// drops a model onto the plate's first object (the part-kind choice shows);
 /// `--library-printers` sets up My printers (U1, CORE One, XL) for the "Fits" line;
-/// `--library-folder DIR` indexes DIR (read-only) instead of the synthetic library.
+/// `--library-folder DIR` indexes DIR (read-only) instead of the synthetic library;
+/// `--library-detail-width W` widens the details panel as dragging its edge does.
 pub fn screenshot_setup(app: &mut App, flags: &[String]) -> Result<DemoGuard, String> {
     use mica_library::testkit::{TempDir, synthetic_library, synthetic_range};
     let value = |name: &str| {
@@ -2393,6 +2491,11 @@ pub fn screenshot_setup(app: &mut App, flags: &[String]) -> Result<DemoGuard, St
         },
     );
     app.library.shown = true;
+    if let Some(w) = value("--library-detail-width") {
+        app.prefs.window.library_detail_width = w
+            .parse()
+            .map_err(|_| format!("--library-detail-width needs a number, not {w}"))?;
+    }
     let t = std::time::Duration::from_secs(120);
     let Some(lib) = &app.library.lib else {
         return Err(app.library.error.clone().unwrap_or_default());
@@ -2791,5 +2894,114 @@ mod tests {
         app.library_act(Act::AddAllToPlate(parts), &ctx);
         assert_eq!(app.plates.current().objects.len(), 10);
         assert!(!app.library.shown);
+    }
+
+    #[test]
+    fn detail_width_is_clamped_to_the_window() {
+        // Never narrower than today's panel.
+        assert_eq!(detail_width(100., 1440.), DETAIL_W);
+        assert_eq!(detail_width(f32::NAN, 1440.), DETAIL_W);
+        assert_eq!(detail_width(500., 1440.), 500.);
+        // The folders column and one card column (with its padding) always stay.
+        let widest = 1440. - LEFT_W - 2. - 2. * MAIN_PAD_X - CARD_W - GAP;
+        assert_eq!(detail_width(5000., 1440.), widest);
+        assert!(1440. - widest - LEFT_W - 2. - 2. * MAIN_PAD_X >= CARD_W);
+        // A window that shrinks narrows a wide panel, down to the minimum.
+        assert!(detail_width(900., 1000.) < 900.);
+        assert_eq!(detail_width(900., 700.), DETAIL_W);
+    }
+
+    #[test]
+    fn dragging_the_details_edge_resizes_and_double_click_resets() {
+        let dir = TempDir::new("gui-detail-width");
+        let models = dir.path().join("models");
+        synthetic_library(&models, 1).unwrap();
+        let ctx = egui::Context::default();
+        let mut app = App::create(
+            &ctx,
+            crate::app::Options {
+                prefs_path: None,
+                store: Some(mica_profiles::user::Store::open(
+                    dir.path().join("profiles"),
+                )),
+                files: vec![],
+                headless: true,
+            },
+        );
+        app.library.open(
+            &dir.path().join("library"),
+            mica_library::Options {
+                watch: false,
+                ..Default::default()
+            },
+        );
+        let lib = app.library.lib.as_ref().unwrap();
+        lib.add_folder(&models).unwrap();
+        assert!(lib.wait_idle(Duration::from_secs(60)));
+        app.library.shown = true;
+        app.library.refresh();
+        app.library.selected = Some(app.library.snapshot().models[0].id.clone());
+        let mut time = 0.;
+        let mut run = |app: &mut App, events: Vec<egui::Event>| {
+            time += 0.05;
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1440., 900.))),
+                    time: Some(time),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.library_view(ui),
+            );
+            out.textures_delta.clear();
+            out.platform_output.cursor_icon
+        };
+        let button = |pos: Pos2, pressed: bool| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        run(&mut app, vec![]);
+        run(&mut app, vec![]);
+        // Hovering the divider shows the resize cursor.
+        let edge = Pos2::new(1440. - DETAIL_W, 450.);
+        run(&mut app, vec![egui::Event::PointerMoved(edge)]);
+        let cursor = run(&mut app, vec![egui::Event::PointerMoved(edge)]);
+        assert_eq!(cursor, egui::CursorIcon::ResizeHorizontal);
+        // Dragging it 300 points left widens the panel by as much.
+        run(&mut app, vec![button(edge, true)]);
+        for x in [1100., 1000., 900., 820.] {
+            run(
+                &mut app,
+                vec![egui::Event::PointerMoved(Pos2::new(x, 450.))],
+            );
+            assert!(app.library.detail_resizing);
+        }
+        run(&mut app, vec![button(Pos2::new(820., 450.), false)]);
+        assert!(!app.library.detail_resizing);
+        assert_eq!(app.prefs.window.library_detail_width, 620.);
+        assert!(app.prefs_dirty);
+        // Too far left stops where one card column still fits.
+        let edge = Pos2::new(820., 450.);
+        run(&mut app, vec![egui::Event::PointerMoved(edge)]);
+        run(&mut app, vec![button(edge, true)]);
+        for x in [600., 100.] {
+            run(
+                &mut app,
+                vec![egui::Event::PointerMoved(Pos2::new(x, 450.))],
+            );
+        }
+        run(&mut app, vec![button(Pos2::new(100., 450.), false)]);
+        let widest = detail_width(f32::MAX, 1440.);
+        assert_eq!(app.prefs.window.library_detail_width, widest);
+        // Double-clicking the divider goes back to the default width.
+        let edge = Pos2::new(1440. - widest, 450.);
+        run(&mut app, vec![egui::Event::PointerMoved(edge)]);
+        for _ in 0..2 {
+            run(&mut app, vec![button(edge, true)]);
+            run(&mut app, vec![button(edge, false)]);
+        }
+        assert_eq!(app.prefs.window.library_detail_width, DETAIL_W);
     }
 }
