@@ -89,12 +89,13 @@ impl App {
     pub(crate) fn welcome_start(&mut self, start: Start) {
         self.close_welcome();
         match start {
-            Start::AddPrinter => {
-                // The model gallery (tested printers first), not the network search.
-                self.open_add_printer();
-                self.add_printer.screen = super::add_printer::Screen::Gallery;
-            }
+            Start::AddPrinter => self.open_printer_gallery(),
             Start::Import => self.open_import_review(),
+            // Without a printer, the user chooses one first; the Benchy follows.
+            Start::Benchy if !self.profiles.has_printer() => {
+                self.benchy_waits_for_printer = true;
+                self.open_printer_gallery();
+            }
             Start::Benchy => self.add_builtin(BuiltinModel::Benchy, AddAs::Object),
         }
     }
@@ -196,7 +197,11 @@ impl App {
                     ui,
                     Card::Benchy,
                     "Try a Benchy",
-                    "Put the 3DBenchy test model on the plate and slice it.",
+                    if self.profiles.has_printer() {
+                        "Put the 3DBenchy test model on the plate and slice it."
+                    } else {
+                        "Choose your printer, then the 3DBenchy test model goes on its plate."
+                    },
                 ) {
                     start = Some(Start::Benchy);
                 }

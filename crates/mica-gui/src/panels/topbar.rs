@@ -114,6 +114,9 @@ impl App {
         if busy {
             return "Wait for the current job to finish".into();
         }
+        if let Some(none) = self.no_printer() {
+            return none.reason();
+        }
         match &self.plates.current().slice_error {
             Some(e) => format!("Can't export or print: {}", e.message),
             None => "Slice the plate first".into(),
@@ -400,6 +403,11 @@ impl App {
                     .color(p.muted_alt),
             )
             .on_hover_text(hover);
+            return;
+        }
+        if let Some(none) = self.no_printer() {
+            // No printer: Slice is off and says why, never silently.
+            widgets::primary_button(ui, "Slice", false).on_disabled_hover_text(none.reason());
             return;
         }
         if can_slice && !self.prefs.auto_slice {

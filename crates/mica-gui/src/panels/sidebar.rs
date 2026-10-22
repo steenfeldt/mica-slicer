@@ -95,16 +95,26 @@ impl App {
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(8., 0.);
                     self.project_card(ui);
-                    let cards = ui.scope(|ui| {
-                        self.printer_card(ui);
-                        self.filament_card(ui);
-                    });
-                    crate::tour::anchor(
-                        ui,
-                        crate::tour::Anchor::PrinterFilament,
-                        cards.response.rect,
-                    );
-                    self.process_card(ui);
+                    if let Some(none) = self.no_printer() {
+                        // No printer, no filament or print profiles: the user chooses one.
+                        let card = ui.scope(|ui| self.no_printer_card(ui, &none));
+                        crate::tour::anchor(
+                            ui,
+                            crate::tour::Anchor::PrinterFilament,
+                            card.response.rect,
+                        );
+                    } else {
+                        let cards = ui.scope(|ui| {
+                            self.printer_card(ui);
+                            self.filament_card(ui);
+                        });
+                        crate::tour::anchor(
+                            ui,
+                            crate::tour::Anchor::PrinterFilament,
+                            cards.response.rect,
+                        );
+                        self.process_card(ui);
+                    }
                     if !self.notices.is_empty() {
                         ui.add_space(8.);
                         ui.horizontal(|ui| {
@@ -278,6 +288,106 @@ impl App {
             Some("keep") => self.keep_my_settings(),
             Some("revert") => self.revert_project_settings(),
             _ => {}
+        }
+    }
+
+    /// The Printer card without a printer: "No printer selected" with Add your printer (the
+    /// gallery) and the user's printers, or the remembered Prusa printer waiting for the Prusa
+    /// printer profiles with the download's state and Try again. Never another printer.
+    fn no_printer_card(&mut self, ui: &mut egui::Ui, none: &crate::app::NoPrinter) {
+        let p = theme::of(ui);
+        let mine = self.profiles.my_printers_in_picker_order(&self.prefs);
+        let mut choice: Option<(usize, String)> = None;
+        let mut open_gallery = false;
+        card(ui, |ui| {
+            widgets::card_header(ui, "Printer", |_| {});
+            ui.spacing_mut().item_spacing.y = 6.;
+            match none {
+                crate::app::NoPrinter::Unchosen => {
+                    ui.label(
+                        egui::RichText::new("No printer selected")
+                            .font(theme::semibold(14.))
+                            .color(p.text),
+                    );
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(
+                                "Mica slices for the printer you choose. Add yours to see its \
+                                 bed and its print and filament profiles.",
+                            )
+                            .font(theme::sans(12.))
+                            .color(p.muted),
+                        )
+                        .wrap(),
+                    );
+                    ui.add_space(4.);
+                    if widgets::primary_button(ui, "Add your printer", true)
+                        .on_hover_text(
+                            "Pick it from the printer gallery. Tested printers come first.",
+                        )
+                        .clicked()
+                    {
+                        open_gallery = true;
+                    }
+                    if !mine.is_empty() {
+                        ui.add_space(4.);
+                        ui.label(
+                            egui::RichText::new("Or choose one of your printers:")
+                                .font(theme::sans(12.))
+                                .color(p.label),
+                        );
+                        for (vi, name) in &mine {
+                            if ui.selectable_label(false, name).clicked() {
+                                choice = Some((*vi, name.clone()));
+                            }
+                        }
+                    }
+                    if self.profiles.prusa_missing {
+                        ui.add_space(4.);
+                        self.prusa_download_ui(ui);
+                    }
+                }
+                crate::app::NoPrinter::Waiting(name) => {
+                    let (model, variant) = split_printer_name(name);
+                    ui.horizontal(|ui| {
+                        let (r, _) = ui.allocate_exact_size(Vec2::splat(18.), Sense::hover());
+                        widgets::glyph(ui.painter(), r, Glyph::Printer, p.muted_alt);
+                        ui.label(
+                            egui::RichText::new(model)
+                                .font(theme::semibold(14.))
+                                .color(p.text),
+                        );
+                        if !variant.is_empty() {
+                            ui.label(
+                                egui::RichText::new(variant)
+                                    .font(theme::sans(12.))
+                                    .color(p.muted),
+                            );
+                        }
+                    });
+                    ui.label(
+                        egui::RichText::new(match self.prusa_download.phase {
+                            crate::prusa_download::Phase::Downloading(_) => {
+                                "Profiles downloading… This printer is ready once they are here."
+                            }
+                            _ => "This printer needs the Prusa printer profiles.",
+                        })
+                        .font(theme::sans(12.))
+                        .color(p.label),
+                    );
+                    self.prusa_download_ui(ui);
+                    ui.add_space(4.);
+                    if widgets::button(ui, "Choose another printer", true).clicked() {
+                        open_gallery = true;
+                    }
+                }
+            }
+        });
+        if let Some((vi, name)) = choice {
+            self.switch_printer(vi, &name);
+        }
+        if open_gallery {
+            self.open_printer_gallery();
         }
     }
 

@@ -246,6 +246,29 @@ impl Snapshot {
     }
 }
 
+/// No printer is selected (`App::no_printer`).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum NoPrinter {
+    /// Nothing chosen yet (a first launch): the user adds their printer.
+    Unchosen,
+    /// The remembered Prusa printer, waiting for the Prusa printer profiles.
+    Waiting(String),
+}
+
+impl NoPrinter {
+    /// Why Slice, Export and Print are off.
+    pub fn reason(&self) -> String {
+        match self {
+            NoPrinter::Unchosen => {
+                "Choose your printer first: Add your printer in the sidebar".into()
+            }
+            NoPrinter::Waiting(name) => format!(
+                "{name} needs the Prusa printer profiles, which are downloaded from Prusa once"
+            ),
+        }
+    }
+}
+
 /// How to start the app: the real window or a headless screenshot.
 pub struct Options {
     /// Where preferences are read and written; `None` never touches the disk.
@@ -454,6 +477,9 @@ pub struct App {
     pub(crate) updater: crate::updater::Updater,
     /// The Prusa printer profiles, downloaded from Prusa once (`prusa_download.rs`).
     pub(crate) prusa_download: crate::prusa_download::PrusaDownload,
+    /// Welcome's "Try a Benchy" without a printer: the Benchy goes on the plate once the user
+    /// has chosen one (`switch_printer`).
+    pub(crate) benchy_waits_for_printer: bool,
     /// An opened G-code file shown read-only in Preview over the scene (`gcode_doc`).
     pub(crate) gcode: Option<crate::gcode_doc::Doc>,
     /// A G-code file being opened (on its thread).
@@ -536,11 +562,11 @@ impl App {
         // Physical printers live next to the preferences; headless runs keep them (and their
         // secrets) in memory only.
         let printers = match &options.prefs_path {
-            Some(_) => crate::printhost::Printers::load(
+            Some(_) if !options.headless => crate::printhost::Printers::load(
                 Some(crate::printhost::config::default_path()),
                 Arc::from(crate::printhost::keychain::system()),
             ),
-            None => crate::printhost::Printers::load(
+            _ => crate::printhost::Printers::load(
                 None,
                 Arc::new(crate::printhost::keychain::MemoryStore::default()),
             ),
@@ -587,9 +613,21 @@ impl App {
             Default::default()
         };
         notices.extend(kept.errors.iter().cloned());
+        // Mica never picks a printer the user didn't choose: the real window starts on the
+        // remembered printer, or on the ones found in PrusaSlicer / Snapmaker Orca on the first
+        // launch, else on none (the sidebar asks for one, `App::no_printer`). A remembered
+        // printer whose profiles are not here (Prusa's, before their download) stays remembered
+        // and is selected once they arrive. Headless runs without settings (tests, screenshots,
+        // the monkey test) keep the CLI's default printer when its profiles are here.
+        let real = options.prefs_path.is_some();
         if prefs.detected {
-            profiles.restore(&prefs);
+            if !profiles.restore(&prefs) && real {
+                profiles.clear_printer();
+            }
         } else {
+            if real {
+                profiles.clear_printer();
+            }
             profiles.detect(&mut prefs);
         }
         // Settings › Slicing › Printer: a launch starts on that printer (with the
@@ -604,6 +642,11 @@ impl App {
             profiles.select_printer(vi, &name);
             profiles.reset_to_defaults(&prefs.defaults.print, &prefs.defaults.filament);
         }
+        let awaited = (profiles.prusa_missing
+            && !profiles.has_printer()
+            && prefs.selection.vendor == "Prusa"
+            && !prefs.selection.printer.is_empty())
+        .then(|| prefs.selection.printer.clone());
         let config = profiles.config();
         // Only the real window opens the library in the app's data folder; headless runs
         // (screenshots, the monkey test) open a temporary one when they need it.
@@ -745,12 +788,14 @@ impl App {
                 crate::updater::Updater::for_this_build()
             },
             prusa_download: Default::default(),
+            benchy_waits_for_printer: false,
             gcode: None,
             gcode_loading: None,
             mixes: Default::default(),
             mcp: Default::default(),
             tour: None,
         };
+        app.prusa_download.restore = awaited;
         app.refresh_warnings();
         if !kept.names.is_empty() {
             let names: Vec<&str> = kept.names.iter().map(|(_, n)| n.as_str()).collect();
@@ -1242,6 +1287,29 @@ impl App {
         self.overlays.printer_switched();
         self.fit_mixes_to_printer();
         self.settings_changed();
+        if self.profiles.has_printer() {
+            // The user chose this one: a Prusa printer waiting for its profiles is not
+            // switched back to when they arrive.
+            self.prusa_download.restore = None;
+            if std::mem::take(&mut self.benchy_waits_for_printer) {
+                self.add_builtin(
+                    mica_core::builtin_models::BuiltinModel::Benchy,
+                    crate::builtin::AddAs::Object,
+                );
+            }
+        }
+    }
+
+    /// Why nothing slices yet, when no printer is selected: none chosen yet, or the remembered
+    /// one waits for its profiles.
+    pub(crate) fn no_printer(&self) -> Option<NoPrinter> {
+        if self.profiles.has_printer() {
+            return None;
+        }
+        Some(match &self.prusa_download.restore {
+            Some(name) if self.profiles.prusa_missing => NoPrinter::Waiting(name.clone()),
+            _ => NoPrinter::Unchosen,
+        })
     }
 
     /// A global setting or preset changed: every plate's slice is stale.
@@ -1303,6 +1371,8 @@ impl App {
                     worker::plate_warnings(&plate.objects, &self.bed, c)
                 }
             }
+            // No printer: the sidebar's Printer card asks for one, no warning.
+            Err(_) if !self.profiles.has_printer() => vec![],
             Err(e) => vec![e.clone()],
         };
         self.warnings.extend(self.tower_warnings());
@@ -2983,6 +3053,10 @@ impl App {
         if self.loading.is_some() || self.plates.plate(i).objects.is_empty() {
             return;
         }
+        if let Some(none) = self.no_printer() {
+            self.status = none.reason();
+            return;
+        }
         if self.viewing_gcode() {
             self.status = "Close the G-code file to slice the plate".into();
             return;
@@ -4402,7 +4476,11 @@ pub fn load_files(
     config: &Result<Config, String>,
     center: Vec3,
 ) -> LoadResult {
-    let config = config.clone()?;
+    // Without a printer models still open (on the default bed); other settings problems stop.
+    let config = match config {
+        Err(e) if e == crate::panels::profiles::NO_PRINTER => Config::defaults(),
+        c => c.clone()?,
+    };
     mica_core::input::load_with_plate(
         &paths,
         (center.x, center.y),
