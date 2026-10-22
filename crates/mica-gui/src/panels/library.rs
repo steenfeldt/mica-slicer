@@ -30,12 +30,16 @@ const ROW_H: f32 = 30.;
 /// A section header in the grid.
 const HEADER_H: f32 = 36.;
 
+/// The narrowest the details panel gets in a window too small for [`DETAIL_W`].
+const DETAIL_MIN_W: f32 = 260.;
+
 /// The details panel's width for a `wanted` width in a Library view `total` points wide: at
-/// least [`DETAIL_W`], and narrow enough that the folders column and one card column stay.
+/// least [`DETAIL_W`], and narrow enough that the folders column and one card column stay
+/// (in a very small window it goes below [`DETAIL_W`], down to [`DETAIL_MIN_W`]).
 pub(crate) fn detail_width(wanted: f32, total: f32) -> f32 {
     let widest = total - LEFT_W - 2. - 2. * MAIN_PAD_X - CARD_W - GAP;
     let w = if wanted.is_finite() { wanted } else { DETAIL_W };
-    w.min(widest).max(DETAIL_W)
+    w.max(DETAIL_W).min(widest.max(DETAIL_MIN_W))
 }
 
 /// What a click in the view asks for; applied after drawing.
@@ -662,7 +666,51 @@ fn project_menu(
     }
 }
 
+/// The narrowest a project's title gets beside its buttons before they move to a row below.
+const BAR_MIN_TITLE: f32 = 240.;
+/// The least space between a project's title and its buttons.
+const BAR_TITLE_GAP: f32 = 16.;
+/// Between the project bar's buttons (and the breadcrumb's parts).
+const BAR_SPACING: f32 = 6.;
+
+/// How the bar above an open project's files is laid out for the width it has.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum BarLayout {
+    /// Breadcrumb, title and buttons in one row; the title takes at most `title_w`.
+    OneRow { title_w: f32 },
+    /// The buttons on a row of their own below the title.
+    Wrapped,
+    /// Like `Wrapped`, with only "Open project" and the "⋯" menu (which then holds the rest).
+    Collapsed,
+}
+
+/// The layout for a bar `avail` wide: `crumb` is the breadcrumb's width before the title,
+/// `title` the title's natural width and `buttons` all the buttons' width (with their
+/// spacing).
+fn bar_layout(avail: f32, crumb: f32, title: f32, buttons: f32) -> BarLayout {
+    let fixed = crumb + BAR_TITLE_GAP + buttons;
+    if fixed + title.min(BAR_MIN_TITLE) <= avail {
+        BarLayout::OneRow {
+            title_w: avail - fixed,
+        }
+    } else if buttons <= avail {
+        BarLayout::Wrapped
+    } else {
+        BarLayout::Collapsed
+    }
+}
+
+/// What the last project bar drew, for tests.
+#[cfg(test)]
+#[derive(Clone, Copy, Debug)]
+struct BarDrawn {
+    layout: BarLayout,
+    more: Rect,
+    title: Rect,
+}
+
 /// Above an open project's files: the way back, its name and its actions.
+#[cfg_attr(not(test), allow(unused_variables, unused_assignments))]
 fn project_bar(
     ui: &mut egui::Ui,
     models: &[Model],
@@ -670,79 +718,114 @@ fn project_bar(
     acts: &mut Vec<Act>,
 ) {
     let p = theme::of(ui);
-    ui.horizontal(|ui| {
-        ui.spacing_mut().item_spacing.x = 6.;
-        if widgets::link(ui, "Library")
-            .on_hover_text("Back to the whole library")
-            .clicked()
-        {
-            acts.push(Act::OpenFolder(None));
-        }
-        ui.label(
-            egui::RichText::new("›")
-                .font(theme::sans(14.))
-                .color(p.muted),
-        );
-        ui.label(
-            egui::RichText::new(&pr.name)
-                .font(theme::semibold(15.))
-                .color(p.text),
-        );
-        ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            ui.spacing_mut().item_spacing.x = 6.;
-            let more = widgets::icon_button(ui, widgets::Glyph::More, "More", true);
-            egui::Popup::menu(&more).show(|ui| {
-                if ui
-                    .button("Split this project")
-                    .on_hover_text("Show this folder's files one by one")
-                    .clicked()
-                {
-                    acts.push(Act::SetGrouping(pr.folder.clone(), Some(Grouping::Split)));
-                    ui.close();
-                }
-                if pr.chosen
-                    && ui
-                        .button("Group automatically")
-                        .on_hover_text("Let Mica decide again whether this folder is a project")
-                        .clicked()
-                {
-                    acts.push(Act::SetGrouping(pr.folder.clone(), None));
-                    ui.close();
-                }
-            });
-            if widgets::button(ui, "Show in Finder", true).clicked() {
-                acts.push(Act::Reveal(pr.folder.clone()));
-            }
-            let parts = pr.plate_parts(models);
-            if !parts.is_empty()
-                && widgets::button(ui, "Add all parts to plate", pr.online)
-                    .on_hover_text(format!(
-                        "Add the {} STL part{} to the current plate",
-                        parts.len(),
-                        if parts.len() == 1 { "" } else { "s" }
-                    ))
-                    .clicked()
+    let parts = pr.plate_parts(models);
+    let main = pr.main_3mf(models);
+    // Measure the row first: it never runs past the column, whatever its width.
+    let text_w = |ui: &egui::Ui, t: &str, font: egui::FontId| {
+        ui.painter()
+            .layout_no_wrap(t.to_string(), font, p.text)
+            .size()
+            .x
+    };
+    let button_w = |ui: &egui::Ui, t: &str, primary: bool| {
+        let font = if primary {
+            theme::semibold(13.)
+        } else {
+            theme::sans(13.)
+        };
+        text_w(ui, t, font) + 24. + BAR_SPACING
+    };
+    let crumb = text_w(ui, "Library", theme::sans(12.))
+        + text_w(ui, "›", theme::sans(14.))
+        + 2. * BAR_SPACING;
+    let title = text_w(ui, &pr.name, theme::semibold(15.));
+    let more_w = widgets::ICON_BUTTON;
+    let open_w = if main.is_some() {
+        button_w(ui, "Open project", true)
+    } else {
+        0.
+    };
+    let secondary = button_w(ui, "Show in Finder", false)
+        + if parts.is_empty() {
+            0.
+        } else {
+            button_w(ui, "Add all parts to plate", false)
+        };
+    let layout = bar_layout(
+        ui.available_width(),
+        crumb,
+        title,
+        open_w + secondary + more_w,
+    );
+    let one_row = matches!(layout, BarLayout::OneRow { .. });
+    let collapsed = layout == BarLayout::Collapsed;
+    let mut more_rect = Rect::NOTHING;
+    let title_rect = ui
+        .horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = BAR_SPACING;
+            if widgets::link(ui, "Library")
+                .on_hover_text("Back to the whole library")
+                .clicked()
             {
-                acts.push(Act::AddAllToPlate(
-                    parts
-                        .iter()
-                        .map(|f| pr.path(models, *f).to_path_buf())
-                        .collect(),
-                ));
+                acts.push(Act::OpenFolder(None));
             }
-            if let Some(f) = pr.main_3mf(models)
-                && widgets::primary_button(ui, "Open project", pr.online)
-                    .on_hover_text(format!(
-                        "Open {} (replaces the current plates)",
-                        pr.path(models, f)
-                            .file_name()
-                            .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
-                    ))
-                    .clicked()
-            {
-                acts.push(Act::OpenProject(pr.path(models, f).to_path_buf()));
+            ui.label(
+                egui::RichText::new("›")
+                    .font(theme::sans(14.))
+                    .color(p.muted),
+            );
+            // The title takes what is left and ends in "…" (the full name on hover).
+            let title_rect = ui
+                .scope(|ui| {
+                    if let BarLayout::OneRow { title_w } = layout {
+                        ui.set_max_width(title_w);
+                    }
+                    ui.add(
+                        egui::Label::new(
+                            egui::RichText::new(&pr.name)
+                                .font(theme::semibold(15.))
+                                .color(p.text),
+                        )
+                        .truncate(),
+                    )
+                    .rect
+                })
+                .inner;
+            if one_row {
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.spacing_mut().item_spacing.x = BAR_SPACING;
+                    let more = project_more(ui, models, pr, acts, false);
+                    more_rect = more;
+                    show_in_finder_button(ui, pr, acts);
+                    add_parts_button(ui, models, pr, acts);
+                    open_project_button(ui, models, pr, acts);
+                });
             }
+            title_rect
+        })
+        .inner;
+    if !one_row {
+        // Too narrow for both: the buttons go on their own row, from the left edge.
+        ui.horizontal(|ui| {
+            ui.spacing_mut().item_spacing.x = BAR_SPACING;
+            open_project_button(ui, models, pr, acts);
+            if !collapsed {
+                add_parts_button(ui, models, pr, acts);
+                show_in_finder_button(ui, pr, acts);
+            }
+            more_rect = project_more(ui, models, pr, acts, collapsed);
         });
+    }
+    #[cfg(test)]
+    ui.ctx().data_mut(|d| {
+        d.insert_temp(
+            egui::Id::unique("lib-project-bar"),
+            BarDrawn {
+                layout,
+                more: more_rect,
+                title: title_rect,
+            },
+        );
     });
     let mut facts = vec![library::project_summary(pr)];
     if !pr.printers.is_empty() {
@@ -762,7 +845,120 @@ fn project_bar(
         |_| pr.folder.display().to_string(),
         |r| format!("{} › {}", folder_name(&pr.root), r.display()),
     ));
-    muted(ui, facts.join(" · "), 11.5);
+    // At most two rows; the rest ends in "…" with everything on hover.
+    let mut job =
+        egui::text::LayoutJob::simple(facts.join(" · "), theme::sans(11.5), p.muted, f32::INFINITY);
+    job.wrap.max_rows = 2;
+    ui.add(egui::Label::new(job).wrap());
+}
+
+/// The project bar's "Open project" (when it has a 3MF to open).
+fn open_project_button(
+    ui: &mut egui::Ui,
+    models: &[Model],
+    pr: &mica_library::Project,
+    acts: &mut Vec<Act>,
+) {
+    if let Some(f) = pr.main_3mf(models)
+        && widgets::primary_button(ui, "Open project", pr.online)
+            .on_hover_text(format!(
+                "Open {} (replaces the current plates)",
+                pr.path(models, f)
+                    .file_name()
+                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned())
+            ))
+            .clicked()
+    {
+        acts.push(Act::OpenProject(pr.path(models, f).to_path_buf()));
+    }
+}
+
+/// The project bar's "Add all parts to plate" (when it has parts).
+fn add_parts_button(
+    ui: &mut egui::Ui,
+    models: &[Model],
+    pr: &mica_library::Project,
+    acts: &mut Vec<Act>,
+) {
+    let parts = pr.plate_parts(models);
+    if !parts.is_empty()
+        && widgets::button(ui, "Add all parts to plate", pr.online)
+            .on_hover_text(parts_hint(parts.len()))
+            .clicked()
+    {
+        acts.push(add_all_parts(models, pr));
+    }
+}
+
+fn parts_hint(n: usize) -> String {
+    format!(
+        "Add the {n} STL part{} to the current plate",
+        if n == 1 { "" } else { "s" }
+    )
+}
+
+fn add_all_parts(models: &[Model], pr: &mica_library::Project) -> Act {
+    Act::AddAllToPlate(
+        pr.plate_parts(models)
+            .iter()
+            .map(|f| pr.path(models, *f).to_path_buf())
+            .collect(),
+    )
+}
+
+fn show_in_finder_button(ui: &mut egui::Ui, pr: &mica_library::Project, acts: &mut Vec<Act>) {
+    if widgets::button(ui, "Show in Finder", true).clicked() {
+        acts.push(Act::Reveal(pr.folder.clone()));
+    }
+}
+
+/// The project bar's "⋯" menu; `with_secondary` adds the buttons that did not fit.
+/// Returns the button's rect.
+fn project_more(
+    ui: &mut egui::Ui,
+    models: &[Model],
+    pr: &mica_library::Project,
+    acts: &mut Vec<Act>,
+    with_secondary: bool,
+) -> Rect {
+    let more = widgets::icon_button(ui, widgets::Glyph::More, "More", true);
+    egui::Popup::menu(&more).show(|ui| {
+        if with_secondary {
+            let parts = pr.plate_parts(models);
+            if !parts.is_empty()
+                && ui
+                    .add_enabled(pr.online, egui::Button::new("Add all parts to plate"))
+                    .on_hover_text(parts_hint(parts.len()))
+                    .clicked()
+            {
+                acts.push(add_all_parts(models, pr));
+                ui.close();
+            }
+            if ui.button("Show in Finder").clicked() {
+                acts.push(Act::Reveal(pr.folder.clone()));
+                ui.close();
+            }
+            ui.separator();
+        }
+        if ui
+            .button("Split this project")
+            .on_hover_text("Show this folder's files one by one")
+            .clicked()
+        {
+            acts.push(Act::SetGrouping(pr.folder.clone(), Some(Grouping::Split)));
+            ui.close();
+        }
+        if pr.chosen
+            && ui
+                .button("Group automatically")
+                .on_hover_text("Let Mica decide again whether this folder is a project")
+                .clicked()
+        {
+            acts.push(Act::SetGrouping(pr.folder.clone(), None));
+            ui.close();
+        }
+    });
+    more.rect
 }
 
 /// The width the grouping, sort and Grid / List controls take beside the search field.
@@ -871,6 +1067,8 @@ impl App {
                 let right =
                     Rect::from_min_max(Pos2::new(rect.right() - detail_w, rect.top()), rect.max);
                 let mut left_ui = ui.new_child(egui::UiBuilder::new().max_rect(left.shrink(14.)));
+                // Each column draws only inside its own rect.
+                left_ui.set_clip_rect(left.intersect(ui.clip_rect()));
                 self.library_sidebar(&mut left_ui, &mut acts);
                 let main = Rect::from_min_max(
                     Pos2::new(left.right() + 1., rect.top()),
@@ -886,6 +1084,7 @@ impl App {
                 let mut main_ui = ui.new_child(
                     egui::UiBuilder::new().max_rect(main.shrink2(Vec2::new(MAIN_PAD_X, 14.))),
                 );
+                main_ui.set_clip_rect(main.intersect(ui.clip_rect()));
                 self.library_main(&mut main_ui, &mut acts);
                 self.library.detail_resizing = false;
                 if show_detail {
@@ -1164,7 +1363,7 @@ impl App {
         let cols = (((ui.available_width() + GAP) / (CARD_W + GAP)).floor() as usize).max(1);
         // Cards share the row's width (no ragged gap on the right).
         let card_w = ((ui.available_width() - GAP * (cols - 1) as f32) / cols as f32)
-            .clamp(CARD_W, CARD_W * 1.4);
+            .clamp(CARD_W.min(ui.available_width()), CARD_W * 1.4);
         // Rows: section headers and runs of cards.
         let entries = self.library.entries().to_vec();
         let mut rows: Vec<(f32, std::ops::Range<usize>, bool)> = vec![];
@@ -1238,9 +1437,18 @@ impl App {
             return;
         };
         let base = Pos2::new(r.left() + 2., r.bottom() - 12.);
-        let g = ui
+        // A long title ends in "…" so that it and its count stay inside the row.
+        let count_w = ui
             .painter()
-            .layout_no_wrap(title.clone(), theme::semibold(13.), p.text);
+            .layout_no_wrap(count.to_string(), theme::sans(12.), p.muted)
+            .size()
+            .x;
+        let mut job =
+            egui::text::LayoutJob::simple_singleline(title.clone(), theme::semibold(13.), p.text);
+        job.wrap = egui::text::TextWrapping::truncate_at_width(
+            (r.width() - GAP - 2. - 8. - count_w).max(40.),
+        );
+        let g = ui.painter().layout_job(job);
         let tw = g.size().x;
         ui.painter()
             .galley(base - Vec2::new(0., g.size().y / 2.), g, p.text);
@@ -2898,6 +3106,231 @@ mod tests {
         assert!(!app.library.shown);
     }
 
+    /// Draws the Library view in a `size` window; every text with its rect and clip rect.
+    fn frame_sized(
+        ctx: &egui::Context,
+        app: &mut App,
+        size: Vec2,
+        events: Vec<egui::Event>,
+    ) -> Vec<(String, Rect, Rect)> {
+        fn texts(shape: egui::Shape, clip: Rect, out: &mut Vec<(String, Rect, Rect)>) {
+            match shape {
+                egui::Shape::Text(t) => {
+                    let r = Rect::from_min_size(t.pos, t.galley.size());
+                    out.push((t.galley.text().to_string(), r, clip));
+                }
+                egui::Shape::Vec(shapes) => {
+                    for s in shapes {
+                        texts(s, clip, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+        let mut output = ctx.run_ui(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, size)),
+                events,
+                ..Default::default()
+            },
+            |ui| app.library_view(ui),
+        );
+        let mut out = vec![];
+        for s in output.shapes {
+            texts(s.shape, s.clip_rect, &mut out);
+        }
+        output.textures_delta.clear();
+        out
+    }
+
+    #[test]
+    fn project_bar_fits_any_width() {
+        let dir = TempDir::new("gui-project-bar");
+        let data = dir.path().join("library");
+        let name = "Cloud Dragon Emerging Book Nook Collection Deluxe Edition";
+        let folder = dir
+            .path()
+            .join("models/Crafty3d")
+            .join(name.replace(' ', "_"));
+        std::fs::create_dir_all(&folder).unwrap();
+        let repo = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/models");
+        for (from, to) in [
+            ("painted-cube.3mf", format!("{name}.3mf")),
+            ("plates-orca.3mf", "PRUSA Cloud Dragon.3mf".into()),
+            ("cube20.stl", "Book Nook Box.stl".into()),
+            ("taper.stl", "Cloud Dragon Head.stl".into()),
+            ("shells.stl", "Cloud Dragon Tail.stl".into()),
+        ] {
+            std::fs::copy(repo.join(from), folder.join(to)).unwrap();
+        }
+        let ctx = egui::Context::default();
+        let mut app = App::create(
+            &ctx,
+            crate::app::Options {
+                prefs_path: None,
+                store: Some(mica_profiles::user::Store::open(
+                    dir.path().join("profiles"),
+                )),
+                files: vec![],
+                headless: true,
+            },
+        );
+        app.library.open(
+            &data,
+            mica_library::Options {
+                watch: false,
+                ..Default::default()
+            },
+        );
+        let lib = app.library.lib.as_ref().unwrap();
+        lib.add_folder(&dir.path().join("models")).unwrap();
+        assert!(lib.wait_idle(Duration::from_secs(60)));
+        app.library.shown = true;
+        app.library.refresh();
+        let pr = app.library.projects().list[0].clone();
+        app.library.open_project = Some(pr.folder.clone());
+        app.library.refresh();
+        let title = pr.name.clone();
+        assert!(title.len() > 40, "{title}");
+        let secondary = ["Add all parts to plate", "Show in Finder"];
+        let bar = |ctx: &egui::Context| {
+            ctx.data(|d| d.get_temp::<BarDrawn>(egui::Id::unique("lib-project-bar")))
+                .expect("project bar drawn")
+        };
+        // (window, details panel width (0: closed), expected layout)
+        for (w, h, dw, expect) in [
+            (1440., 900., 0., "one row"),
+            (1100., 900., 0., "one row"),
+            (900., 900., 0., "wrapped"),
+            (1440., 900., 640., "wrapped"),
+            (1440., 900., 5000., "collapsed"),
+            (700., 900., 0., "collapsed"),
+            (840., 1000., 5000., "collapsed"),
+        ] {
+            let detail = dw > 0.;
+            let size = Vec2::new(w, h);
+            app.library.selected = if detail {
+                Some(app.library.visible_at(0).unwrap().id.clone())
+            } else {
+                None
+            };
+            app.prefs.window.library_detail_width = if detail { dw } else { DETAIL_W };
+            frame_sized(&ctx, &mut app, size, vec![]);
+            let text = frame_sized(&ctx, &mut app, size, vec![]);
+            let b = bar(&ctx);
+            let what = format!("{w}x{h} details {dw}: {b:?}");
+            let layout = match b.layout {
+                BarLayout::OneRow { .. } => "one row",
+                BarLayout::Wrapped => "wrapped",
+                BarLayout::Collapsed => "collapsed",
+            };
+            assert_eq!(layout, expect, "{what}");
+            // The center column: between the folders column and the details panel.
+            let left = LEFT_W + 1. + MAIN_PAD_X;
+            let right = if detail {
+                w - detail_width(dw, w) - 1. - MAIN_PAD_X
+            } else {
+                w - MAIN_PAD_X
+            };
+            assert!(right - left >= CARD_W, "{what}");
+            let inside = |r: Rect| r.left() >= left - 0.5 && r.right() <= right + 0.5;
+            assert!(inside(b.title), "title {what}");
+            assert!(inside(b.more), "more {what}");
+            // Everything the center column draws (texts clipped to it) lies inside it.
+            for (t, r, clip) in &text {
+                if clip.left() > LEFT_W && clip.right() < right + MAIN_PAD_X + 1.5 {
+                    assert!(inside(*r), "{t:?} at {r:?} outside {left}..{right} {what}");
+                }
+            }
+            // The folders column's filters stay whole and uncovered.
+            for t in ["Multi-color", "Not sliced", "Last 30 days"] {
+                let (_, r, _) = text.iter().find(|(x, _, _)| x == t).expect(t);
+                assert!(r.right() <= LEFT_W, "{t} {what}");
+            }
+            // The title keeps its distance from every button.
+            let buttons: Vec<Rect> = text
+                .iter()
+                .filter(|(t, r, _)| {
+                    (t == "Open project" || secondary.contains(&t.as_str()))
+                        && r.top() < b.more.bottom()
+                        && r.left() < right
+                })
+                .map(|(_, r, _)| r.expand2(Vec2::new(12., 0.)))
+                .chain([b.more])
+                .collect();
+            for r in &buttons {
+                assert!(inside(*r), "button {r:?} {what}");
+                let gap = b.title.expand2(Vec2::new(BAR_TITLE_GAP - 0.5, 0.));
+                assert!(
+                    !gap.intersects(*r),
+                    "title {:?} touches {r:?} {what}",
+                    b.title
+                );
+            }
+            let shown = |t: &str| {
+                text.iter()
+                    .any(|(x, r, _)| x == t && r.top() < b.more.bottom() && r.left() < right)
+            };
+            assert!(shown("Open project"), "{what}");
+            match b.layout {
+                BarLayout::OneRow { .. } => {
+                    // Buttons right-aligned beside the title, as the wide layout always was.
+                    assert!((b.more.right() - right).abs() < 1., "{what}");
+                    assert!(
+                        buttons.iter().all(
+                            |r| r.center().y > b.title.top() && r.center().y < b.title.bottom()
+                        )
+                    );
+                    assert!(secondary.iter().all(|t| shown(t)), "{what}");
+                }
+                BarLayout::Wrapped => {
+                    assert!(buttons.iter().all(|r| r.top() > b.title.bottom()), "{what}");
+                    assert!(secondary.iter().all(|t| shown(t)), "{what}");
+                }
+                BarLayout::Collapsed => {
+                    assert!(secondary.iter().all(|t| !shown(t)), "{what}");
+                    // They are in the "⋯" menu instead.
+                    let at = b.more.center();
+                    frame_sized(&ctx, &mut app, size, vec![egui::Event::PointerMoved(at)]);
+                    for pressed in [true, false] {
+                        let ev = egui::Event::PointerButton {
+                            pos: at,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        };
+                        frame_sized(&ctx, &mut app, size, vec![ev]);
+                    }
+                    let menu = frame_sized(&ctx, &mut app, size, vec![]);
+                    for t in secondary.iter().chain(&["Split this project"]) {
+                        assert!(
+                            menu.iter().any(|(x, _, _)| x == t),
+                            "{t} not in menu {what}"
+                        );
+                    }
+                    // Close it again.
+                    let ev = egui::Event::Key {
+                        key: egui::Key::Escape,
+                        physical_key: None,
+                        pressed: true,
+                        repeat: false,
+                        modifiers: egui::Modifiers::NONE,
+                    };
+                    frame_sized(&ctx, &mut app, size, vec![ev]);
+                }
+            }
+            // The whole title on one row, ending in "…" when it does not fit.
+            let shown_title = text
+                .iter()
+                .find(|(t, r, _)| (*t == title || t.ends_with('…')) && r.intersects(b.title))
+                .map(|(t, _, _)| t.clone())
+                .expect("title drawn");
+            if w == 1440. && !detail {
+                assert_eq!(shown_title, title, "{what}");
+            }
+        }
+    }
+
     #[test]
     fn detail_width_is_clamped_to_the_window() {
         // Never narrower than today's panel.
@@ -2910,7 +3343,11 @@ mod tests {
         assert!(1440. - widest - LEFT_W - 2. - 2. * MAIN_PAD_X >= CARD_W);
         // A window that shrinks narrows a wide panel, down to the minimum.
         assert!(detail_width(900., 1000.) < 900.);
-        assert_eq!(detail_width(900., 700.), DETAIL_W);
+        assert_eq!(
+            detail_width(900., 800.),
+            800. - LEFT_W - 2. - 2. * MAIN_PAD_X - CARD_W - GAP
+        );
+        assert_eq!(detail_width(900., 700.), DETAIL_MIN_W);
     }
 
     #[test]
