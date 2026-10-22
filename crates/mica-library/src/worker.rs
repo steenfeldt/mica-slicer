@@ -9,7 +9,7 @@ use crate::model::{
     Extra, ExtraKind, ExtraRecord, FileRecord, FolderState, FolderStatus, Info, Kind, Location,
     Model, Snapshot,
 };
-use crate::store::{Changes, Index, Store};
+use crate::store::{Changes, Index, OpenError, Store};
 use crate::walk::{Found, FoundExtra, mtime_ns, skipped_path, walk};
 use crate::{Cmd, Options, Shared};
 use std::collections::{BTreeSet, HashMap, HashSet, VecDeque};
@@ -38,8 +38,18 @@ struct Worker {
     paused: Arc<AtomicBool>,
     tx: mpsc::Sender<Cmd>,
     rx: mpsc::Receiver<Cmd>,
-    store: Store,
+    /// `None` while another Mica process has the index: the library is then read-only (a
+    /// view of the last committed index), nothing is scanned or written, and the index is
+    /// taken over once that process lets go of it.
+    store: Option<Store>,
     index: Index,
+    /// The index file.
+    index_path: PathBuf,
+    /// Read-only: when taking the index over was last tried, and the file's size and time
+    /// when the view was read.
+    last_takeover: Instant,
+    view_stamp: Option<(u64, std::time::SystemTime)>,
+    last_view: Instant,
     thumbs: PathBuf,
     data_dir: PathBuf,
     pool: rayon::ThreadPool,
@@ -80,9 +90,19 @@ pub(crate) fn run(
         g.handled = g.sent;
         drop(g);
     };
-    let (store, index, warning) = match Store::open(&data_dir.join("index.redb")) {
-        Ok(v) => v,
-        Err(e) => {
+    let index_path = data_dir.join("index.redb");
+    let (store, index, warning) = match Store::open(&index_path) {
+        Ok((store, index, warning)) => (Some(store), index, warning),
+        // Another Mica has the index: show what it last committed, change nothing.
+        Err(OpenError::InUse) => match Store::read_snapshot(&index_path) {
+            Ok(index) => (None, index, None),
+            Err(e) => (
+                None,
+                Index::default(),
+                Some(format!("The library could not be shown ({e})")),
+            ),
+        },
+        Err(OpenError::Failed(e)) => {
             let mut g = shared.lock().unwrap_or_else(|e| e.into_inner());
             g.error = Some(e);
             drop(g);
@@ -90,6 +110,7 @@ pub(crate) fn run(
             return;
         }
     };
+    let read_only = store.is_none();
     let pool = match rayon::ThreadPoolBuilder::new()
         .num_threads(options.threads.max(1))
         .thread_name(|i| format!("mica-library-{i}"))
@@ -107,6 +128,7 @@ pub(crate) fn run(
         g.user = index.user.clone();
         g.grouping = index.grouping.clone();
         g.warning = warning;
+        g.read_only = read_only;
     }
     let mut w = Worker {
         options,
@@ -115,6 +137,12 @@ pub(crate) fn run(
         tx,
         rx,
         store,
+        view_stamp: read_only
+            .then(|| crate::store::stamp(&index_path))
+            .flatten(),
+        index_path,
+        last_takeover: Instant::now(),
+        last_view: Instant::now(),
         thumbs: data_dir.join("thumbs"),
         data_dir,
         pool,
@@ -134,15 +162,7 @@ pub(crate) fn run(
         bad_pictures: HashSet::new(),
         index,
     };
-    for r in w.index.files.values() {
-        *w.refs.entry(r.hash.clone()).or_default() += 1;
-    }
-    for f in w.index.folders.clone() {
-        w.status.insert(f.clone(), status(&f, FolderState::Waiting));
-        w.queue.push_back(f);
-    }
-    // Thumbnails an earlier session did not get to (resumed; nothing is rendered twice).
-    w.queue_renders();
+    w.start();
     w.publish(true);
     {
         let busy = !w.queue.is_empty();
@@ -236,6 +256,81 @@ impl Worker {
         self.shared.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    fn read_only(&self) -> bool {
+        self.store.is_none()
+    }
+
+    /// Sets up the session for the loaded index: references, and (owning the index) every
+    /// folder queued for a scan and the thumbnails an earlier session did not get to.
+    fn start(&mut self) {
+        self.refs.clear();
+        for r in self.index.files.values() {
+            *self.refs.entry(r.hash.clone()).or_default() += 1;
+        }
+        self.status.clear();
+        self.queue.clear();
+        self.renders.clear();
+        let state = if self.read_only() {
+            FolderState::Ready
+        } else {
+            FolderState::Waiting
+        };
+        for f in self.index.folders.clone() {
+            self.status.insert(f.clone(), status(&f, state.clone()));
+            if !self.read_only() {
+                self.queue.push_back(f);
+            }
+        }
+        // Thumbnails an earlier session did not get to (resumed; nothing is rendered twice).
+        self.queue_renders();
+        self.dirty = true;
+    }
+
+    /// Read-only: every few seconds, tries to take the index over (the other Mica has quit),
+    /// and otherwise re-reads the view when the other process has committed changes.
+    fn retry_takeover(&mut self) {
+        if !self.read_only() || self.last_takeover.elapsed() < self.options.takeover_check {
+            return;
+        }
+        self.last_takeover = Instant::now();
+        match Store::open(&self.index_path) {
+            Ok((store, index, warning)) => {
+                self.store = Some(store);
+                self.index = index;
+                {
+                    let mut g = self.lock();
+                    g.read_only = false;
+                    g.user = self.index.user.clone();
+                    g.grouping = self.index.grouping.clone();
+                    if warning.is_some() {
+                        g.warning = warning;
+                    }
+                }
+                self.start();
+                self.publish(true);
+            }
+            // Still in use (or briefly unreadable): keep the view, refreshed now and then.
+            Err(_) => {
+                let stamp = crate::store::stamp(&self.index_path);
+                if stamp != self.view_stamp
+                    && self.last_view.elapsed() >= self.options.takeover_check * 5
+                    && let Ok(index) = Store::read_snapshot(&self.index_path)
+                {
+                    self.view_stamp = stamp;
+                    self.last_view = Instant::now();
+                    self.index = index;
+                    {
+                        let mut g = self.lock();
+                        g.user = self.index.user.clone();
+                        g.grouping = self.index.grouping.clone();
+                    }
+                    self.start();
+                    self.publish(true);
+                }
+            }
+        }
+    }
+
     fn main_loop(&mut self) {
         while !self.shutdown {
             let paused = self.paused.load(Ordering::Relaxed);
@@ -284,6 +379,7 @@ impl Worker {
             if self.last_offline_check.elapsed() >= self.options.offline_check {
                 self.check_availability();
             }
+            self.retry_takeover();
             self.flush(&mut Changes::default());
             if self.dirty {
                 self.publish(true);
@@ -297,7 +393,7 @@ impl Worker {
 
     /// Every model still needing a rendered thumbnail, queued once, in name order.
     fn queue_renders(&mut self) {
-        if !self.options.render {
+        if !self.options.render || self.read_only() {
             return;
         }
         let queued: HashSet<String> = self.renders.iter().cloned().collect();
@@ -430,8 +526,15 @@ impl Worker {
     fn handle(&mut self, cmd: Cmd) {
         // File events come from the watcher, not the `Library` handle: they are not counted.
         let counted = !matches!(cmd, Cmd::Fs(_) | Cmd::FsRescan(_));
+        // Read-only, only shutting down is handled: the other Mica makes every change.
+        let cmd = if self.read_only() && !matches!(cmd, Cmd::Shutdown) {
+            None
+        } else {
+            Some(cmd)
+        };
         match cmd {
-            Cmd::AddFolder(path) => {
+            None => {}
+            Some(Cmd::AddFolder(path)) => {
                 if !self.index.folders.contains(&path) {
                     self.index.folders.push(path.clone());
                     self.index.folders.sort();
@@ -446,7 +549,7 @@ impl Worker {
                     self.dirty = true;
                 }
             }
-            Cmd::RemoveFolder(path) => {
+            Some(Cmd::RemoveFolder(path)) => {
                 self.index.folders.retain(|f| f != &path);
                 self.queue.retain(|f| f != &path);
                 self.status.remove(&path);
@@ -480,7 +583,7 @@ impl Worker {
                 self.cancel = Some(path);
                 self.dirty = true;
             }
-            Cmd::Rescan(folder) => {
+            Some(Cmd::Rescan(folder)) => {
                 let all = self.index.folders.clone();
                 for f in all
                     .into_iter()
@@ -491,7 +594,7 @@ impl Worker {
                     }
                 }
             }
-            Cmd::PersistGrouping(path) => {
+            Some(Cmd::PersistGrouping(path)) => {
                 let g = self.lock().grouping.get(&path).copied();
                 match g {
                     Some(g) => self.index.grouping.insert(path.clone(), g),
@@ -503,7 +606,7 @@ impl Worker {
                 };
                 self.flush(&mut c);
             }
-            Cmd::PersistUser(id) => {
+            Some(Cmd::PersistUser(id)) => {
                 let user = self.lock().user.get(&id).cloned();
                 let mut c = Changes {
                     user: vec![(id, user)],
@@ -511,16 +614,16 @@ impl Worker {
                 };
                 self.flush(&mut c);
             }
-            Cmd::Fs(paths) => {
+            Some(Cmd::Fs(paths)) => {
                 self.events.extend(paths);
                 self.last_event = Instant::now();
             }
-            Cmd::FsRescan(root) => {
+            Some(Cmd::FsRescan(root)) => {
                 if !self.queue.contains(&root) {
                     self.queue.push_back(root);
                 }
             }
-            Cmd::Shutdown => self.shutdown = true,
+            Some(Cmd::Shutdown) => self.shutdown = true,
         }
         let mut g = self.lock();
         if counted {
@@ -550,7 +653,10 @@ impl Worker {
         if c.is_empty() {
             return;
         }
-        if let Err(e) = self.store.write(c) {
+        // Read-only, nothing is written (nothing should reach here).
+        if let Some(store) = &self.store
+            && let Err(e) = store.write(c)
+        {
             self.lock().warning = Some(e);
         }
         *c = Changes::default();
@@ -764,6 +870,9 @@ impl Worker {
 
     /// Full scan of one library folder.
     fn scan_root(&mut self, root: &Path) {
+        if self.read_only() {
+            return;
+        }
         if !self.index.folders.iter().any(|f| f == root) {
             return;
         }
@@ -1101,7 +1210,9 @@ impl Worker {
                 Some(FolderState::Offline)
             );
             let up = available(&root);
-            if offline && up {
+            if offline && up && self.read_only() {
+                self.set_state(&root, FolderState::Ready);
+            } else if offline && up {
                 if !self.queue.contains(&root) {
                     self.queue.push_back(root);
                 }
@@ -1114,6 +1225,10 @@ impl Worker {
 
     /// Removes cached thumbnails no model refers to (only in the app's own folder).
     fn collect_garbage(&mut self) {
+        // The other Mica owns the thumbnails while this one only shows its index.
+        if self.read_only() {
+            return;
+        }
         let Ok(dir) = std::fs::read_dir(&self.thumbs) else {
             return;
         };

@@ -293,3 +293,36 @@ fn the_pinned_assets_and_hashes_are_well_formed() {
         }
     }
 }
+
+#[test]
+fn two_downloads_at_once_both_end_with_the_verified_files() {
+    // Two Mica processes (here: two downloads in one, which share even the process id)
+    // fetching into the same folder at the same time.
+    let mut big = BUNDLE.to_vec();
+    big.extend(std::iter::repeat_n(b'#', 4 << 20));
+    let routes = HashMap::from([
+        ("PrusaResearch/2.5.12.ini".to_string(), Reply::ok(&big)),
+        ("PrusaResearch/bed.stl".to_string(), Reply::ok(BED)),
+    ]);
+    let Some(base) = serve(routes) else { return };
+    let dir = temp("twice");
+    let pins = pins(&big, &[("bed.stl", BED)]);
+    std::thread::scope(|s| {
+        for _ in 0..4 {
+            let (base, dir, pins, big) = (&base, &dir, &pins, &big);
+            s.spawn(move || {
+                let got = prusa::fetch_from(base, dir, pins, &mut |_| {}, &AtomicBool::new(false))
+                    .unwrap();
+                assert_eq!(got.assets, 1);
+                // Whatever the other download is doing, the file here is complete.
+                assert_eq!(&std::fs::read(&got.bundle).unwrap(), big);
+            });
+        }
+    });
+    assert_eq!(files(&dir), vec!["2.5.12.ini", "bed.stl"]);
+    assert_eq!(
+        prusa::cached_bundle_in(&dir, &pins),
+        Some(dir.join("2.5.12.ini"))
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

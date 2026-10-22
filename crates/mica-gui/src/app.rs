@@ -258,6 +258,9 @@ pub struct App {
     pub(crate) profiles: Profiles,
     pub(crate) prefs: Prefs,
     pub(crate) prefs_path: Option<PathBuf>,
+    /// The settings file as this process last read or wrote it: saves write only what
+    /// changed since, so another Mica process's changes are kept.
+    prefs_saved: crate::state::Saved,
     pub(crate) prefs_dirty: bool,
     pub(crate) overlays: Overlays,
     pub(crate) config: Result<Config, String>,
@@ -514,9 +517,9 @@ impl App {
 
     /// Builds the app without touching a window. Shared by the real window and screenshots.
     pub fn create(ctx: &egui::Context, options: Options) -> Self {
-        let (mut prefs, prefs_warning) = match &options.prefs_path {
-            Some(p) => Prefs::load(p),
-            None => (Prefs::default(), None),
+        let (mut prefs, prefs_warning, prefs_saved) = match &options.prefs_path {
+            Some(p) => Prefs::load_tracked(p),
+            None => (Prefs::default(), None, Default::default()),
         };
         let store = options
             .store
@@ -633,6 +636,7 @@ impl App {
             profiles,
             prefs_dirty: options.prefs_path.is_some(),
             prefs_path: options.prefs_path,
+            prefs_saved,
             prefs,
             config,
             bed,
@@ -3328,7 +3332,7 @@ impl App {
             && self.prefs_dirty
         {
             self.profiles.store_selection(&mut self.prefs);
-            if let Err(e) = self.prefs.save(path) {
+            if let Err(e) = self.prefs.save_merged(path, &mut self.prefs_saved) {
                 self.notify_error("Settings were not saved", e);
             }
             self.prefs_dirty = false;

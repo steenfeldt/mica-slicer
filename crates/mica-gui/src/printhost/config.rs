@@ -378,14 +378,10 @@ pub fn load(path: &Path) -> (Vec<Printer>, Option<String>) {
     }
 }
 
-/// Writes atomically (temp file + rename).
+/// Writes atomically (a temporary file of this process + rename), under the file's lock.
 pub fn save(path: &Path, printers: &[Printer]) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    let tmp = path.with_extension("toml.tmp");
-    std::fs::write(&tmp, to_toml(printers)).map_err(|e| format!("{}: {e}", tmp.display()))?;
-    std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+    let text = to_toml(printers);
+    mica_core::shared_file::locked(path, || mica_core::shared_file::write_text(path, &text))
 }
 
 /// How well a physical printer fits a Mica profile, best first.

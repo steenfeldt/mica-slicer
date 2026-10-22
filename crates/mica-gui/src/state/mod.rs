@@ -269,6 +269,55 @@ impl Default for Prefs {
     }
 }
 
+/// The settings as this process last read or wrote them (see [`Prefs::save_merged`]). The
+/// default (nothing known) makes the next save write every value.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Saved(Option<toml::Table>);
+
+/// Replaces, in `base`, every value `raw` also has with the same type (recursing into
+/// tables): `base` keeps only the keys Mica knows, and a number written without a decimal
+/// point (`width = 800`) still equals what Mica writes (`800.0`).
+fn overlay_known(base: &mut toml::Table, raw: &toml::Table) {
+    for (k, v) in base.iter_mut() {
+        match (v, raw.get(k)) {
+            (toml::Value::Table(b), Some(toml::Value::Table(r))) => overlay_known(b, r),
+            (v, Some(r)) if v.type_str() == r.type_str() => *v = r.clone(),
+            _ => {}
+        }
+    }
+}
+
+/// Writes into `disk` the values of `mine` that differ from `base` and removes the keys
+/// `mine` dropped, table by table. Values this process did not change keep whatever `disk`
+/// has (another process may have changed them). Without a base, every value is written.
+fn apply_changes(disk: &mut toml::Table, base: Option<&toml::Table>, mine: &toml::Table) {
+    for (k, m) in mine {
+        let b = base.and_then(|b| b.get(k));
+        match (b, m) {
+            (b, toml::Value::Table(m)) => {
+                let slot = disk
+                    .entry(k.clone())
+                    .or_insert_with(|| toml::Value::Table(Default::default()));
+                if !slot.is_table() {
+                    *slot = toml::Value::Table(Default::default());
+                }
+                if let toml::Value::Table(d) = slot {
+                    apply_changes(d, b.and_then(toml::Value::as_table), m);
+                }
+            }
+            (Some(b), m) if b == m => {}
+            _ => {
+                disk.insert(k.clone(), m.clone());
+            }
+        }
+    }
+    if let Some(base) = base {
+        for k in base.keys().filter(|k| !mine.contains_key(*k)) {
+            disk.remove(k);
+        }
+    }
+}
+
 impl Prefs {
     /// `~/Library/Application Support/Mica Slicer/mica.toml` (or `MICA_CONFIG_DIR`).
     pub fn default_path() -> PathBuf {
@@ -282,20 +331,41 @@ impl Prefs {
     /// Reads the file; a missing or broken file yields defaults (the error is returned alongside
     /// so the UI can mention it without refusing to start).
     pub fn load(path: &Path) -> (Self, Option<String>) {
-        match std::fs::read_to_string(path) {
+        let (p, warning, _) = Self::load_tracked(path);
+        (p, warning)
+    }
+
+    /// [`Self::load`], plus what was read, for [`Self::save_merged`]: the values this process
+    /// starts from, so a later save writes only what it changed.
+    pub fn load_tracked(path: &Path) -> (Self, Option<String>, Saved) {
+        let (p, raw, warning) = match std::fs::read_to_string(path) {
             Ok(text) => match Self::from_toml(&text) {
-                Ok(p) => (p, None),
+                Ok(p) => (p, toml::from_str::<toml::Table>(&text).ok(), None),
                 Err(e) => (
                     Self::default(),
+                    None,
                     Some(format!("{}: {e}; using defaults", path.display())),
                 ),
             },
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::default(), None),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => (Self::default(), None, None),
             Err(e) => (
                 Self::default(),
+                None,
                 Some(format!("{}: {e}; using defaults", path.display())),
             ),
+        };
+        // The base is what the file said for every key Mica knows (the defaults for keys it
+        // did not have): a value Mica normalized while loading then counts as a change and
+        // is written back.
+        let mut base = p.to_table();
+        if let Some(raw) = &raw {
+            overlay_known(&mut base, raw);
         }
+        (p, warning, Saved(Some(base)))
+    }
+
+    fn to_table(&self) -> toml::Table {
+        toml::Table::try_from(self).expect("prefs always serialize")
     }
 
     pub fn from_toml(text: &str) -> Result<Self, String> {
@@ -316,6 +386,7 @@ impl Prefs {
         Ok(p)
     }
 
+    #[cfg(test)]
     pub fn to_toml(&self) -> String {
         format!(
             "# Mica Slicer settings. Edit while Mica is closed; unknown keys are kept.\n{}",
@@ -323,14 +394,34 @@ impl Prefs {
         )
     }
 
-    /// Writes atomically (temp file + rename) so a crash never leaves a half-written file.
+    /// Writes every value (keys of a newer Mica in the file are kept). See [`Self::save_merged`].
+    #[cfg(test)]
     pub fn save(&self, path: &Path) -> Result<(), String> {
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        }
-        let tmp = path.with_extension("toml.tmp");
-        std::fs::write(&tmp, self.to_toml()).map_err(|e| format!("{}: {e}", tmp.display()))?;
-        std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+        self.save_merged(path, &mut Saved::default())
+    }
+
+    /// Writes the values that differ from `saved` (what this process loaded or saved last)
+    /// into the file as it is now, and remembers them in `saved`. Another Mica process using
+    /// the same settings folder may have written other values meanwhile: they are kept, not
+    /// overwritten with this process's older copy. The file is re-read and written under a
+    /// lock, atomically (temporary file + rename), so a crash never leaves half a file and
+    /// two processes saving at once lose nothing.
+    pub fn save_merged(&self, path: &Path, saved: &mut Saved) -> Result<(), String> {
+        let mine = self.to_table();
+        mica_core::shared_file::locked(path, || {
+            let mut disk = std::fs::read_to_string(path)
+                .ok()
+                .and_then(|t| toml::from_str::<toml::Table>(&t).ok())
+                .unwrap_or_default();
+            apply_changes(&mut disk, saved.0.as_ref(), &mine);
+            let text = format!(
+                "# Mica Slicer settings. Edit while Mica is closed; unknown keys are kept.\n{}",
+                toml::to_string(&disk).map_err(|e| e.to_string())?
+            );
+            mica_core::shared_file::write_text(path, &text)
+        })?;
+        saved.0 = Some(mine);
+        Ok(())
     }
 
     pub fn push_recent(&mut self, path: PathBuf) {
@@ -433,6 +524,100 @@ mod tests {
             mica_profiles::features::Features::from_toml(&text).unwrap(),
             p.features
         );
+    }
+
+    #[test]
+    fn two_processes_saving_keep_each_others_changes() {
+        let dir = std::env::temp_dir().join(format!("mica-prefs-two-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(FILE_NAME);
+        std::fs::write(
+            &path,
+            "future_key = 1\ntheme = \"light\"\n[window]\nwidth = 800\n",
+        )
+        .unwrap();
+        // Two Mica processes start from the same file.
+        let (mut a, _, mut a_saved) = Prefs::load_tracked(&path);
+        let (mut b, _, mut b_saved) = Prefs::load_tracked(&path);
+        a.welcome_seen = true;
+        a.window.width = 1000.;
+        a.save_merged(&path, &mut a_saved).unwrap();
+        // The second still has its old copy of those values, and changes others.
+        b.push_recent(PathBuf::from("/tmp/b.stl"));
+        b.window.height = 700.;
+        b.last_version = "9.9.9".into();
+        b.save_merged(&path, &mut b_saved).unwrap();
+        let (merged, warning) = Prefs::load(&path);
+        assert!(warning.is_none());
+        assert!(merged.welcome_seen);
+        assert_eq!(merged.window.width, 1000.);
+        assert_eq!(merged.window.height, 700.);
+        assert_eq!(merged.recent_files, vec![PathBuf::from("/tmp/b.stl")]);
+        assert_eq!(merged.last_version, "9.9.9");
+        assert_eq!(merged.theme, "light");
+        // Keys of a newer Mica survive both saves.
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("future_key = 1"), "{text}");
+        // A value the first changes back is written, though the second has it too.
+        a.welcome_seen = false;
+        a.save_merged(&path, &mut a_saved).unwrap();
+        b.save_merged(&path, &mut b_saved).unwrap();
+        assert!(!Prefs::load(&path).0.welcome_seen);
+        // Many saves from two writers at once lose nothing and leave no temporary file.
+        std::thread::scope(|s| {
+            for who in ["a", "b"] {
+                let path = &path;
+                s.spawn(move || {
+                    let (mut p, _, mut saved) = Prefs::load_tracked(path);
+                    for i in 0..40 {
+                        p.visible_filaments
+                            .insert(format!("{who}{i}"), vec![format!("PLA {i}")]);
+                        p.save_merged(path, &mut saved).unwrap();
+                    }
+                });
+            }
+        });
+        let (p, _) = Prefs::load(&path);
+        assert_eq!(p.visible_filaments.len(), 80);
+        let names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            names
+                .iter()
+                .all(|n| n == FILE_NAME || n == "mica.toml.lock"),
+            "{names:?}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_new_settings_file_is_merged_too() {
+        // Neither process found a file: the second's save keeps what the first wrote.
+        let dir = std::env::temp_dir().join(format!("mica-prefs-new-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path = dir.join(FILE_NAME);
+        let (mut a, _, mut a_saved) = Prefs::load_tracked(&path);
+        let (mut b, _, mut b_saved) = Prefs::load_tracked(&path);
+        a.welcome_seen = true;
+        a.save_merged(&path, &mut a_saved).unwrap();
+        b.theme = "light".into();
+        b.save_merged(&path, &mut b_saved).unwrap();
+        let (p, _) = Prefs::load(&path);
+        assert!(p.welcome_seen);
+        assert_eq!(p.theme, "light");
+        // An old format file is brought up to date by the first save.
+        std::fs::write(&path, "format = 1\nauto_slice = true\n").unwrap();
+        let (c, _, mut c_saved) = Prefs::load_tracked(&path);
+        c.save_merged(&path, &mut c_saved).unwrap();
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(
+            text.contains("format = 2") && text.contains("auto_slice = false"),
+            "{text}"
+        );
+        let _ = std::fs::remove_dir_all(dir);
     }
 
     #[test]

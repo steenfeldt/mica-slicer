@@ -84,7 +84,7 @@ fn library_error(ui: &mut egui::Ui, error: &str, acts: &mut Vec<Act>) {
     );
     muted(
         ui,
-        "Close the other window or resolve the access problem, then try again. You can keep working in Mica.",
+        "Resolve the access problem, then try again. You can keep working in Mica.",
         12.,
     );
     if widgets::button(ui, "Retry", true).clicked() {
@@ -893,6 +893,9 @@ impl App {
                     .font(theme::sans(12.))
                     .color(theme::WARNING),
             );
+        }
+        if v.lib.as_ref().is_some_and(|lib| lib.read_only()) {
+            muted(ui, mica_library::READ_ONLY_NOTE, 12.);
         }
         let snap = v.snapshot().clone();
         // Toolbar: search, count, grouping, sort, grid / list.
@@ -2312,9 +2315,15 @@ impl App {
             muted(ui, "The library is not available in this window.", 11.5);
             return;
         }
+        let read_only = self.library.lib.as_ref().is_some_and(|l| l.read_only());
+        if read_only {
+            muted(ui, mica_library::READ_ONLY_NOTE, 12.);
+        }
         folders_list(ui, &self.library, &mut acts, false);
         let headless = self.headless;
-        add_folder_row(ui, &mut self.library, &mut acts, headless);
+        if !read_only {
+            add_folder_row(ui, &mut self.library, &mut acts, headless);
+        }
         ui.add_space(10.);
         let ctx = ui.ctx().clone();
         for a in acts {
@@ -2589,16 +2598,29 @@ mod tests {
     }
 
     #[test]
-    fn in_use_library_shows_error_and_retry_recovers() {
+    fn in_use_library_is_read_only_and_taken_over() {
         let dir = TempDir::new("gui-in-use");
         let data = dir.path().join("library");
         let models = dir.path().join("models");
         std::fs::create_dir_all(&data).unwrap();
         synthetic_library(&models, 1).unwrap();
-        let (first, _, _) = Store::open(&data.join("index.redb")).unwrap();
+        let index = data.join("index.redb");
+        // Another Mica holds the index; it has indexed one model (a file since removed).
+        let (first, _, _) = Store::open(&index).unwrap();
         first
             .write(&Changes {
                 folders: Some(vec![models.clone()]),
+                files: vec![(
+                    models.join("gone.stl"),
+                    Some(mica_library::FileRecord {
+                        root: models.clone(),
+                        size: 3,
+                        mtime_ns: 7,
+                        hash: "ab".into(),
+                        kind: mica_library::Kind::Stl,
+                    }),
+                )],
+                models: vec![("ab".into(), Some(Default::default()))],
                 ..Default::default()
             })
             .unwrap();
@@ -2618,35 +2640,53 @@ mod tests {
             &data,
             mica_library::Options {
                 watch: false,
+                takeover_check: Duration::from_millis(100),
                 ..Default::default()
             },
         );
         let timeout = Duration::from_secs(10);
-        assert!(!app.library.lib.as_ref().unwrap().wait_idle(timeout));
-        let message = "The library is open in another Mica window";
-        let mut retry = Pos2::ZERO;
+        assert!(app.library.lib.as_ref().unwrap().wait_idle(timeout));
+        assert!(app.library.lib.as_ref().unwrap().read_only());
+        let note = mica_library::READ_ONLY_NOTE;
         for preferences in [true, false] {
             // A second frame completes egui's initial layout pass.
             frame(&ctx, &mut app, vec![], preferences);
             let text = frame(&ctx, &mut app, vec![], preferences);
-            assert!(text.iter().any(|(t, _)| t == message));
+            assert!(text.iter().any(|(t, _)| t == note), "{text:?}");
+            assert!(!text.iter().any(|(t, _)| t == "Retry"));
             assert!(!text.iter().any(|(t, _)| t.contains("library is empty")));
-            retry = text.iter().find(|(t, _)| t == "Retry").unwrap().1;
         }
-        // Retry while still locked preserves both the message and the original file.
-        click_retry(&ctx, &mut app, retry);
-        assert!(!app.library.lib.as_ref().unwrap().wait_idle(timeout));
-        app.library.refresh();
-        assert_eq!(app.library.error.as_deref(), Some(message));
-        assert_eq!(std::fs::read_dir(&data).unwrap().count(), 2); // index + thumbs
-        drop(first);
-        click_retry(&ctx, &mut app, retry);
-        assert!(app.library.lib.as_ref().unwrap().wait_idle(timeout));
-        let text = frame(&ctx, &mut app, vec![], false);
         assert!(app.library.error.is_none());
-        assert!(!text.iter().any(|(t, _)| t == message));
+        // Browsing works from what the other Mica committed.
         assert_eq!(app.library.snapshot().folders[0].path, models);
         assert_eq!(app.library.snapshot().models.len(), 1);
+        // Changes are refused and nothing is written, moved or set aside.
+        let before = std::fs::read(&index).unwrap();
+        app.library.add_folder(dir.path());
+        assert_eq!(app.library.notice.as_deref(), Some(note));
+        app.library.toggle_favourite("ab");
+        app.library.add_tag("ab", "Mine");
+        app.library.refresh();
+        assert!(!app.library.snapshot().models[0].user.favourite);
+        assert!(app.library.snapshot().models[0].user.tags.is_empty());
+        std::thread::sleep(Duration::from_millis(400));
+        assert_eq!(std::fs::read(&index).unwrap(), before);
+        assert_eq!(std::fs::read_dir(&data).unwrap().count(), 2); // index + thumbs
+        // Once the other Mica quits, this one takes the index over by itself and scans.
+        drop(first);
+        let lib = app.library.lib.as_ref().unwrap();
+        let start = std::time::Instant::now();
+        while lib.read_only() && start.elapsed() < timeout {
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        assert!(!lib.read_only());
+        assert!(lib.wait_idle(timeout));
+        let text = frame(&ctx, &mut app, vec![], false);
+        assert!(app.library.error.is_none());
+        assert!(!text.iter().any(|(t, _)| t == note));
+        let snap = app.library.snapshot();
+        assert_eq!(snap.models.len(), 1);
+        assert_ne!(snap.models[0].id, "ab");
         assert_eq!(std::fs::read_dir(&data).unwrap().count(), 2);
     }
 

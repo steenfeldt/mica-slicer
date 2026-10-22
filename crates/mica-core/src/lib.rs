@@ -39,6 +39,7 @@ pub mod resolve;
 pub mod rules;
 pub mod seam;
 pub mod settings;
+pub mod shared_file;
 pub mod shells;
 pub mod shortest_path;
 pub mod slice;

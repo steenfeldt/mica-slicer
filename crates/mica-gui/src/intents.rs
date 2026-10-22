@@ -170,13 +170,8 @@ impl Recipes {
             recipes: self.list.clone(),
         })
         .map_err(|e| e.to_string())?;
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        }
-        let tmp = path.with_extension("toml.tmp");
-        std::fs::write(&tmp, format!("# Mica Slicer part recipes.\n{text}"))
-            .map_err(|e| format!("{}: {e}", tmp.display()))?;
-        std::fs::rename(&tmp, path).map_err(|e| format!("{}: {e}", path.display()))
+        let text = format!("# Mica Slicer part recipes.\n{text}");
+        mica_core::shared_file::locked(path, || mica_core::shared_file::write_text(path, &text))
     }
 }
 

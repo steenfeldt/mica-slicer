@@ -156,6 +156,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     let files: Vec<std::path::PathBuf> = args.iter().map(std::path::PathBuf::from).collect();
+    // A window process: an update must not swap the app from under it (see mica_update::instance).
+    if let Ok(exe) = std::env::current_exe() {
+        mica_update::instance::hold(&exe);
+    }
     let (prefs, _) = state::Prefs::load(&state::Prefs::default_path());
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,

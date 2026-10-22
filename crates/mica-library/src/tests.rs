@@ -571,8 +571,17 @@ fn thumbnails_wait_while_slicing_and_resume_after_a_restart() {
         && s.files > 0
         && s.models.iter().any(|m| m.info.thumbnail_rendered)));
     l.set_paused(true);
-    std::thread::sleep(Duration::from_millis(300));
-    let paused_at = l.thumbnails_rendered();
+    // A thumbnail already being rendered finishes (slower on a busy machine).
+    let mut paused_at = l.thumbnails_rendered();
+    let start = std::time::Instant::now();
+    loop {
+        std::thread::sleep(Duration::from_millis(1500));
+        let now = l.thumbnails_rendered();
+        if now == paused_at || start.elapsed() > T {
+            break;
+        }
+        paused_at = now;
+    }
     std::thread::sleep(Duration::from_millis(500));
     assert_eq!(
         l.thumbnails_rendered(),
@@ -594,4 +603,156 @@ fn thumbnails_wait_while_slicing_and_resume_after_a_restart() {
             .filter(|m| matches!(m.kind, Kind::Stl | Kind::Obj | Kind::ThreeMf))
             .all(|m| m.thumbnail.is_some())
     );
+}
+
+/// Run as a separate process by the test below: a first Mica that owns the index of
+/// `MICA_TEST_LIBRARY_DATA`, has scanned `MICA_TEST_LIBRARY_DIR` and tagged a model, and
+/// keeps the index until its input closes.
+#[test]
+fn first_process_holding_the_index() {
+    let (Some(data), Some(dir)) = (
+        std::env::var_os("MICA_TEST_LIBRARY_DATA"),
+        std::env::var_os("MICA_TEST_LIBRARY_DIR"),
+    ) else {
+        return;
+    };
+    let l = Library::open(Path::new(&data), quiet()).unwrap();
+    assert!(!l.read_only());
+    l.add_folder(Path::new(&dir)).unwrap();
+    assert!(l.wait_idle(T));
+    let id = l.snapshot().models[0].id.clone();
+    l.set_tags(&id, &["Kept".into()]);
+    assert!(l.wait_idle(T));
+    println!("ready {id}");
+    let mut line = String::new();
+    let _ = std::io::stdin().read_line(&mut line);
+}
+
+#[test]
+fn a_second_process_browses_read_only_and_takes_the_index_over() {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    let lib = TempDir::new("two-lib");
+    let data = TempDir::new("two-data");
+    synthetic_library(lib.path(), 6).unwrap();
+    let mut first = Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "tests::first_process_holding_the_index",
+            "--nocapture",
+        ])
+        .env("MICA_TEST_LIBRARY_DATA", data.path())
+        .env("MICA_TEST_LIBRARY_DIR", lib.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn()
+        .unwrap();
+    let mut out = BufReader::new(first.stdout.take().unwrap());
+    let mut line = String::new();
+    let id = loop {
+        line.clear();
+        assert!(out.read_line(&mut line).unwrap() > 0, "first process ended");
+        if let Some(id) = line.trim().strip_prefix("ready ") {
+            break id.to_string();
+        }
+    };
+    let before = listing(data.path());
+    let second = Library::open(
+        data.path(),
+        Options {
+            takeover_check: Duration::from_millis(100),
+            ..quiet()
+        },
+    )
+    .unwrap();
+    assert!(second.wait_idle(T));
+    assert!(second.read_only());
+    assert!(second.error().is_none() && second.warning().is_none());
+    // Browsing and search work from what the first process committed.
+    let s = second.snapshot();
+    let models = s.models.len();
+    assert!(models >= 6, "{models}");
+    assert_eq!(s.folders.len(), 1);
+    assert_eq!(s.folders[0].state, FolderState::Ready);
+    let tagged = s.models.iter().find(|m| m.id == id).unwrap();
+    assert_eq!(tagged.user.tags, vec!["Kept".to_string()]);
+    assert_eq!(second.all_tags(), vec!["Kept".to_string()]);
+    // Changes are refused or ignored; nothing in the data folder changes, nothing is set
+    // aside, and no scan starts.
+    assert_eq!(
+        second.add_folder(lib.path()).unwrap_err(),
+        crate::READ_ONLY_NOTE
+    );
+    second.set_favourite(&id, true);
+    second.set_tags(&id, &["Lost".into()]);
+    second.rescan(None);
+    second.remove_folder(lib.path());
+    assert!(second.wait_idle(T));
+    std::thread::sleep(Duration::from_millis(600));
+    assert!(second.read_only());
+    assert!(!second.snapshot().models.iter().any(|m| m.user.favourite));
+    assert_eq!(second.snapshot().folders.len(), 1);
+    assert_eq!(listing(data.path()), before);
+    // The first process quits: the second takes the index over by itself, keeps the tag and
+    // can change things again.
+    drop(first.stdin.take());
+    assert!(first.wait().unwrap().success());
+    let start = std::time::Instant::now();
+    while second.read_only() && start.elapsed() < T {
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert!(!second.read_only());
+    assert!(second.wait_idle(T));
+    let s = second.snapshot();
+    assert_eq!(s.models.len(), models);
+    assert_eq!(
+        s.models.iter().find(|m| m.id == id).unwrap().user.tags,
+        vec!["Kept".to_string()]
+    );
+    second.set_favourite(&id, true);
+    assert!(second.wait_idle(T));
+    drop(second);
+    let (_, index, warning) = crate::store::Store::open(&data.path().join("index.redb")).unwrap();
+    assert!(warning.is_none());
+    assert!(index.user[&id].favourite);
+    assert!(
+        !std::fs::read_dir(data.path()).unwrap().any(|e| e
+            .unwrap()
+            .file_name()
+            .to_string_lossy()
+            .contains("damaged"))
+    );
+}
+
+#[test]
+fn a_second_handle_in_one_process_is_read_only_too() {
+    let lib = TempDir::new("two-handles-lib");
+    let data = TempDir::new("two-handles-data");
+    synthetic_library(lib.path(), 3).unwrap();
+    let first = Library::open(data.path(), quiet()).unwrap();
+    first.add_folder(lib.path()).unwrap();
+    assert!(first.wait_idle(T));
+    let second = Library::open(
+        data.path(),
+        Options {
+            takeover_check: Duration::from_millis(50),
+            ..quiet()
+        },
+    )
+    .unwrap();
+    assert!(second.wait_idle(T));
+    assert!(second.read_only());
+    assert_eq!(
+        second.snapshot().models.len(),
+        first.snapshot().models.len()
+    );
+    drop(first);
+    assert!(second.wait_for(T, |_| true));
+    let start = std::time::Instant::now();
+    while second.read_only() && start.elapsed() < T {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    assert!(!second.read_only());
+    assert!(second.wait_idle(T));
+    assert_eq!(second.snapshot().models.len(), 3);
 }

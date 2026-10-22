@@ -568,11 +568,10 @@ impl Store {
         let dir = self.dir(profile.kind);
         std::fs::create_dir_all(&dir).map_err(|e| ProfileError::Io(dir.clone(), e))?;
         let path = dir.join(file_name(&profile.name));
-        // Written aside and renamed, so a reader (the CLI, another window) never sees half a
-        // file; `list` skips the `.tmp` file.
-        let tmp = dir.join(format!(".{}.tmp", file_name(&profile.name)));
-        std::fs::write(&tmp, profile.to_toml()).map_err(|e| ProfileError::Io(tmp.clone(), e))?;
-        std::fs::rename(&tmp, &path).map_err(|e| ProfileError::Io(path.clone(), e))?;
+        // Written aside (a name unique to this process and call) and renamed, so a reader (the
+        // CLI, another window) never sees half a file; `list` skips the temporary file.
+        mica_core::shared_file::write(&path, profile.to_toml().as_bytes())
+            .map_err(|e| ProfileError::Io(path.clone(), e))?;
         Ok(path)
     }
 

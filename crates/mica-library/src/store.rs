@@ -66,6 +66,41 @@ pub struct Store {
     db: Database,
 }
 
+/// What another Mica process holding the index means to the user: shown as an error only if
+/// even a read-only view is impossible.
+pub const IN_USE: &str = "The library is open in another Mica window";
+
+/// Why [`Store::open`] failed.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum OpenError {
+    /// Another process (or handle) has the index open: it is in use, not damaged, and is left
+    /// exactly as it is.
+    InUse,
+    /// Anything else (permissions, I/O). The file is left alone too.
+    Failed(String),
+}
+
+impl std::fmt::Display for OpenError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OpenError::InUse => f.write_str(IN_USE),
+            OpenError::Failed(e) => f.write_str(e),
+        }
+    }
+}
+
+impl From<String> for OpenError {
+    fn from(e: String) -> Self {
+        OpenError::Failed(e)
+    }
+}
+
+/// Size and modification time of the index file (a cheap "did it change" check).
+pub fn stamp(path: &Path) -> Option<(u64, std::time::SystemTime)> {
+    let m = std::fs::metadata(path).ok()?;
+    Some((m.len(), m.modified().ok()?))
+}
+
 fn err(e: impl std::fmt::Display) -> String {
     format!("library index: {e}")
 }
@@ -104,13 +139,11 @@ fn key_path(k: &[u8]) -> PathBuf {
 impl Store {
     /// Opens (or creates) the index file. Only corruption/format errors set the file aside
     /// (renamed, never deleted). Lock, permission and other operational errors preserve it.
-    pub fn open(path: &Path) -> Result<(Store, Index, Option<String>), String> {
+    pub fn open(path: &Path) -> Result<(Store, Index, Option<String>), OpenError> {
         let mut warning = None;
         let db = match Database::create(path) {
             Ok(db) => db,
-            Err(DatabaseError::DatabaseAlreadyOpen) => {
-                return Err("The library is open in another Mica window".into());
-            }
+            Err(DatabaseError::DatabaseAlreadyOpen) => return Err(OpenError::InUse),
             // All other (including future) errors must leave the file alone.
             Err(e) if damaged(&e) => {
                 let aside = path.with_extension(format!(
@@ -126,11 +159,37 @@ impl Store {
                 ));
                 Database::create(path).map_err(err)?
             }
-            Err(e) => return Err(err(e)),
+            Err(e) => return Err(OpenError::Failed(err(e))),
         };
         let store = Store { db };
         let index = store.load()?;
         Ok((store, index, warning))
+    }
+
+    /// The last committed state of an index another process has open (and locked), read
+    /// from a private copy: the file itself is only read, never locked, repaired, moved or
+    /// changed. A missing file is an empty index. On macOS the copy is a clone of the file
+    /// (instant, one consistent moment); a commit the other process was writing during the
+    /// copy is dropped when the copy opens, as after a crash, leaving the commit before it.
+    pub fn read_snapshot(path: &Path) -> Result<Index, String> {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        if !path.exists() {
+            return Ok(Index::default());
+        }
+        let copy = std::env::temp_dir().join(format!(
+            "mica-library-view-{}-{}.redb",
+            std::process::id(),
+            NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let result = (|| {
+            std::fs::copy(path, &copy).map_err(err)?;
+            let store = Store {
+                db: Database::create(&copy).map_err(err)?,
+            };
+            store.load()
+        })();
+        let _ = std::fs::remove_file(&copy);
+        result
     }
 
     fn load(&self) -> Result<Index, String> {
@@ -412,7 +471,11 @@ mod tests {
         let before = std::fs::read(&path).unwrap();
         for _ in 0..2 {
             let error = Store::open(&path).err().expect("second open must fail");
-            assert_eq!(error, "The library is open in another Mica window");
+            assert_eq!(error, OpenError::InUse);
+            assert_eq!(
+                error.to_string(),
+                "The library is open in another Mica window"
+            );
             assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
             assert_eq!(std::fs::read(&path).unwrap(), before);
         }
