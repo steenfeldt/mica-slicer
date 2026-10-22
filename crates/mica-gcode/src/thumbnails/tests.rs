@@ -499,3 +499,39 @@ fn render_oracle() {
     )
     .unwrap();
 }
+
+#[test]
+fn per_face_colours() {
+    let mesh = cube();
+    let orbit = Orbit {
+        azimuth: 35.,
+        elevation: 28.,
+        zoom: 1.,
+        fit: Fit::Box,
+    };
+    let plain = render_orbit(&mesh, 64, 64, [200, 40, 40], orbit).unwrap();
+    let same = render_orbit_colored(&mesh, 64, 64, &[[200, 40, 40]; 12], orbit).unwrap();
+    assert_eq!(
+        plain.rgba, same.rgba,
+        "one colour per face draws as one colour"
+    );
+    // The top in blue: blue shows, red stays on the sides.
+    let top = mesh.bounds().1[2];
+    let colours: Vec<[u8; 3]> = mesh
+        .faces
+        .iter()
+        .map(|f| {
+            if f.iter().all(|&v| mesh.vertices[v as usize][2] == top) {
+                [40, 40, 200]
+            } else {
+                [200, 40, 40]
+            }
+        })
+        .collect();
+    assert_eq!(colours.iter().filter(|c| c[2] == 200).count(), 2);
+    let two = render_orbit_colored(&mesh, 64, 64, &colours, orbit).unwrap();
+    let px = |img: &Image, f: fn(&[u8]) -> bool| img.rgba.chunks(4).filter(|p| f(p)).count();
+    assert!(px(&two, |p| p[3] == 255 && p[2] > p[0]) > 100);
+    assert!(px(&two, |p| p[3] == 255 && p[0] > p[2]) > 100);
+    assert_eq!(px(&plain, |p| p[3] == 255 && p[2] > p[0]), 0);
+}

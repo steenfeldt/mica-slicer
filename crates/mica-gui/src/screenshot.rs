@@ -26,7 +26,7 @@
 //!          [--theme dark|light|follow-system] [--new-project] [--welcome] [--whats-new]
 //!          [--library] [--library-list] [--library-search T] [--library-select N]
 //!          [--library-filter F] [--library-sort S] [--library-offline] [--library-scanning]
-//!          [--library-group G] [--library-project NAME]
+//!          [--library-group G] [--library-project NAME] [--library-folder DIR]
 //!          [--library-pending] [--library-drag N[,M]] [--library-drop-part N] [--library-printers]
 //!          [--shortcuts SEARCH] [--emboss KIND[+wrap]:FACE:TEXT|svg=PATH]… [--emboss-close]
 //!          [--color-by MODE] [--measure-on] [--measure X,Y[,shift]]... [--section NX,NY,NZ[,POS]]

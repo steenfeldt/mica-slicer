@@ -17,7 +17,7 @@ mod render;
 
 pub use png::{encode_png, encode_png_rgb};
 pub use qoi::encode_qoi;
-pub use render::{Camera, Fit, Image, Orbit, render, render_orbit};
+pub use render::{Camera, Fit, Image, Orbit, render, render_orbit, render_orbit_colored};
 
 use std::io::{self, Write};
 

@@ -2338,8 +2338,9 @@ pub struct DemoGuard {
 }
 
 /// `--library*` screenshot flags taking a value.
-pub const SHOT_VALUE_FLAGS: [&str; 9] = [
+pub const SHOT_VALUE_FLAGS: [&str; 10] = [
     "--library-group",
+    "--library-folder",
     "--library-project",
     "--library-search",
     "--library-select",
@@ -2363,7 +2364,8 @@ pub const SHOT_VALUE_FLAGS: [&str; 9] = [
 /// shows the first-run state; `--library-pending` leaves rendered thumbnails pending;
 /// `--library-drag N[,M]` drags models over Prepare (with `--pointer`); `--library-drop-part N`
 /// drops a model onto the plate's first object (the part-kind choice shows);
-/// `--library-printers` sets up My printers (U1, CORE One, XL) for the "Fits" line.
+/// `--library-printers` sets up My printers (U1, CORE One, XL) for the "Fits" line;
+/// `--library-folder DIR` indexes DIR (read-only) instead of the synthetic library.
 pub fn screenshot_setup(app: &mut App, flags: &[String]) -> Result<DemoGuard, String> {
     use mica_library::testkit::{TempDir, synthetic_library, synthetic_range};
     let value = |name: &str| {
@@ -2395,7 +2397,10 @@ pub fn screenshot_setup(app: &mut App, flags: &[String]) -> Result<DemoGuard, St
     let Some(lib) = &app.library.lib else {
         return Err(app.library.error.clone().unwrap_or_default());
     };
-    if has("--library-empty") {
+    if let Some(folder) = value("--library-folder") {
+        lib.add_folder(std::path::Path::new(&folder))?;
+        lib.wait_idle(t);
+    } else if has("--library-empty") {
         lib.wait_idle(t);
     } else {
         synthetic_library(&library_root, n).map_err(|e| e.to_string())?;

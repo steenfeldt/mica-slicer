@@ -11,7 +11,7 @@
 //! meshes are simplified first (vertex clustering finer than a pixel); meshes above the
 //! triangle budget are not rendered at all and keep a placeholder.
 
-use crate::extract::{first_plate_mesh, parse_obj};
+use crate::extract::{first_plate_mesh, first_plate_tool_mesh, parse_obj, project_colours};
 use crate::model::{Info, Kind};
 use mica_core::mesh::TriangleMesh;
 use mica_gcode::thumbnails::{Fit, Orbit};
@@ -51,6 +51,108 @@ pub fn needs_render(kind: Kind, info: &Info) -> bool {
         && (info.thumbnail.is_none() || info.thumbnail_rendered || rendered_kind)
 }
 
+/// Whether a known model's filament colours were read by an older reader
+/// (`crate::model::COLOURS_VERSION`) and should be read again.
+pub fn needs_colours(kind: Kind, info: &Info) -> bool {
+    matches!(kind, Kind::ThreeMf | Kind::Gcode | Kind::Bgcode)
+        && info.readable
+        && info.colours_version < crate::model::COLOURS_VERSION
+}
+
+/// What the Library's 3D preview draws: the mesh, and for a project with filament colours
+/// the colour of every face (its part's tool, or the tool painted on it), as in Prepare.
+#[derive(Clone, Debug)]
+pub struct PreviewMesh {
+    pub mesh: TriangleMesh,
+    /// One colour per face of `mesh`; `None`: no colours known (drawn in the accent).
+    pub face_colours: Option<Vec<[u8; 3]>>,
+    /// Triangles of the model itself (painted facets split into leaves are counted once).
+    pub triangles: usize,
+}
+
+impl PreviewMesh {
+    /// Simplified by vertex clustering (see [`simplify`]), keeping each face's colour.
+    pub fn simplified(self, cells: u32) -> Self {
+        let (mesh, kept) = simplify_faces(&self.mesh, cells);
+        let face_colours = self
+            .face_colours
+            .map(|c| kept.iter().map(|&f| c[f]).collect());
+        Self {
+            mesh,
+            face_colours,
+            triangles: self.triangles,
+        }
+    }
+}
+
+fn hex_rgb(s: &str) -> Option<[u8; 3]> {
+    let h = s.strip_prefix('#')?;
+    let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
+    Some([byte(0)?, byte(2)?, byte(4)?])
+}
+
+/// The preview mesh of a model file's content: a 3MF's first plate in its filament colours
+/// (when its settings name them), anything else as [`load_mesh`] without colours.
+pub fn load_preview(kind: Kind, data: &[u8]) -> Result<PreviewMesh, String> {
+    if kind != Kind::ThreeMf {
+        let mesh = load_mesh(kind, data)?;
+        let triangles = mesh.faces.len();
+        return Ok(PreviewMesh {
+            mesh,
+            face_colours: None,
+            triangles,
+        });
+    }
+    let project =
+        mica_core::threemf::read_3mf(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
+    let colours: Vec<Option<[u8; 3]>> = project_colours(&project)
+        .iter()
+        .map(|c| c.as_deref().and_then(hex_rgb))
+        .collect();
+    if colours.iter().all(Option::is_none) {
+        let mesh = first_plate_mesh(&project);
+        if mesh.faces.is_empty() {
+            return Err("the file holds no triangles".into());
+        }
+        let triangles = mesh.faces.len();
+        return Ok(PreviewMesh {
+            mesh,
+            face_colours: None,
+            triangles,
+        });
+    }
+    let triangles = crate::extract::first_plate_triangles(&project);
+    let (mesh, tools) = first_plate_tool_mesh(&project);
+    drop(project);
+    if mesh.faces.is_empty() {
+        return Err("the file holds no triangles".into());
+    }
+    // A tool without a colour of its own keeps the accent.
+    let face_colours = tools
+        .iter()
+        .map(|&t| {
+            t.checked_sub(1)
+                .and_then(|i| colours.get(i).copied().flatten())
+                .unwrap_or(VIOLET)
+        })
+        .collect();
+    Ok(PreviewMesh {
+        mesh,
+        face_colours: Some(face_colours),
+        triangles,
+    })
+}
+
+/// Reads a model file (read-only) and returns its preview mesh.
+pub fn load_preview_file(kind: Kind, path: &Path) -> Result<PreviewMesh, String> {
+    let size = std::fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if size > MAX_FILE {
+        return Err("too large to preview".into());
+    }
+    let data = std::fs::read(path).map_err(|e| e.to_string())?;
+    load_preview(kind, &data)
+}
+
 /// The mesh of a model file's content: an STL or OBJ as it is, a 3MF's assembled first plate.
 pub fn load_mesh(kind: Kind, data: &[u8]) -> Result<TriangleMesh, String> {
     let mesh = match kind {
@@ -81,10 +183,15 @@ pub fn load_mesh_file(kind: Kind, path: &Path) -> Result<TriangleMesh, String> {
 /// cells along the largest side become one (the first one seen), and triangles that collapse
 /// are dropped. Deterministic; linear in the mesh size.
 pub fn simplify(mesh: &TriangleMesh, cells: u32) -> TriangleMesh {
+    simplify_faces(mesh, cells).0
+}
+
+/// [`simplify`], also returning the source face of every kept face.
+pub fn simplify_faces(mesh: &TriangleMesh, cells: u32) -> (TriangleMesh, Vec<usize>) {
     let (lo, hi) = mesh.bounds();
     let extent = (0..3).map(|i| hi[i] - lo[i]).fold(0f32, f32::max);
     if !(extent.is_finite() && extent > 0.) || cells == 0 {
-        return mesh.clone();
+        return (mesh.clone(), (0..mesh.faces.len()).collect());
     }
     let cell = extent / cells as f32;
     let key = |v: [f32; 3]| -> [u32; 3] {
@@ -102,15 +209,20 @@ pub fn simplify(mesh: &TriangleMesh, cells: u32) -> TriangleMesh {
             })
         })
         .collect();
+    let mut kept = Vec::new();
     let faces = mesh
         .faces
         .iter()
-        .filter_map(|f| {
+        .enumerate()
+        .filter_map(|(n, f)| {
             let g = f.map(|i| remap.get(i as usize).copied().unwrap_or(0));
-            (g[0] != g[1] && g[1] != g[2] && g[0] != g[2]).then_some(g)
+            (g[0] != g[1] && g[1] != g[2] && g[0] != g[2]).then(|| {
+                kept.push(n);
+                g
+            })
         })
         .collect();
-    TriangleMesh { vertices, faces }
+    (TriangleMesh { vertices, faces }, kept)
 }
 
 /// The library thumbnail of a mesh as PNG bytes (the same bytes for the same mesh).
@@ -226,6 +338,37 @@ mod tests {
         assert_eq!((again.vertices, again.faces), (s.vertices, s.faces));
         // A plain box stays a box.
         assert_eq!(simplify(&cube(), 1024).faces.len(), 12);
+    }
+
+    #[test]
+    fn project_preview_is_in_its_filament_colours() {
+        let p = load_preview(Kind::ThreeMf, &crate::testkit::coloured_3mf()).unwrap();
+        // Plate 1: two cubes of 12 triangles (the painted sides split into their leaves).
+        assert_eq!(p.triangles, 24);
+        let c = p.face_colours.as_ref().expect("coloured");
+        assert_eq!(c.len(), p.mesh.faces.len());
+        let count = |rgb: [u8; 3]| c.iter().filter(|&&x| x == rgb).count();
+        // Cube 1: 8 unpainted faces in tool 1, one side tool 2, one side tool 3; cube 2
+        // all tool 2.
+        assert_eq!(count([0xCB, 0x8F, 0x29]), 8);
+        assert_eq!(count([0, 0, 0]), 2 + 12);
+        assert_eq!(count([0xFF, 0xFF, 0xFF]), 2);
+        assert!(!c.contains(&VIOLET) && !c.contains(&[0xFC, 0xE9, 0x4F]));
+        // Simplifying keeps each face's colour.
+        let s = p.clone().simplified(1024);
+        assert_eq!(s.face_colours.unwrap().len(), s.mesh.faces.len());
+        // A bare STL has no colours (drawn in the accent, as before).
+        let stl =
+            std::fs::read(crate::testkit::repo_root().join("tests/models/cube20.stl")).unwrap();
+        let p = load_preview(Kind::Stl, &stl).unwrap();
+        assert!(p.face_colours.is_none());
+        assert_eq!(p.triangles, 12);
+        // Known models read by the older colour reader are read again.
+        let old = Info {
+            readable: true,
+            ..Default::default()
+        };
+        assert!(needs_colours(Kind::ThreeMf, &old) && !needs_colours(Kind::Stl, &old));
     }
 
     #[test]

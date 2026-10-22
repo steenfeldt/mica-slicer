@@ -384,6 +384,33 @@ pub fn picture_jpeg(mesh: &TriangleMesh, px: u16, colour: [u8; 3]) -> Vec<u8> {
     out
 }
 
+/// An OrcaSlicer project with known colours: the repository's `plates-orca.3mf` (filament
+/// colours `#CB8F29`, `#000000`, `#FFFFFF`, `#FB0207`; on plate 1 a cube on tool 1 with a
+/// side painted tool 2 and one tool 3, and a cube on tool 2) plus Orca's default yellow
+/// `extruder_colour` for every extruder, as Orca writes it.
+pub fn coloured_3mf() -> Vec<u8> {
+    use std::io::{Read, Write};
+    let src = std::fs::read(repo_root().join("tests/models/plates-orca.3mf")).expect("test 3MF");
+    let mut zin = zip::ZipArchive::new(std::io::Cursor::new(src)).expect("zip");
+    let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for i in 0..zin.len() {
+        let mut f = zin.by_index(i).expect("entry");
+        let name = f.name().to_string();
+        let mut data = vec![];
+        f.read_to_end(&mut data).expect("read entry");
+        if name == "Metadata/project_settings.config" {
+            let mut v: serde_json::Value = serde_json::from_slice(&data).expect("json");
+            v["extruder_colour"] = serde_json::json!(["#FCE94F", "#FCE94F", "#FCE94F", "#FCE94F"]);
+            data = serde_json::to_vec_pretty(&v).expect("json");
+        }
+        out.start_file(name, opts).expect("entry");
+        out.write_all(&data).expect("write entry");
+    }
+    out.finish().expect("zip").into_inner()
+}
+
 /// A project 3MF: the repository's `plates-orca.3mf` with `picture` as its plate thumbnail
 /// (so each generated project has its own content and cover).
 pub fn sample_3mf(picture: &[u8]) -> Vec<u8> {

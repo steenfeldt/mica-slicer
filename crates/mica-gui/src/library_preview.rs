@@ -9,16 +9,20 @@
 
 use crate::theme;
 use eframe::egui::{self, Align2, Pos2, Rect, Sense, Stroke, Vec2};
-use mica_core::mesh::TriangleMesh;
 use mica_gcode::thumbnails::{Fit, Orbit};
 use mica_library::Kind;
+use mica_library::render::PreviewMesh;
 use std::path::PathBuf;
 use std::sync::mpsc;
+use std::time::{Duration, Instant};
 
 /// Meshes with more triangles are simplified for the preview (it redraws while dragging).
 const PREVIEW_TRIANGLES: usize = 250_000;
 /// Cells along the largest side when simplifying for the preview.
 const PREVIEW_CELLS: u32 = 400;
+
+/// How long the embedded thumbnail fades into the coloured 3D view.
+const CROSSFADE: Duration = Duration::from_millis(250);
 
 /// The orbit view: degrees and a magnification.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -46,6 +50,8 @@ pub struct Facts {
     /// Bounding box size, mm.
     pub size: [f32; 3],
     pub triangles: usize,
+    /// Drawn in the project's filament colours (else in the accent, like an STL).
+    pub coloured: bool,
 }
 
 enum State {
@@ -68,15 +74,32 @@ pub struct Preview {
     /// The view and size of the last request and of the picture shown.
     requested: Option<(View, [u16; 2])>,
     shown: Option<(View, [u16; 2])>,
+    /// When the first 3D picture arrived (the thumbnail fades out from then).
+    first_frame: Option<Instant>,
     tx: mpsc::Sender<(View, [u16; 2])>,
     rx: mpsc::Receiver<Reply>,
 }
 
-fn simplified(mesh: TriangleMesh) -> TriangleMesh {
-    if mesh.faces.len() > PREVIEW_TRIANGLES {
-        mica_library::render::simplify(&mesh, PREVIEW_CELLS)
+fn simplified(mesh: PreviewMesh) -> PreviewMesh {
+    if mesh.mesh.faces.len() > PREVIEW_TRIANGLES {
+        mesh.simplified(PREVIEW_CELLS)
     } else {
         mesh
+    }
+}
+
+/// One picture of the preview mesh: in its face colours, else in the accent.
+pub fn render(
+    m: &PreviewMesh,
+    w: u16,
+    h: u16,
+    orbit: Orbit,
+) -> std::io::Result<mica_gcode::thumbnails::Image> {
+    match &m.face_colours {
+        Some(c) => mica_gcode::thumbnails::render_orbit_colored(&m.mesh, w, h, c, orbit),
+        None => {
+            mica_gcode::thumbnails::render_orbit(&m.mesh, w, h, mica_library::render::VIOLET, orbit)
+        }
     }
 }
 
@@ -89,12 +112,13 @@ impl Preview {
         let spawned = std::thread::Builder::new()
             .name("mica-library-preview".into())
             .spawn(move || {
-                let mesh = mica_library::render::load_mesh_file(kind, &path);
+                let mesh = mica_library::render::load_preview_file(kind, &path);
                 let facts = mesh.as_ref().map_err(Clone::clone).map(|m| {
-                    let (lo, hi) = m.bounds();
+                    let (lo, hi) = m.mesh.bounds();
                     Facts {
                         size: std::array::from_fn(|i| hi[i] - lo[i]),
-                        triangles: m.faces.len(),
+                        triangles: m.triangles,
+                        coloured: m.face_colours.is_some(),
                     }
                 });
                 let failed = facts.is_err();
@@ -117,13 +141,7 @@ impl Preview {
                         zoom: view.zoom,
                         fit: Fit::Sphere,
                     };
-                    let Ok(img) = mica_gcode::thumbnails::render_orbit(
-                        &mesh,
-                        w,
-                        h,
-                        mica_library::render::VIOLET,
-                        orbit,
-                    ) else {
+                    let Ok(img) = render(&mesh, w, h, orbit) else {
                         continue;
                     };
                     let image = egui::ColorImage::from_rgba_unmultiplied(
@@ -143,6 +161,7 @@ impl Preview {
             texture: None,
             requested: None,
             shown: None,
+            first_frame: None,
             tx,
             rx,
         };
@@ -170,6 +189,7 @@ impl Preview {
                         }
                     }
                     self.shown = Some((view, size));
+                    self.first_frame.get_or_insert_with(Instant::now);
                 }
             }
         }
@@ -195,6 +215,18 @@ impl Preview {
 
     pub fn texture(&self) -> Option<&egui::TextureHandle> {
         self.texture.as_ref()
+    }
+
+    /// How far the 3D view has faded in over the thumbnail (0 to 1). A coloured project
+    /// fades in; a model drawn in the accent (an STL) replaces the thumbnail at once.
+    pub fn fade(&self) -> f32 {
+        match (self.first_frame, self.facts()) {
+            (Some(t), Some(f)) if f.coloured => {
+                (t.elapsed().as_secs_f32() / CROSSFADE.as_secs_f32()).min(1.)
+            }
+            (Some(_), _) => 1.,
+            (None, _) => 0.,
+        }
     }
 
     /// The picture shown is the newest one asked for.
@@ -351,7 +383,8 @@ impl crate::app::App {
             (rect.width() * ppp).round() as u16,
             (rect.height() * ppp).round() as u16,
         ];
-        let mut shown = false;
+        // The 3D view's opacity over the thumbnail (0: only the thumbnail).
+        let mut fade = 0.;
         if let Some(pv) = self.library.preview.as_mut().filter(|pv| pv.id == m.id) {
             if resp.dragged() {
                 pv.orbit(resp.drag_delta());
@@ -366,16 +399,8 @@ impl crate::app::App {
                 pv.reset();
             }
             pv.request(size);
-            if let Some(t) = pv.texture() {
-                let s = t.size_vec2() / ppp;
-                let k = (rect.width() / s.x).min(rect.height() / s.y).min(1.);
-                ui.painter().image(
-                    t.id(),
-                    Rect::from_center_size(rect.center(), s * k),
-                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1., 1.)),
-                    egui::Color32::WHITE,
-                );
-                shown = true;
+            if pv.texture().is_some() {
+                fade = pv.fade();
             }
             if pv.facts().is_some() && (resp.hovered() || resp.dragged()) {
                 ctx.set_cursor_icon(if resp.dragged() {
@@ -384,8 +409,40 @@ impl crate::app::App {
                     egui::CursorIcon::Grab
                 });
             }
-            if !pv.settled() && pv.error().is_none() {
-                ctx.request_repaint_after(std::time::Duration::from_millis(30));
+            if (!pv.settled() && pv.error().is_none()) || (fade > 0. && fade < 1.) {
+                ctx.request_repaint_after(std::time::Duration::from_millis(16));
+            }
+        }
+        if fade < 1. {
+            let tint = egui::Color32::WHITE.gamma_multiply(1. - fade);
+            match self.library.texture(&ctx, m) {
+                Some(t) => {
+                    let r = rect.shrink(10.);
+                    let s = t.size_vec2();
+                    let k = (r.width() / s.x).min(r.height() / s.y);
+                    ui.painter().image(
+                        t.id(),
+                        Rect::from_center_size(r.center(), s * k),
+                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1., 1.)),
+                        tint,
+                    );
+                }
+                None if fade == 0. => crate::panels::library::thumb_placeholder(ui, rect, m),
+                None => {}
+            }
+        }
+        if let Some(pv) = self.library.preview.as_ref().filter(|pv| pv.id == m.id) {
+            if fade > 0.
+                && let Some(t) = pv.texture()
+            {
+                let s = t.size_vec2() / ppp;
+                let k = (rect.width() / s.x).min(rect.height() / s.y).min(1.);
+                ui.painter().image(
+                    t.id(),
+                    Rect::from_center_size(rect.center(), s * k),
+                    Rect::from_min_max(Pos2::ZERO, Pos2::new(1., 1.)),
+                    egui::Color32::WHITE.gamma_multiply(fade),
+                );
             }
             if pv.loading() {
                 ui.painter().text(
@@ -404,22 +461,6 @@ impl crate::app::App {
             .is_some_and(|pv| pv.facts().is_some())
         {
             resp.on_hover_text("Drag to turn, scroll to zoom, double-click to reset the view");
-        }
-        if !shown {
-            match self.library.texture(&ctx, m) {
-                Some(t) => {
-                    let r = rect.shrink(10.);
-                    let s = t.size_vec2();
-                    let k = (r.width() / s.x).min(r.height() / s.y);
-                    ui.painter().image(
-                        t.id(),
-                        Rect::from_center_size(r.center(), s * k),
-                        Rect::from_min_max(Pos2::ZERO, Pos2::new(1., 1.)),
-                        egui::Color32::WHITE,
-                    );
-                }
-                None => crate::panels::library::thumb_placeholder(ui, rect, m),
-            }
         }
         // Size, triangles and the printers it fits.
         let facts = self
@@ -575,6 +616,52 @@ mod tests {
         assert_eq!(p.view, View::default());
         drop(p);
         assert_eq!(textures(), before, "the texture is freed with the preview");
+    }
+
+    #[test]
+    fn projects_show_their_filament_colours_and_fade_in() {
+        let ctx = egui::Context::default();
+        let dir = mica_library::testkit::TempDir::new("preview-colours");
+        let path = dir.path().join("coloured.3mf");
+        std::fs::write(&path, mica_library::testkit::coloured_3mf()).unwrap();
+        let mut p = Preview::new("coloured", Kind::ThreeMf, path.clone(), &ctx);
+        assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+        let f = p.facts().unwrap().clone();
+        assert!(f.coloured && f.triangles == 24, "{f:?}");
+        assert_eq!(p.fade(), 0., "the thumbnail shows until the first picture");
+        p.request([200, 120]);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert!(p.fade() < 1., "a coloured project fades in");
+        std::thread::sleep(CROSSFADE);
+        assert_eq!(p.fade(), 1.);
+        // The picture: the project's tan, black and no accent violet.
+        let m = mica_library::render::load_preview_file(Kind::ThreeMf, &path).unwrap();
+        let img = render(&m, 200, 120, mica_library::render::VIEW).unwrap();
+        let near = |c: [u8; 3]| {
+            img.rgba.chunks(4).any(|px| {
+                px[3] == 255
+                    && (0..3).all(|i| {
+                        // Shading scales the colour; compare the hue by ratios.
+                        let k = f32::from(px[0].max(1)) / f32::from(c[0].max(1));
+                        (f32::from(px[i]) - f32::from(c[i]) * k).abs() < 12.
+                    })
+            })
+        };
+        assert!(near([0xCB, 0x8F, 0x29]), "tool 1's colour shows");
+        let violet = mica_library::render::VIOLET;
+        assert!(
+            !img.rgba
+                .chunks(4)
+                .any(|px| px[3] == 255 && px[2] > px[0] + 40 && px[2] > violet[1])
+        );
+        // A bare STL swaps at once, in the accent.
+        let stl = mica_library::testkit::repo_root().join("tests/models/cube20.stl");
+        let mut p = Preview::new("stl", Kind::Stl, stl, &ctx);
+        assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+        assert!(!p.facts().unwrap().coloured);
+        p.request([64, 64]);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert_eq!(p.fade(), 1.);
     }
 
     #[test]

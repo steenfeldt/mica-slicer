@@ -411,9 +411,10 @@ impl Worker {
             .iter()
             .filter(|(h, info)| {
                 !queued.contains(*h)
-                    && kinds
-                        .get(h.as_str())
-                        .is_some_and(|(k, _)| crate::render::needs_render(*k, info))
+                    && kinds.get(h.as_str()).is_some_and(|(k, _)| {
+                        crate::render::needs_render(*k, info)
+                            || crate::render::needs_colours(*k, info)
+                    })
             })
             .map(|(h, _)| {
                 let name = kinds[h.as_str()]
@@ -458,37 +459,61 @@ impl Worker {
             }
         }
         let budget = self.options.render_budget;
-        let jobs: Vec<(String, Kind, PathBuf, u64)> = want
+        let jobs: Vec<(String, Kind, PathBuf, u64, bool, bool)> = want
             .iter()
             .filter_map(|h| {
                 let info = self.index.models.get(h)?;
                 let (kind, path) = at.get(h.as_str())?.clone();
-                crate::render::needs_render(kind, info)
-                    .then(|| (h.clone(), kind, path, info.triangles))
+                let render = crate::render::needs_render(kind, info);
+                let colours = crate::render::needs_colours(kind, info);
+                (render || colours)
+                    .then(|| (h.clone(), kind, path, info.triangles, render, colours))
             })
             .collect();
         if jobs.is_empty() {
             return;
         }
-        let results: Vec<(String, crate::render::Rendered)> = self.pool.install(|| {
+        type Done = (
+            String,
+            Option<crate::render::Rendered>,
+            Option<Option<Vec<String>>>,
+        );
+        let results: Vec<Done> = self.pool.install(|| {
             use rayon::prelude::*;
             jobs.par_iter()
-                .map(|(h, kind, path, tris)| {
-                    (
-                        h.clone(),
-                        crate::render::render_file(*kind, path, *tris, budget),
-                    )
+                .map(|(h, kind, path, tris, render, colours)| {
+                    // Colours read again by a newer reader (`COLOURS_VERSION`); `None` inside:
+                    // unreadable right now, kept as they are.
+                    let colours = colours.then(|| {
+                        let data = std::fs::metadata(path)
+                            .is_ok_and(|m| m.len() <= IN_MEMORY)
+                            .then(|| std::fs::read(path).ok())
+                            .flatten();
+                        let e = extract(*kind, path, data.as_deref());
+                        e.info.readable.then_some(e.info.colours)
+                    });
+                    let rendered =
+                        render.then(|| crate::render::render_file(*kind, path, *tris, budget));
+                    (h.clone(), rendered, colours)
                 })
                 .collect()
         });
         let mut c = Changes::default();
         let mut done = 0;
-        for (hash, r) in results {
+        for (hash, r, colours) in results {
             let Some(mut info) = self.index.models.get(&hash).cloned() else {
                 continue;
             };
+            if let Some(read) = colours {
+                if let Some(colours) = read {
+                    info.colours = colours;
+                }
+                info.colours_version = crate::model::COLOURS_VERSION;
+            }
+            let rendered = r.is_some();
             match r {
-                crate::render::Rendered::Png(png) => {
+                None => {}
+                Some(crate::render::Rendered::Png(png)) => {
                     let dest = self.thumbs.join(format!("{hash}.png"));
                     let tmp = self.thumbs.join(format!(".{hash}.png.tmp"));
                     if std::fs::write(&tmp, &png).is_err() || std::fs::rename(&tmp, &dest).is_err()
@@ -509,14 +534,16 @@ impl Worker {
                     info.thumbnail_rendered = true;
                     info.no_render = None;
                 }
-                crate::render::Rendered::Skipped(why) => info.no_render = Some(why),
+                Some(crate::render::Rendered::Skipped(why)) => info.no_render = Some(why),
                 // Gone or offline meanwhile: a later scan queues it again.
-                crate::render::Rendered::Unavailable => continue,
+                Some(crate::render::Rendered::Unavailable) => continue,
             }
-            info.render_version = crate::render::RENDER_VERSION;
+            if rendered {
+                info.render_version = crate::render::RENDER_VERSION;
+                done += 1;
+            }
             c.models.push((hash.clone(), Some(info.clone())));
             self.index.models.insert(hash, info);
-            done += 1;
         }
         self.flush(&mut c);
         self.lock().rendered += done;

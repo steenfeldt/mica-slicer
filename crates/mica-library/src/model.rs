@@ -155,6 +155,11 @@ pub enum Grouping {
     Split,
 }
 
+/// Bumped when the way `Info::colours` is read changes: known models are read again (in the
+/// background pass that renders thumbnails). 1: filament colours over Orca's default
+/// extruder colours, only the first plate's tools.
+pub const COLOURS_VERSION: u32 = 1;
+
 /// Everything read from a file's content. Keyed by content hash, so it is extracted once per
 /// unique content, however many copies exist.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -188,6 +193,8 @@ pub struct Info {
     pub render_version: u32,
     /// Why no thumbnail could be rendered (too detailed, unreadable mesh), in plain words.
     pub no_render: Option<String>,
+    /// How `colours` was read ([`COLOURS_VERSION`]); older entries are read again.
+    pub colours_version: u32,
 }
 
 impl Info {

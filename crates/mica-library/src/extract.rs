@@ -53,14 +53,16 @@ pub fn extract(kind: Kind, path: &Path, data: Option<&[u8]>) -> Extracted {
             thumbnail: None,
         }),
     };
-    result.unwrap_or_else(|e| Extracted {
+    let mut e = result.unwrap_or_else(|e| Extracted {
         info: Info {
             readable: false,
             error: Some(e),
             ..Default::default()
         },
         thumbnail: None,
-    })
+    });
+    e.info.colours_version = crate::model::COLOURS_VERSION;
+    e
 }
 
 fn size_of(mesh: &TriangleMesh) -> Option<[f32; 3]> {
@@ -180,23 +182,28 @@ fn colour(s: &str) -> Option<String> {
         .then(|| format!("#{}", hex[..6].to_ascii_uppercase()))
 }
 
-/// The tools' colours: per-extruder colours where set, else the filament colours.
-fn colours(values: &HashMap<String, String>) -> Vec<String> {
-    let filament = values
-        .get("filament_colour")
-        .map(|v| list(v))
-        .unwrap_or_default();
-    let extruder = values
-        .get("extruder_colour")
-        .map(|v| list(v))
-        .unwrap_or_default();
+/// The tools' colours (one slot per tool, `None` for a tool without one): the filament
+/// colours, as Prepare shows them (and OrcaSlicer draws objects). `extruder_colour` only
+/// fills a tool without a valid filament colour: Orca stores its printer default
+/// (`#FCE94F`, yellow) there for every extruder, so preferring it painted every Orca
+/// project's dots yellow.
+pub(crate) fn colours(values: &HashMap<String, String>) -> Vec<Option<String>> {
+    // Positional: an empty entry is a tool without a colour.
+    let slots = |key: &str| -> Vec<&str> {
+        values
+            .get(key)
+            .filter(|v| !v.trim().is_empty())
+            .map(|v| v.split(';').collect())
+            .unwrap_or_default()
+    };
+    let (filament, extruder) = (slots("filament_colour"), slots("extruder_colour"));
     let n = filament.len().max(extruder.len());
     (0..n)
-        .filter_map(|i| {
-            extruder
+        .map(|i| {
+            filament
                 .get(i)
                 .and_then(|c| colour(c))
-                .or_else(|| filament.get(i).and_then(|c| colour(c)))
+                .or_else(|| extruder.get(i).and_then(|c| colour(c)))
         })
         .collect()
 }
@@ -268,36 +275,127 @@ fn slice_info(text: &str, info: &mut Info) {
     }
 }
 
-/// The assembled first plate of a project (every printable model part of the objects on it,
-/// in bed coordinates), or everything without plate data.
-pub fn first_plate_mesh(project: &mica_core::threemf::Project) -> TriangleMesh {
+/// The printable model parts of a project's first plate (every part without plate data):
+/// `(instance, part, tool)` with the part's one-based tool (the part's `extruder`, else the
+/// object's, else 1).
+fn first_plate_parts(
+    project: &mica_core::threemf::Project,
+) -> impl Iterator<
+    Item = (
+        &mica_core::threemf::Instance,
+        &mica_core::threemf::Part,
+        usize,
+    ),
+> {
     let first: Option<BTreeSet<(usize, usize)>> = project
         .plates
         .first()
         .map(|p| p.instances.iter().map(|i| (i.object, i.instance)).collect());
+    let tool = |s: &mica_core::threemf::Settings| {
+        s.get("extruder")
+            .and_then(|v| v.trim().parse::<usize>().ok())
+            .filter(|&t| t > 0)
+    };
+    project.objects.iter().enumerate().flat_map(move |(oi, o)| {
+        let first = first.clone();
+        o.instances
+            .iter()
+            .enumerate()
+            .filter(move |(ii, inst)| {
+                inst.printable && first.as_ref().is_none_or(|f| f.contains(&(oi, *ii)))
+            })
+            .flat_map(move |(_, inst)| {
+                o.parts
+                    .iter()
+                    .filter(|p| p.kind == mica_core::threemf::PartKind::Model)
+                    .map(move |part| {
+                        let t = tool(&part.settings).or(tool(&o.settings)).unwrap_or(1);
+                        (inst, part, t)
+                    })
+            })
+    })
+}
+
+/// The assembled first plate of a project (every printable model part of the objects on it,
+/// in bed coordinates), or everything without plate data.
+pub fn first_plate_mesh(project: &mica_core::threemf::Project) -> TriangleMesh {
     let mut mesh = TriangleMesh::default();
-    for (oi, o) in project.objects.iter().enumerate() {
-        for (ii, inst) in o.instances.iter().enumerate() {
-            if !inst.printable || first.as_ref().is_some_and(|f| !f.contains(&(oi, ii))) {
-                continue;
-            }
-            for part in o
-                .parts
-                .iter()
-                .filter(|p| p.kind == mica_core::threemf::PartKind::Model)
-            {
-                let base = mesh.vertices.len() as u32;
-                mesh.vertices
-                    .extend(part.mesh.vertices.iter().map(|&v| inst.transform.apply(v)));
-                let mirrored = inst.transform.determinant() < 0.;
-                mesh.faces.extend(part.mesh.faces.iter().map(|f| {
-                    let f = f.map(|i| i + base);
-                    if mirrored { [f[0], f[2], f[1]] } else { f }
-                }));
-            }
-        }
+    for (inst, part, _) in first_plate_parts(project) {
+        let base = mesh.vertices.len() as u32;
+        mesh.vertices
+            .extend(part.mesh.vertices.iter().map(|&v| inst.transform.apply(v)));
+        let mirrored = inst.transform.determinant() < 0.;
+        mesh.faces.extend(part.mesh.faces.iter().map(|f| {
+            let f = f.map(|i| i + base);
+            if mirrored { [f[0], f[2], f[1]] } else { f }
+        }));
     }
     mesh
+}
+
+/// Triangles of the first plate's model parts (as [`first_plate_mesh`] holds them).
+pub fn first_plate_triangles(project: &mica_core::threemf::Project) -> usize {
+    first_plate_parts(project)
+        .map(|(_, part, _)| part.mesh.faces.len())
+        .sum()
+}
+
+/// The tools (one-based) the first plate prints with: each part's tool and every tool
+/// painted on it (colour painting / MMU segmentation).
+pub fn first_plate_tools(project: &mica_core::threemf::Project) -> BTreeSet<usize> {
+    let mut out = BTreeSet::new();
+    for (_, part, tool) in first_plate_parts(project) {
+        out.insert(tool);
+        out.extend(part.painting.material.states().into_iter().map(usize::from));
+    }
+    out
+}
+
+/// The first plate as [`first_plate_mesh`] with the one-based tool of every face: a part's
+/// faces carry its tool, and colour-painted facets are split into their painted leaves,
+/// each with its own tool (as Prepare draws them).
+pub fn first_plate_tool_mesh(project: &mica_core::threemf::Project) -> (TriangleMesh, Vec<usize>) {
+    let mut mesh = TriangleMesh::default();
+    let mut tools = Vec::new();
+    for (inst, part, tool) in first_plate_parts(project) {
+        let mirrored = inst.transform.determinant() < 0.;
+        let paint = &part.painting.material;
+        if paint.is_empty() {
+            let base = mesh.vertices.len() as u32;
+            mesh.vertices
+                .extend(part.mesh.vertices.iter().map(|&v| inst.transform.apply(v)));
+            mesh.faces.extend(part.mesh.faces.iter().map(|f| {
+                let f = f.map(|i| i + base);
+                if mirrored { [f[0], f[2], f[1]] } else { f }
+            }));
+            tools.resize(mesh.faces.len(), tool);
+            continue;
+        }
+        paint.visit(&part.mesh, true, |state, t| {
+            let base = mesh.vertices.len() as u32;
+            for p in t {
+                mesh.vertices
+                    .push(inst.transform.apply(p.map(|v| v as f32)));
+            }
+            mesh.faces.push(if mirrored {
+                [base, base + 2, base + 1]
+            } else {
+                [base, base + 1, base + 2]
+            });
+            tools.push(if state == 0 { tool } else { usize::from(state) });
+        });
+    }
+    (mesh, tools)
+}
+
+/// The project's filament colours (`#RRGGBB`, one slot per tool), when its settings name
+/// any.
+pub fn project_colours(project: &mica_core::threemf::Project) -> Vec<Option<String>> {
+    project
+        .config
+        .as_ref()
+        .map(|cfg| colours(&config_values(&cfg.path, &cfg.text)))
+        .unwrap_or_default()
 }
 
 fn three_mf(data: &[u8]) -> Result<Extracted, String> {
@@ -309,21 +407,7 @@ fn three_mf(data: &[u8]) -> Result<Extracted, String> {
         plates: project.plates.len().max(1) as u32,
         ..Default::default()
     };
-    let mut used_tools = BTreeSet::new();
-    let mut painted = false;
     for o in &project.objects {
-        let tool = |s: &mica_core::threemf::Settings| {
-            s.get("extruder")
-                .and_then(|v| v.trim().parse::<usize>().ok())
-                .filter(|&t| t > 0)
-        };
-        used_tools.insert(tool(&o.settings).unwrap_or(1));
-        for part in &o.parts {
-            if let Some(t) = tool(&part.settings) {
-                used_tools.insert(t);
-            }
-            painted |= !part.painting.material.is_empty();
-        }
         info.triangles += o
             .parts
             .iter()
@@ -337,15 +421,13 @@ fn three_mf(data: &[u8]) -> Result<Extracted, String> {
     if let Some(cfg) = &project.config {
         let values = config_values(&cfg.path, &cfg.text);
         apply_profiles(&mut info, &values);
+        // The dots show the shown (first) plate's filaments: the tools of its parts and the
+        // tools painted on them.
         let all = colours(&values);
-        info.colours = if painted {
-            all
-        } else {
-            used_tools
-                .iter()
-                .filter_map(|t| all.get(t - 1).cloned())
-                .collect()
-        };
+        info.colours = first_plate_tools(&project)
+            .iter()
+            .filter_map(|t| all.get(t - 1).cloned().flatten())
+            .collect();
     }
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
     let names: Vec<String> = zip.file_names().map(str::to_string).collect();
@@ -457,9 +539,9 @@ fn gcode_info(values: &HashMap<String, String>, thumbs: Vec<Vec<u8>>) -> Extract
         Some(used) if used.len() > 1 => all
             .into_iter()
             .zip(used)
-            .filter_map(|(c, u)| u.then_some(c))
+            .filter_map(|(c, u)| c.filter(|_| u))
             .collect(),
-        _ => all.into_iter().take(1).collect(),
+        _ => all.into_iter().flatten().take(1).collect(),
     };
     // The largest embedded picture.
     let thumbnail = thumbs
@@ -623,6 +705,35 @@ mod tests {
         assert_eq!(i.colours, ["#FF0000", "#00FF00"]);
         assert!(i.multi_colour());
         assert_eq!(e.thumbnail.unwrap().1, "png");
+    }
+
+    #[test]
+    fn project_dots_are_the_first_plates_filament_colours() {
+        // Orca's yellow default `extruder_colour` is not the filament colour.
+        let data = crate::testkit::coloured_3mf();
+        let e = extract(Kind::ThreeMf, Path::new("x.3mf"), Some(&data));
+        // Plate 1: tool 1, tool 2 and the painted tools 2 and 3; the lid (tool 3, plate 2)
+        // and the loose cube (tool 4) are not on it.
+        assert_eq!(e.info.colours, ["#CB8F29", "#000000", "#FFFFFF"]);
+        assert_eq!(e.info.colours_version, crate::model::COLOURS_VERSION);
+        let mut values = HashMap::new();
+        values.insert(
+            "extruder_colour".to_string(),
+            "#FCE94F;#0000FF;#FCE94F".to_string(),
+        );
+        values.insert(
+            "filament_colour".to_string(),
+            "#FF0000;;#00FF00;x".to_string(),
+        );
+        assert_eq!(
+            colours(&values),
+            [
+                Some("#FF0000".into()),
+                Some("#0000FF".into()),
+                Some("#00FF00".into()),
+                None
+            ]
+        );
     }
 
     #[test]

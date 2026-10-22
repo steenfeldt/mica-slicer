@@ -9,6 +9,7 @@
 // Changes: parallel viewing rays for specular, 2x supersampling, transparent background, one placed mesh;
 // Changes: no bed, modifiers, painting, GPU or perspective. U1 uses current Orca's 2% Z padding.
 // Changes: An original orbit camera (any azimuth/elevation, box or sphere fit) for the model library.
+// Changes: Optional per-face colours (the library preview's filament colours).
 // Upstream attribution (AGPLv3 or higher):
 // Copyright (c) Prusa Research 2018-2023 Enrico Turri, Oleksandra Iushchenko, Tomáš Mészáros,
 // Lukáš Matěna, Vojtěch Bubník, David Kocík, Filip Sykala, Lukáš Hejl, Vojtěch Král.
@@ -77,7 +78,7 @@ pub fn render(
     let dy = 0.5 * (size[0] + size[1]) + S * size[2];
     let (w, h) = (usize::from(width) * 2, usize::from(height) * 2);
     let zoom = (w as f32 / dx).min(h as f32 / dy) / 1.025;
-    rasterize(mesh, width, height, color, view, center, zoom)
+    rasterize(mesh, width, height, |_| color, view, center, zoom)
 }
 
 /// How [`render_orbit`] frames the mesh.
@@ -107,6 +108,35 @@ pub fn render_orbit(
     width: u16,
     height: u16,
     color: [u8; 3],
+    orbit: Orbit,
+) -> io::Result<Image> {
+    render_orbit_faces(mesh, width, height, |_| color, orbit)
+}
+
+/// [`render_orbit`] with a colour per face (`face_colors[i]` for `mesh.faces[i]`; faces
+/// without an entry use the last colour, or grey for an empty list).
+pub fn render_orbit_colored(
+    mesh: &TriangleMesh,
+    width: u16,
+    height: u16,
+    face_colors: &[[u8; 3]],
+    orbit: Orbit,
+) -> io::Result<Image> {
+    let fallback = face_colors.last().copied().unwrap_or([0x80; 3]);
+    render_orbit_faces(
+        mesh,
+        width,
+        height,
+        |i| face_colors.get(i).copied().unwrap_or(fallback),
+        orbit,
+    )
+}
+
+fn render_orbit_faces(
+    mesh: &TriangleMesh,
+    width: u16,
+    height: u16,
+    color: impl Fn(usize) -> [u8; 3],
     orbit: Orbit,
 ) -> io::Result<Image> {
     if width == 0 || height == 0 || width >= 1000 || height >= 1000 {
@@ -164,7 +194,7 @@ fn rasterize(
     mesh: &TriangleMesh,
     width: u16,
     height: u16,
-    color: [u8; 3],
+    color: impl Fn(usize) -> [u8; 3],
     view: impl Fn([f32; 3]) -> [f32; 3],
     center: [f32; 3],
     zoom: f32,
@@ -196,7 +226,7 @@ fn rasterize(
     }
     let mut depth = vec![f32::NEG_INFINITY; w * h];
     let mut pixels = vec![[0u8; 4]; w * h];
-    for face in &mesh.faces {
+    for (index, face) in mesh.faces.iter().enumerate() {
         let vertex = |i: u32| {
             vertices.get(i as usize).copied().ok_or_else(|| {
                 io::Error::new(
@@ -245,7 +275,8 @@ fn rasterize(
                 if e[0] <= 0.0 && e[1] <= 0.0 && e[2] <= 0.0 && z > depth[i] {
                     depth[i] = z;
                     // Undo the screen-space reflection for lighting in camera space.
-                    pixels[i] = *shaded.get_or_insert_with(|| shade([-n[0], n[1], -n[2]], color));
+                    pixels[i] =
+                        *shaded.get_or_insert_with(|| shade([-n[0], n[1], -n[2]], color(index)));
                 }
                 for k in 0..3 {
                     e[k] += step_x[k];
