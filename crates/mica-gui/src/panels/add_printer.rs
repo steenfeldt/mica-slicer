@@ -546,6 +546,13 @@ impl App {
         self.add_printer.error = None;
     }
 
+    /// Opens the Add printer window on its model gallery (tested printers first), not the
+    /// network search: Welcome's and the sidebar's "Add your printer".
+    pub(crate) fn open_printer_gallery(&mut self) {
+        self.open_add_printer();
+        self.add_printer.screen = Screen::Gallery;
+    }
+
     /// The models of the loaded bundles and, once read, of every other vendor.
     pub(crate) fn catalog(&mut self) -> &Catalog {
         if self.add_printer.catalog.is_none() {

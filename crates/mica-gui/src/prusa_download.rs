@@ -143,11 +143,9 @@ fn percent(f: f32) -> String {
 impl App {
     /// At launch (real window only): downloads the Prusa profiles when none were found.
     pub(crate) fn startup_prusa_download(&mut self, ctx: &egui::Context) {
+        // The remembered Prusa printer waits in `prusa_download.restore` (`App::create`).
         if !self.profiles.prusa_missing {
             return;
-        }
-        if self.prefs.selection.vendor == "Prusa" && !self.prefs.selection.printer.is_empty() {
-            self.prusa_download.restore = Some(self.prefs.selection.printer.clone());
         }
         if !self.headless && !mica_core::user_data::isolated() {
             self.prusa_download.start(ctx);
@@ -165,30 +163,36 @@ impl App {
     /// printers (and selects the remembered one).
     pub(crate) fn poll_prusa_download(&mut self, ctx: &egui::Context) {
         if let Some(fetched) = self.prusa_download.poll() {
-            match self.profiles.install_prusa(&fetched.bundle) {
-                Ok(()) => {
-                    self.add_printer.catalog = None;
-                    if let Some(printer) = self.prusa_download.restore.take()
-                        && let Some(vi) = self.profiles.vendor_index("Prusa")
-                        && self.profiles.vendor_name() != "Prusa"
-                    {
-                        self.switch_printer(vi, &printer);
-                    }
-                    let mut text = "The Prusa printer profiles are ready.".to_string();
-                    if !fetched.missing_assets.is_empty() {
-                        text.push_str(&format!(
-                            " {} bed pictures could not be downloaded; those printers show a \
-                             plain bed.",
-                            fetched.missing_assets.len()
-                        ));
-                    }
-                    self.notify_info(text);
-                }
-                Err(e) => self.prusa_download.phase = Phase::Failed(e),
-            }
+            self.prusa_profiles_arrived(fetched);
         }
         if self.prusa_download.working() {
             ctx.request_repaint_after(Duration::from_millis(200));
+        }
+    }
+
+    /// The downloaded bundle: the Prusa printers appear, and the remembered Prusa printer is
+    /// selected again (unless the user chose another meanwhile).
+    pub(crate) fn prusa_profiles_arrived(&mut self, fetched: prusa::Fetched) {
+        match self.profiles.install_prusa(&fetched.bundle) {
+            Ok(()) => {
+                self.add_printer.catalog = None;
+                if let Some(printer) = self.prusa_download.restore.take()
+                    && let Some(vi) = self.profiles.vendor_index("Prusa")
+                    && self.profiles.printer_exists(vi, &printer)
+                {
+                    self.switch_printer(vi, &printer);
+                }
+                let mut text = "The Prusa printer profiles are ready.".to_string();
+                if !fetched.missing_assets.is_empty() {
+                    text.push_str(&format!(
+                        " {} bed pictures could not be downloaded; those printers show a \
+                         plain bed.",
+                        fetched.missing_assets.len()
+                    ));
+                }
+                self.notify_info(text);
+            }
+            Err(e) => self.prusa_download.phase = Phase::Failed(e),
         }
     }
 

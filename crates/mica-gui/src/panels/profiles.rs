@@ -14,6 +14,14 @@ use mica_profiles::{
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
+/// The printer `mica slice` uses without `--printer`, and headless runs (tests, screenshots,
+/// the monkey test) start on when its profiles are here. The real window never starts on it
+/// unless the user chose it (`App::create`).
+pub const DEFAULT_PRINTER: &str = "Prusa CORE One HF0.4 nozzle";
+
+/// Why there is no configuration without a printer.
+pub const NO_PRINTER: &str = "No printer selected. Add your printer first.";
+
 pub const SNAPMAKER_BEDS: [&str; 4] = [
     "High Temp Plate",
     "Textured PEI Plate",
@@ -118,6 +126,13 @@ pub struct UserSettings {
     pub filaments: Vec<BTreeMap<String, String>>,
 }
 
+#[cfg(test)]
+thread_local! {
+    /// Tests: discover profiles as a packaged Mica does before the Prusa printer profiles are
+    /// downloaded (no Prusa bundle anywhere), on this test's thread only.
+    pub(crate) static WITHOUT_PRUSA: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 pub struct Profiles {
     pub vendors: Vec<(String, Vendor)>,
     pub vendor: usize,
@@ -172,7 +187,10 @@ impl Profiles {
         // The Prusa bundle (`vendor_profiles::prusa::find_bundle`); when there is none yet it is
         // downloaded from Prusa (`prusa_download.rs`), never silently missing.
         let mut prusa_missing = false;
-        if let Some(p) = mica_profiles::vendor_profiles::prusa::find_bundle(None) {
+        let bundle = mica_profiles::vendor_profiles::prusa::find_bundle(None);
+        #[cfg(test)]
+        let bundle = bundle.filter(|_| !WITHOUT_PRUSA.get());
+        if let Some(p) = bundle {
             match std::fs::read_to_string(&p) {
                 Ok(s) => vendors.push((
                     "Prusa".into(),
@@ -203,12 +221,15 @@ impl Profiles {
             }
             Err(e) => warnings.push(e.to_string()),
         }
+        // The CLI's default printer (`mica slice`) when its profiles are here; else none: never
+        // another vendor's first printer in its place.
+        let prusa = vendors.iter().position(|(k, _)| k == "Prusa");
         let mut p = Self {
             vendors,
-            vendor: 0,
-            printer: "Prusa CORE One HF0.4 nozzle".into(),
-            process: "0.20mm SPEED @COREONE HF0.4".into(),
-            filaments: vec!["Prusament PLA @COREONE HF0.4".into()],
+            vendor: prusa.unwrap_or(0),
+            printer: String::new(),
+            process: String::new(),
+            filaments: vec![String::new()],
             bed: "High Temp Plate".into(),
             printers: vec![],
             processes: vec![],
@@ -228,8 +249,27 @@ impl Profiles {
             let appdata = mica_core::user_data::var_dir("APPDATA");
             p.look_in(&home, appdata.as_deref());
         }
+        if prusa.is_some() {
+            p.printer = DEFAULT_PRINTER.into();
+            p.process = "0.20mm SPEED @COREONE HF0.4".into();
+            p.filaments = vec!["Prusament PLA @COREONE HF0.4".into()];
+        }
         p.refresh();
         p
+    }
+
+    /// Whether a printer is selected. Without one (a first launch, or a remembered printer
+    /// whose profiles are not here yet) there is no configuration and nothing slices.
+    pub fn has_printer(&self) -> bool {
+        !self.printer.is_empty() && self.vendors.get(self.vendor).is_some()
+    }
+
+    /// No printer selected: the user chooses one (`App::no_printer`).
+    pub fn clear_printer(&mut self) {
+        self.printer.clear();
+        self.process.clear();
+        self.filaments = vec![String::new()];
+        self.refresh();
     }
 
     /// Where to look for the other slicers' presets and settings: the home folder `home`
@@ -419,16 +459,19 @@ impl Profiles {
         if self.vendor_index("Snapmaker").is_some() && printers::snapmaker_orca_installed() {
             prefs.add_printer("Snapmaker", "Snapmaker U1 (0.4 nozzle)");
         }
-        if prefs.my_printers.is_empty() {
+        if prefs.my_printers.is_empty() && self.has_printer() {
             prefs.add_printer(self.vendor_name(), &self.printer);
         }
         self.store_selection(prefs);
     }
 
-    /// Restores the remembered selection, if those presets still exist.
-    pub fn restore(&mut self, prefs: &Prefs) {
+    /// Restores the remembered selection, if that printer still exists; returns whether it
+    /// did (else the selection is left as it was, never another printer of the vendor).
+    pub fn restore(&mut self, prefs: &Prefs) -> bool {
         let s = &prefs.selection;
-        if let Some(vi) = self.vendor_index(&s.vendor) {
+        if let Some(vi) = self.vendor_index(&s.vendor)
+            && self.printer_exists(vi, &s.printer)
+        {
             self.vendor = vi;
             self.printer = s.printer.clone();
             self.refresh();
@@ -444,10 +487,17 @@ impl Profiles {
             if SNAPMAKER_BEDS.contains(&s.bed.as_str()) {
                 self.bed = s.bed.clone();
             }
+            return true;
         }
+        false
     }
 
+    /// Remembers the selection; without a printer the remembered one stays (a Prusa printer
+    /// waiting for its profiles is selected again once they are here).
     pub fn store_selection(&self, prefs: &mut Prefs) {
+        if !self.has_printer() {
+            return;
+        }
         prefs.selection = crate::state::Selection {
             vendor: self.vendor_name().to_string(),
             printer: self.printer.clone(),
@@ -620,6 +670,12 @@ impl Profiles {
         .into_iter()
         .map(str::to_owned)
         .collect();
+        if self.printer.is_empty() {
+            // No printer: no print or filament profiles either.
+            self.processes.clear();
+            self.materials.clear();
+            return;
+        }
         ensure(&mut self.printer, &self.printers);
         self.processes = self.listed(PresetKind::Print);
         ensure(&mut self.process, &self.processes);
@@ -1012,6 +1068,9 @@ impl Profiles {
             .vendors
             .get(self.vendor)
             .ok_or("No profile bundles available")?;
+        if self.printer.is_empty() {
+            return Err(NO_PRINTER.into());
+        }
         let resolve = |f: &str| -> Result<Config, String> {
             match v {
                 Vendor::Prusa(b) => b
