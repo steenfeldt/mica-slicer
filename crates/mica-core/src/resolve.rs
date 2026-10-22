@@ -530,6 +530,7 @@ impl PrintSettings {
                 .bool("gap_fill_enabled")
                 .ok_or_else(|| missing("gap_fill_enabled"))?,
             thin_walls: c.bool("thin_walls").ok_or_else(|| missing("thin_walls"))?,
+            spiral_vase: crate::spiral_vase::enabled(c),
             top_solid_layers: int(c, "top_solid_layers")?.max(0) as usize,
             bottom_solid_layers: int(c, "bottom_solid_layers")?.max(0) as usize,
             top_solid_min_thickness: float(c, "top_solid_min_thickness")?,

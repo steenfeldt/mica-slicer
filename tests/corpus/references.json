@@ -1196,6 +1196,58 @@
     "source_sha256": "d4cddd02dee776330efdee11241578318d8c0156d6298e8f5a658f9ffae3c9dc",
     "validator_warnings": 0
   },
+  "spiral_vase/core": {
+    "filament_mm": [
+      1222.4082799999808
+    ],
+    "model_sha256": "f7173403daff5b3e8387474ec1ac30222ecd69785867bbbb1e5a83d80f50dee1",
+    "profile_args": [
+      "--printer",
+      "Prusa CORE One HF0.4 nozzle",
+      "--print",
+      "0.20mm SPEED @COREONE HF0.4",
+      "--filament",
+      "Prusament PLA @COREONE HF0.4"
+    ],
+    "roles": {
+      "Internal solid infill": 161.1566000000002,
+      "Outer wall": 962.1250199999687,
+      "Top surface": 82.12666000000003
+    },
+    "source_file": "spiral_vase-core.gcode",
+    "source_sha256": "f10b32a6eb3fd4d0a22a8f89638d0639f3c95c7bdccd5ca4b233d32d123e9c47",
+    "validator_warnings": 0
+  },
+  "spiral_vase/u1": {
+    "filament_mm": [
+      1150.59223999998,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "model_sha256": "f7173403daff5b3e8387474ec1ac30222ecd69785867bbbb1e5a83d80f50dee1",
+    "profile_args": [
+      "--vendor",
+      "Snapmaker",
+      "--printer",
+      "Snapmaker U1 (0.4 nozzle)",
+      "--print",
+      "0.20 Standard @Snapmaker U1 (0.4 nozzle)",
+      "--filament",
+      "Snapmaker PLA @U1",
+      "--bed",
+      "High Temp Plate"
+    ],
+    "roles": {
+      "Bottom surface": 98.13684000000005,
+      "Internal solid infill": 80.50282,
+      "Outer wall": 876.1175899999974,
+      "Top surface": 80.83498999999996
+    },
+    "source_file": "spiral_vase-u1.gcode",
+    "source_sha256": "2adf732f6822c09338d23a39886d1953a6b289cee4bd8aeac8dc89f877977132",
+    "validator_warnings": 0
+  },
   "support_orca_interface/u1": {
     "filament_mm": [
       3392.27496999914,

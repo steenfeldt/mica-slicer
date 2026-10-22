@@ -8,6 +8,9 @@
 // Changes: Prusa rules chain supports through support_order before fitting; normal supports use
 // Changes: upstream's unseeded outer chain, organic carries the preceding endpoint across batches.
 // Changes: The Orca travel geometry of a batch is computed while its in-order steps run, and used when the layer's height and first external wall width are unchanged.
+// Source: prusaslicer@b028299c77 src/libslic3r/GCode.cpp :: SmoothPathGenerator::operator()
+// Source: orca@8500fcdcca src/libslic3r/GCode.cpp :: GCode::extrude_loop
+// Changes: Spiral vase: a spiral layer's loop starts at the point nearest where the previous layer ended, carried across batches.
 
 //! Bounded preparation ahead of the ordered writer. Curl history is advanced in order;
 //! immutable curve fits and travel geometry use the engine's shared worker pool.
@@ -31,6 +34,8 @@ pub(crate) struct Carry {
     overhangs: crate::overhang::OverhangProcessor,
     /// End of the last path prepared, for support chaining.
     last: Option<Point>,
+    /// Spiral vase: where the previous layer's extrusions ended.
+    spiral_last: Option<Point>,
 }
 
 /// Orca `GCode::extrude_support`: `chain_and_reorder_extrusion_entities` of each run of support
@@ -122,7 +127,11 @@ impl Parameters<'_> {
         carry: &mut Carry,
     ) -> Vec<Prepared> {
         let orca = crate::orca_motion::enabled(self.config);
-        let Carry { overhangs, last } = carry;
+        let Carry {
+            overhangs,
+            last,
+            spiral_last,
+        } = carry;
         // The travel geometry only reads the source and each layer's height and first external
         // wall width, which the in-order steps below do not change (checked when it is used):
         // it is computed meanwhile, on the shared pool.
@@ -143,7 +152,7 @@ impl Parameters<'_> {
             .collect();
         let mut ready = Vec::new();
         mica_core::parallel::join(
-            || self.prepare_in_order(batch, start, overhangs, last, orca),
+            || self.prepare_in_order(batch, start, overhangs, (last, spiral_last), orca),
             || {
                 ready = mica_core::parallel::map(&ahead, |offset, layer| {
                     let _timer =
@@ -198,10 +207,30 @@ impl Parameters<'_> {
         batch: &mut [ScheduledLayer],
         start: usize,
         overhangs: &mut crate::overhang::OverhangProcessor,
-        last: &mut Option<Point>,
+        (last, spiral_last): (&mut Option<Point>, &mut Option<Point>),
         orca: bool,
     ) {
+        let spiral = mica_core::spiral_vase::enabled(self.config);
         for (offset, scheduled) in batch.iter_mut().enumerate() {
+            if spiral {
+                // Spiral vase: a spiral layer's loop starts where the previous layer ended
+                // (the loop's split at the previous position, across layers).
+                if let Some(from) = *spiral_last
+                    && mica_core::spiral_vase::spiral_layer(self.settings, scheduled.layer.index)
+                    && let Some(sources) = crate::spiral_vase::start_loop_near(
+                        &mut scheduled.layer.paths,
+                        from,
+                        mica_core::rules::Rules::of(self.config).is_orca(),
+                    )
+                    && !scheduled.assignments.is_empty()
+                {
+                    scheduled.assignments =
+                        sources.iter().map(|&k| scheduled.assignments[k]).collect();
+                }
+                if let Some(end) = scheduled.layer.paths.last().and_then(|p| p.points.last()) {
+                    *spiral_last = Some(*end);
+                }
+            }
             if orca {
                 chain_orca_support(scheduled, last);
             }

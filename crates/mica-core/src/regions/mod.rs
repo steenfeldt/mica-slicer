@@ -8,6 +8,8 @@
 // Changes: Retain logical virtual regions through volume/modifier clipping, then intern physical targets per object-local layer before path generation; Mica's mix patterns resolve walls and inside separately there, and gradients over each mix's layer span in the object.
 // Upstream attribution (PrintApply.cpp):
 // Copyright (c) Prusa Research 2021 - 2023 Enrico Turri @enricoturri1966, Vojtěch Bubník @bubnikv, Pavel Mikuš @Godrak, Oleksandra Iushchenko @YuSanka, Lukáš Matěna @lukasmatena, Lukáš Hejl @hejllukas, Roman Beránek @zavorka
+// Source: prusaslicer@b028299c77 src/libslic3r/PrintObjectSlice.cpp :: slice_volumes
+// Changes: Spiral vase: model parts sliced to their largest outline (PositiveLargestContour) above the bottom layers of their own settings.
 //
 // PrusaSlicer is released under the terms of the AGPLv3 or higher
 //
@@ -52,6 +54,25 @@ pub struct Volume {
     /// Sparse canonical overrides. Object settings belong in the preparation's base config.
     pub config: Config,
 }
+/// Spiral vase: a model part is sliced to its largest outline, holes closed, above the bottom
+/// layers its own (region) settings ask for (`slice_volumes`' PositiveLargestContour; layer
+/// height ranges are not combined with spiral vase upstream).
+fn spiral_largest_contours(
+    volume: &Volume,
+    base: &Config,
+    zs: &[f64],
+    slices: &mut [crate::slice::LayerSlice],
+) {
+    if volume.kind != PartKind::Model || !crate::spiral_vase::enabled(base) {
+        return;
+    }
+    let config = apply_config(base, &volume.config);
+    let from = crate::spiral_vase::slice_from_layer_config(&config, zs);
+    for slice in slices.iter_mut().skip(from) {
+        slice.islands = crate::spiral_vase::largest_contour(&slice.islands);
+    }
+}
+
 /// The mesh a volume is sliced from: its displaced mesh when it has one.
 fn sliced_mesh<'a>(
     volume: &'a Volume,
@@ -389,6 +410,8 @@ impl RegionModel {
                     observer,
                 )
             };
+            let mut slices = slices;
+            spiral_largest_contours(volume, base, zs, &mut slices);
             crate::progress::check(observer)?;
             if volume.kind == PartKind::Model && !volume.painting.supports.is_empty() {
                 crate::painting::projection::support_masks(
@@ -478,6 +501,8 @@ impl RegionModel {
                     observer,
                 )
             };
+            let mut slices = slices;
+            spiral_largest_contours(volume, base, zs, &mut slices);
             crate::progress::check(observer)?;
             let mut colors =
                 if volume.kind == PartKind::Model && !volume.painting.material.is_empty() {

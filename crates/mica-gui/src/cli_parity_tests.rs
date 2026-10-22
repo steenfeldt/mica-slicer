@@ -402,6 +402,68 @@ fn rules_case(printer: &Printer, rules: mica_core::rules::Rules, saved: Option<F
     );
 }
 
+/// Spiral vase turned on in the sidebar (which also sets one wall, no top, no infill and no
+/// supports) and on the CLI with the same values: the same spiral, byte for byte. The hole
+/// block's hole closes above its solid bottom.
+fn spiral_vase_case(printer: &Printer) {
+    let ctx = egui::Context::default();
+    let Some(mut app) = gui(&ctx, printer) else {
+        return;
+    };
+    let paths = [models().join("hole_block.stl")];
+    open(&mut app, &paths);
+    app.apply_edit(
+        Some(crate::overlays::Target::Print),
+        crate::panels::editor::Edit::Set {
+            key: "spiral_vase".into(),
+            raw: "1".into(),
+        },
+    );
+    let config = app.effective_config().unwrap().clone();
+    assert_eq!(config.int("perimeters"), Some(1));
+    assert_eq!(config.bool("support_material"), Some(false));
+    let mut args = printer.args(true);
+    for key in [
+        "spiral_vase",
+        "perimeters",
+        "top_solid_layers",
+        "fill_density",
+        "support_material",
+        "support_material_enforce_layers",
+        "thin_walls",
+        "overhang_reverse",
+    ] {
+        if let Some(raw) = app.overlays.print.get(key) {
+            args.extend(["--set".into(), format!("{key}={raw}")]);
+        }
+    }
+    let gui = gui_gcode(&app, 0);
+    let text = String::from_utf8_lossy(&gui);
+    // Z rises within the spiral layers (G1 Z… X… Y… E…).
+    assert!(
+        text.lines()
+            .filter(|l| l.starts_with("G1 Z") && l.contains(" E"))
+            .count()
+            > 100,
+        "no spiral in the G-code"
+    );
+    same(
+        &gui,
+        &cli_gcode(&paths, &args),
+        &format!("spiral vase on {}", printer.printer),
+    );
+}
+
+#[test]
+fn spiral_vase_on_the_core_one() {
+    spiral_vase_case(&CORE_ONE);
+}
+
+#[test]
+fn spiral_vase_on_the_u1() {
+    spiral_vase_case(&U1);
+}
+
 #[test]
 fn orca_rules_on_the_core_one() {
     rules_case(&CORE_ONE, mica_core::rules::Rules::OrcaSlicer, None);

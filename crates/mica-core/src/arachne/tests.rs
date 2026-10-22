@@ -179,6 +179,7 @@ fn params() -> WallParams {
         gap_fill: true,
         filter_out_gap_fill: 0.,
         fill_density: 0.15,
+        spiral_vase: false,
     }
 }
 

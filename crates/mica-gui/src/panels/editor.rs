@@ -144,7 +144,20 @@ pub fn is_advanced(key: &str) -> bool {
 pub fn disabled_reason(key: &str, c: &Config) -> Option<String> {
     let off = |k: &str| c.bool(k) == Some(false);
     let zero = |k: &str| c.float(k).is_some_and(|v| v <= 0.);
+    let spiral = mica_core::spiral_vase::enabled(c);
     let reason = match key {
+        // Spiral vase forces these while it is on (mica_core::spiral_vase::normalize).
+        "perimeters" if spiral => "Spiral vase prints one wall while it is on",
+        "top_solid_layers" if spiral => "Spiral vase prints no top layers while it is on",
+        "fill_density" if spiral => "Spiral vase prints no infill while it is on",
+        k if spiral
+            && (k == "fill_pattern" || k == "fill_angle" || k.starts_with("infill_anchor")) =>
+        {
+            "No infill while Spiral vase is on"
+        }
+        "retract_layer_change" if spiral => {
+            "Spiral vase never retracts at a layer change: the wall runs on into the next layer"
+        }
         "brim_width" | "brim_separation" if c.string("brim_type") == Some("no_brim") => {
             "No effect while Brim type is “No brim”"
         }
@@ -1352,6 +1365,35 @@ mod tests {
         assert_eq!(unit_for(TOP_BOTTOM, ""), "layers");
         assert_eq!(unit_for("layer_height", "mm"), "mm");
         assert_eq!(unit_for("fill_density", "a very long unit"), "");
+    }
+
+    /// Spiral vase forces one wall, no top layers and no infill: those rows are greyed out
+    /// with the reason while it is on.
+    #[test]
+    fn spiral_vase_locks_what_it_forces() {
+        let mut c = Config::defaults();
+        for key in [
+            "perimeters",
+            "top_solid_layers",
+            "fill_density",
+            "fill_pattern",
+        ] {
+            assert!(disabled_reason(key, &c).is_none(), "{key}");
+        }
+        c.set_raw("spiral_vase", "1").unwrap();
+        for key in [
+            "perimeters",
+            "top_solid_layers",
+            "fill_density",
+            "fill_pattern",
+            "retract_layer_change",
+        ] {
+            assert!(
+                disabled_reason(key, &c).is_some_and(|r| r.contains("Spiral vase")),
+                "{key}"
+            );
+        }
+        assert!(disabled_reason("bottom_solid_layers", &c).is_none());
     }
 
     #[test]

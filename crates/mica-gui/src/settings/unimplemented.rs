@@ -135,9 +135,6 @@ pub const SETTINGS: &[Setting] = &[
     // Klipper: progress follows `disable_m73`, and there is no silent mode.
     s("remaining_times", "0", Klipper, Upstream::Both),
     s("silent_mode", "1", Klipper, Upstream::Both),
-    // Not printed yet; the slice warns and prints normal layers (a project's plate setting
-    // still loads and saves).
-    s("spiral_vase", "0", Everywhere, Upstream::Warned),
     // Scripts are not run (on purpose for now); the slice says so.
     s("post_process", "", Everywhere, Upstream::Warned),
     s("gcode_substitutions", "", Everywhere, Upstream::Warned),
@@ -439,15 +436,15 @@ mod tests {
         assert!(in_use(&u1).is_empty(), "{:?}", in_use(&u1));
     }
 
-    /// Spiral vase, post-processing scripts and the other settings the engine warns about
-    /// itself are hidden, and the slice's own warning (CLI and GUI alike) replaces the
-    /// generic notice; the quiet ones get neither.
+    /// Post-processing scripts and the other settings the engine warns about itself are
+    /// hidden, and the slice's own warning (CLI and GUI alike) replaces the generic notice;
+    /// the quiet ones get neither. Spiral vase is printed, so it is offered and not warned.
     #[test]
     fn engine_warned_settings_are_hidden_and_warned_once() {
         let mut c = marlin();
         c.set_raw("extra_perimeters", "0").unwrap();
+        assert!(implemented("spiral_vase", &c));
         for key in [
-            "spiral_vase",
             "post_process",
             "gcode_substitutions",
             "filament_shrinkage_compensation_xy",
@@ -468,8 +465,11 @@ mod tests {
         c.set_raw("max_print_speed", "300").unwrap();
         assert!(in_use(&c).is_empty(), "{:?}", in_use(&c));
         let warnings = mica_core::safety::config_warnings(&c);
+        assert!(
+            !warnings.iter().any(|w| w.contains("Spiral vase")),
+            "{warnings:?}"
+        );
         for start in [
-            "Spiral vase isn't supported yet",
             "Post-processing scripts aren't run yet",
             "Filament shrinkage compensation isn't applied yet",
         ] {

@@ -264,7 +264,7 @@ impl App {
         egui::Popup::menu(&resp).show(|ui| {
             ui.set_min_width(220.);
             for key in plate_settings::PLATE_OPTIONS {
-                if key == BED_TYPE && !beds {
+                if !plate_settings::offered(key, beds) {
                     continue;
                 }
                 let present = overrides.contains_key(key);

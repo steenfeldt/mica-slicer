@@ -12,6 +12,9 @@
 // Changes: Prusa profiles expand each first-layer polygon on its own (holes shrink), classify layer 1 against the uncompensated first layer (upstream keeps it in lslices) and use decimated visibility.
 // Copyright (c) Prusa Research 2020 - 2023 Vojtěch Bubník @bubnikv, Lukáš Matěna @lukasmatena, Pavel Mikuš @Godrak.
 // Copyright (c) SuperSlicer 2023 Remi Durand @supermerill.
+// Source: prusaslicer@b028299c77 src/libslic3r/GCode.cpp :: SmoothPathGenerator::operator()
+// Source: orca@8500fcdcca src/libslic3r/ExtrusionEntity.cpp :: ExtrusionLoop::split_at
+// Changes: Spiral vase: loops split at the point nearest the last position (no seam placer, no scarf), merged with a vertex within 1.5 µm (PrusaSlicer) or SCALED_EPSILON (Orca), unclipped on spiral layers.
 
 //! Cross-layer seams. Preparation releases visibility samples, the ray index and alignment candidates.
 //! Aligned, rear and random retain one record per boundary per layer; all inner walls project that
@@ -378,6 +381,9 @@ impl SeamPlan {
         if poly.len() < 3 {
             return None;
         }
+        if s.spiral_vase {
+            return spiral_vase_open(layer, wall, flow, s, last);
+        }
         let bbox = BoundingBox::from_points(poly.iter())?;
         let record = self
             .layers
@@ -581,6 +587,75 @@ impl SeamPlan {
             brick: None,
         })
     }
+}
+
+/// Spiral vase: no seam placement, no scarf (`GCodeGenerator::extrude_perimeters` and Orca's
+/// `GCode::extrude_loop` with `spiral_vase` on). The loop starts where the nozzle is (PrusaSlicer
+/// `SmoothPathCache::resolve_or_fit_split_with_seam`, Orca `ExtrusionLoop::split_at`), and on
+/// the layers that become a spiral it is not clipped short of its start (`m_enable_loop_clipping`
+/// off), so it closes onto the next layer.
+fn spiral_vase_open(
+    layer: usize,
+    wall: &WallLoop,
+    flow: Flow,
+    s: &PrintSettings,
+    last: Point,
+) -> Option<ExtrusionPath> {
+    let reversed;
+    let poly = if (crate::geometry::signed_area(&wall.polygon) < 0.0)
+        != s.seam.prefer_clockwise_movements
+    {
+        reversed = wall.polygon.iter().rev().copied().collect::<Vec<_>>();
+        &reversed
+    } else {
+        &wall.polygon
+    };
+    let vertices: Vec<V> = poly.iter().copied().map(V::from).collect();
+    let choice = geometry::closest(&vertices, V::from(last));
+    // The split point merges with a vertex closer than 1.5 µm (PrusaSlicer's
+    // seam_point_merge_distance_threshold) or SCALED_EPSILON (Orca's split_at).
+    let merge = if s.adhesion.orca { 100. } else { 1_500. };
+    let mut at = choice.point;
+    if choice.previous != choice.next {
+        let (a, b) = (vertices[choice.previous], vertices[choice.next]);
+        let (da, db) = ((at - a).norm(), (at - b).norm());
+        if da < db {
+            if da < merge {
+                at = a;
+            }
+        } else if db < merge {
+            at = b;
+        }
+    }
+    let total = polygon_length(poly) / SCALE;
+    let mut points = geometry::open(poly, at);
+    let mut meta = None;
+    if !crate::spiral_vase::spiral_layer(s, layer) {
+        scarf::gap(
+            &mut points,
+            &mut meta,
+            s.seam.gap.resolve(s.nozzle_diameter, 1.0),
+        );
+    }
+    if points.len() < 2 {
+        return None;
+    }
+    let mut meta: Box<PathSeam> = meta.unwrap_or_default();
+    meta.loop_length_mm = Some(total);
+    meta.original_clockwise = crate::geometry::signed_area(&wall.polygon) < 0.0;
+    Some(ExtrusionPath {
+        role: if wall.depth == 0 {
+            Role::ExternalPerimeter
+        } else {
+            Role::Perimeter
+        },
+        points,
+        flow,
+        overhang: None,
+        perimeter_index: Some(wall.depth),
+        seam: Some(meta),
+        brick: None,
+    })
 }
 
 impl ExtrusionPath {

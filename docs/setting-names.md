@@ -260,6 +260,7 @@ OrcaSlicer's where Orca has the option (the GUI follows Orca's layout), else Pru
 | Others › Brim | Brim-object gap | `brim_separation` | `brim_separation` | Brim separation gap | `brim_object_gap` | Brim-object gap | both |  |
 | Others › Special mode | Slicing mode | `slicing_mode` | `slicing_mode` | Slicing Mode | `slicing_mode` | Slicing Mode | both | not offered: Even-odd, Close holes |
 | Others › Special mode | Print sequence | `complete_objects` | `complete_objects` | Complete individual objects | `print_sequence` | Print sequence | both |  |
+| Others › Special mode | Spiral vase | `spiral_vase` | `spiral_vase` | Spiral vase | `spiral_mode` | Spiral vase | both |  |
 | Others › Fuzzy Skin | Fuzzy skin | `fuzzy_skin` | `fuzzy_skin` | Fuzzy Skin | `fuzzy_skin` | Fuzzy Skin | both |  |
 | Others › Fuzzy Skin | Fuzzy skin point distance | `fuzzy_skin_point_dist` | `fuzzy_skin_point_dist` | Fuzzy skin point distance | `fuzzy_skin_point_distance` | Fuzzy skin point distance | both |  |
 | Others › Fuzzy Skin | Fuzzy skin thickness | `fuzzy_skin_thickness` | `fuzzy_skin_thickness` | Fuzzy skin thickness | `fuzzy_skin_thickness` | Fuzzy skin thickness | both |  |
@@ -450,7 +451,6 @@ These options are never shown because Mica's engine does not implement them. Pro
 | `gcode_comments` | Verbose G-code | `0` |
 | `use_firmware_retraction` | Use firmware retraction | `0` |
 | `high_current_on_filament_swap` | High extruder current on filament swap | `0` |
-| `spiral_vase` | Spiral vase | `0` |
 | `post_process` | Post-processing scripts | — |
 | `gcode_substitutions` | G-code substitutions | — |
 | `filament_shrinkage_compensation_xy` | Shrinkage (XY) | `0%` |

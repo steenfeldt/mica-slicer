@@ -275,18 +275,20 @@ impl Builder {
     }
     /// Adds a layer with speeds and fans estimated the way the exporter computes them.
     pub fn push(&mut self, layer: &ScheduledLayer, settings: &[PrintSettings]) -> io::Result<()> {
-        self.push_with(layer, settings, None, None)
+        self.push_with(layer, settings, None, None, None)
     }
     /// Adds a layer using what the exporter actually emitted (final feedrates and fans per
-    /// path stretch, and the layer's cooling-adjusted time).
+    /// path stretch, and the layer's cooling-adjusted time). `spiral`: the exporter prints the
+    /// layer as a spiral vase spiral (`Some(true)`: the last layer, with its finishing loop).
     pub fn push_emitted(
         &mut self,
         layer: &ScheduledLayer,
         settings: &[PrintSettings],
         emissions: &[PathEmission],
         layer_time_s: f64,
+        spiral: Option<bool>,
     ) -> io::Result<()> {
-        self.push_with(layer, settings, Some(emissions), Some(layer_time_s))
+        self.push_with(layer, settings, Some(emissions), Some(layer_time_s), spiral)
     }
     fn push_with(
         &mut self,
@@ -294,9 +296,11 @@ impl Builder {
         settings: &[PrintSettings],
         emissions: Option<&[PathEmission]>,
         layer_time_s: Option<f64>,
+        spiral: Option<bool>,
     ) -> io::Result<()> {
         let start = self.count;
         let index = self.layers.len();
+        let below = self.layers.last().map_or(0., |l| l.z);
         // One layer's records are buffered (bounded by the layer) so the acceleration planner
         // sees them in order before they are written.
         let mut records: Vec<(Segment, usize)> = Vec::new();
@@ -304,6 +308,9 @@ impl Builder {
         match emissions {
             Some(e) => emitted_segments(layer, settings, e, &mut self.last, &mut sink),
             None => segments(layer, settings, &self.cooling, &mut self.last, &mut sink),
+        }
+        if let Some(last) = spiral {
+            spiral_ramp(&mut records, below, layer.layer.print_z as f32, last);
         }
         self.write_records(&records, layer.layer.index, index)?;
         self.layers.push(Layer {
@@ -432,6 +439,38 @@ impl Builder {
         })
     }
 }
+/// A spiral vase layer as the exporter prints it (`mica_gcode::spiral_vase`): its extrusions
+/// rise from the layer below (`below`) to the layer's own Z in proportion to the length printed
+/// (the travel onto the loop is not printed), and the last layer prints its loop once more
+/// at its own height. The XY smoothing towards the previous layer is not drawn.
+fn spiral_ramp(records: &mut Vec<(Segment, usize)>, below: f32, z: f32, last: bool) {
+    records.retain(|(s, _)| s.role() != TRAVEL);
+    let length = |s: &Segment| (s.b[0] - s.a[0]).hypot(s.b[1] - s.a[1]);
+    let total: f32 = records.iter().map(|(s, _)| length(s)).sum();
+    if total <= 0. {
+        return;
+    }
+    let finish: Vec<(Segment, usize)> = if last {
+        records
+            .iter()
+            .map(|&(mut s, path)| {
+                s.a[2] = z;
+                s.b[2] = z;
+                (s, path)
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let mut done = 0.;
+    for (s, _) in records.iter_mut() {
+        s.a[2] = below + (z - below) * done / total;
+        done += length(s);
+        s.b[2] = below + (z - below) * done / total;
+    }
+    records.extend(finish);
+}
+
 /// Emits one record per path segment plus connecting travels, with the speed and fan the
 /// exporter settled on for each stretch of a path.
 fn emitted_segments(
@@ -902,6 +941,45 @@ mod tests {
         assert!(p.layers[0].time_s > 0.);
         assert_eq!(p.stats.layer_time.min, p.layers[0].time_s);
     }
+    /// A spiral vase layer rises from the layer below in proportion to the length printed,
+    /// without its travel; the last one also prints a flat finishing loop.
+    #[test]
+    fn spiral_layers_rise_along_their_length() {
+        let segment = |a: [f32; 2], b: [f32; 2], role| {
+            (
+                Segment::new(
+                    [a[0], a[1], 1.],
+                    [b[0], b[1], 1.],
+                    [0.4, 0.2],
+                    role,
+                    0,
+                    50.,
+                    0.,
+                ),
+                0,
+            )
+        };
+        let layer = vec![
+            segment([0., 0.], [1., 0.], TRAVEL),
+            segment([1., 0.], [4., 0.], Role::ExternalPerimeter as u32),
+            segment([4., 0.], [4., 1.], Role::ExternalPerimeter as u32),
+        ];
+        let mut records = layer.clone();
+        spiral_ramp(&mut records, 0.8, 1., false);
+        let z: Vec<[f32; 2]> = records.iter().map(|(s, _)| [s.a[2], s.b[2]]).collect();
+        assert_eq!(z.len(), 2);
+        assert!((z[0][0] - 0.8).abs() < 1e-6 && (z[0][1] - 0.95).abs() < 1e-6);
+        assert!((z[1][0] - 0.95).abs() < 1e-6 && (z[1][1] - 1.).abs() < 1e-6);
+        let mut records = layer;
+        spiral_ramp(&mut records, 0.8, 1., true);
+        assert_eq!(records.len(), 4);
+        assert!(
+            records[2..]
+                .iter()
+                .all(|(s, _)| s.a[2] == 1. && s.b[2] == 1.)
+        );
+    }
+
     #[test]
     fn disk_batches_and_layer_range() {
         let (job, config, settings) = job();

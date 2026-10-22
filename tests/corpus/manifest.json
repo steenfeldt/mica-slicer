@@ -608,6 +608,21 @@
       "validate_note": "Synthetic ColorMix virtual tool 6; exact 100-layer PrusaSlicer 2.9.6 sequence checked by tests/oracles/colormix.py.",
       "layer_sequence_checks": true,
       "filament_tolerance": 3
+    },
+    {
+      "id": "spiral_vase",
+      "generated": "vase.stl",
+      "printers": [
+        "core",
+        "u1"
+      ],
+      "args": [
+        "--set",
+        "spiral_vase=1",
+        "--set",
+        "support_material=0"
+      ],
+      "validate_note": "tests/models/vase.py, a twisted flared vase body, in spiral vase mode: solid bottom layers, then one wall rising continuously (Z within each layer), the flow ramping in over the first spiral layer and out over a finishing loop. References are PrusaSlicer 2.9.6 --spiral-vase --no-support-material (its stock CORE One profile enables supports) and OrcaSlicer 2.4.1 with spiral_mode, wall_loops 1, top_shell_layers 0 and sparse_infill_density 0% (Orca's own dialog sets these). The validator reads spiral vase from the file's configuration."
     }
   ]
 }

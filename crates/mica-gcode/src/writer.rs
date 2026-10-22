@@ -32,6 +32,8 @@
 // Source: prusaslicer@b028299c77 bundled_deps/localesutils/LocalesUtils.cpp :: float_to_string_decimal_point
 // Changes: Six significant digits (a stream's default precision, as %g) in Mica's number style, for the layer markers.
 // Changes: Brick layers: travels keep a lift above raised walls until a layer above them starts.
+// Source: prusaslicer@b028299c77 src/libslic3r/GCode/GCodeWriter.cpp :: GCodeWriter::travel_to_xy_force
+// Changes: Spiral vase: the layer's output taken out and put back post-processed, with the filament it adds.
 
 //! Low-level G-code emission with state tracking (position, feedrate, retraction, lift).
 //!
@@ -410,6 +412,19 @@ impl Writer {
 
     pub fn as_str(&self) -> &str {
         &self.out
+    }
+
+    /// The G-code written since the last drain, taken out for post-processing (spiral vase).
+    pub(crate) fn take_output(&mut self) -> String {
+        std::mem::take(&mut self.out)
+    }
+
+    /// Puts post-processed G-code back; `added_e` is the filament it extrudes beyond what was
+    /// taken out (spiral vase's flow ramps and finishing loop).
+    pub(crate) fn restore_output(&mut self, text: String, added_e: f64) {
+        self.out = text;
+        self.stats.filament_mm += added_e;
+        self.tool_filament[self.tool] += quantize_e(added_e);
     }
 
     pub fn position(&self) -> Option<(f64, f64)> {
@@ -1038,6 +1053,25 @@ impl Writer {
 
     /// `GCodeWriter::travel_to_xy_force`-like: always emits the XY travel (the wipe tower's
     /// never-skip move after custom toolchange G-code), with the feedrate on its own line.
+    /// PrusaSlicer's `GCodeWriter::travel_to_xy_force`: one `G1 X… Y… F…` line, whatever the
+    /// current feed rate.
+    pub(crate) fn travel_to_xy_force_line(&mut self, x: f64, y: f64, speed: f64) {
+        if let Some((cx, cy)) = self.position() {
+            self.stats.time_s += (x - cx).hypot(y - cy) / speed;
+        }
+        let f = speed * 60.0;
+        let _ = writeln!(
+            self.out,
+            "G1 X{} Y{} F{}",
+            num(x - self.offset.0, 3),
+            num(y - self.offset.1, 3),
+            num(f, 0)
+        );
+        self.x = Some(x);
+        self.y = Some(y);
+        self.feedrate = Some(f);
+    }
+
     pub(crate) fn travel_to_xy_force(&mut self, x: f64, y: f64, speed: f64) {
         if self.raised.is_some() {
             let z = self.z;

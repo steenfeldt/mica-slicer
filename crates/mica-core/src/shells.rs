@@ -8,7 +8,7 @@
 // Source: prusaslicer@b028299c77 src/libslic3r/PrintObject.cpp :: PrintObject::prepare_infill, PrintObject::detect_surfaces_type, PrintObject::discover_vertical_shells, PrintObject::discover_horizontal_shells
 // Source: prusaslicer@b028299c77 src/libslic3r/LayerRegion.cpp :: LayerRegion::slices_to_fill_surfaces_clipped, LayerRegion::prepare_fill_surfaces, LayerRegion::process_external_surfaces, expand_bridges_detect_orientations, expand_merge_surfaces, merge_bridges
 // Source: prusaslicer@b028299c77 src/libslic3r/Algorithm/RegionExpansion.cpp :: RegionExpansionParameters::build, wave_seeds, propagate_waves, merge_expansions_into_expolygons
-// Changes: Reuse immutable neighbour classification and expanded shells by exact scaled flow dimensions; shared object outlines/fill holes across regions; no interface_shells or spiral vase. Surface types live in per-type ExPolygon lists instead of a SurfaceCollection, and each
+// Changes: Reuse immutable neighbour classification and expanded shells by exact scaled flow dimensions; shared object outlines/fill holes across regions; no interface_shells. Spiral vase types only the bottom layers (the last one top, every layer above internal) and limits vertical shells to them. Surface types live in per-type ExPolygon lists instead of a SurfaceCollection, and each
 // Changes: pass works on whole-object per-layer arrays (see `classify`). Wave seeds come from clipping the
 // Changes: slightly grown source contours with each boundary ExPolygon (no Clipper Z-tracking or split
 // Changes: merging); bridges are grouped by overlapping anchors. Bridge direction and bridge_over_infill
@@ -165,6 +165,18 @@ pub(crate) fn classify_region_at(
             (slices, surfaces)
         })
         .unzip();
+    // Spiral vase: only the bottom layers are classified; the last of them prints as a top
+    // surface, every layer above is internal (detect_surfaces_type).
+    let spiral = s.spiral_vase;
+    let spiral_bottom = s.bottom_solid_layers.min(n);
+    if spiral {
+        if let Some((_, cache)) = shared {
+            for (own, known) in slices.iter_mut().zip(&cache.slices) {
+                *own = known.clone();
+            }
+        }
+        spiral_vase_types(&mut slices, &mut surfaces, outlines, &fill, spiral_bottom);
+    }
     crate::bridge::extra::external(&mut surfaces, layers, s);
     surfaces
         .par_iter_mut()
@@ -176,7 +188,7 @@ pub(crate) fn classify_region_at(
     );
     if extra_external {
         // The added bridge also seeds the bottom-shell stack, as Orca's typed slices do.
-        if let Some((_, cache)) = shared {
+        if let Some((_, cache)) = shared.filter(|_| !spiral) {
             slices = cache.slices.clone();
         }
         for (typed, fill) in slices.iter_mut().zip(&surfaces) {
@@ -186,20 +198,21 @@ pub(crate) fn classify_region_at(
             typed.bottom_bridge = union_ex(&typed.bottom_bridge);
         }
     }
-    let slices = if extra_external {
+    let slices = if extra_external || spiral {
         &slices
     } else {
         shared.map_or(&slices, |(_, cache)| &cache.slices)
     };
     if s.ensure_vertical_shell_thickness != EnsureVerticalShellThickness::Disabled {
         let owned_cache;
-        let (cache, projected) = if let Some((_, cache)) = shared.filter(|_| !extra_external) {
-            (&cache.vertical, Some(cache.projected.as_slice()))
-        } else {
-            owned_cache = vertical_cache(slices, layers);
-            (&owned_cache, None)
-        };
-        surfaces = discover_vertical_shells(
+        let (cache, projected) =
+            if let Some((_, cache)) = shared.filter(|_| !extra_external && !spiral) {
+                (&cache.vertical, Some(cache.projected.as_slice()))
+            } else {
+                owned_cache = vertical_cache(slices, layers);
+                (&owned_cache, None)
+            };
+        let mut shelled = discover_vertical_shells(
             neighbours,
             shared_fill.unwrap_or(&fill),
             cache,
@@ -208,6 +221,13 @@ pub(crate) fn classify_region_at(
             layers,
             s,
         );
+        if spiral {
+            // Spiral vase: vertical shells only for the bottom layers.
+            for (new, old) in shelled.iter_mut().zip(&mut surfaces).skip(spiral_bottom) {
+                *new = std::mem::take(old);
+            }
+        }
+        surfaces = shelled;
     }
     drop(fill);
 
@@ -379,7 +399,8 @@ fn clip_typed_slices(
 /// `LayerRegion::prepare_fill_surfaces`: no top/bottom surfaces when no such layers are wanted, and small
 /// sparse areas become solid.
 fn prepare_fill_surfaces(surfaces: &mut FillSurfaces, s: &PrintSettings) {
-    if s.top_solid_layers == 0 {
+    // Spiral vase keeps the top it gave the last bottom layer.
+    if s.top_solid_layers == 0 && !s.spiral_vase {
         let top = std::mem::take(&mut surfaces.top);
         surfaces.internal.extend(top);
     }
@@ -391,13 +412,49 @@ fn prepare_fill_surfaces(surfaces: &mut FillSurfaces, s: &PrintSettings) {
     }
     if s.minimum_sparse_infill_area.is_some() && s.fill_density >= 1.0 {
         surfaces.internal_solid.append(&mut surfaces.internal);
-    } else if s.minimum_sparse_infill_area.is_none() && s.fill_density > 0.0 {
+    } else if s.minimum_sparse_infill_area.is_none() && s.fill_density > 0.0 && !s.spiral_vase {
         let min_area = s.solid_infill_below_area * SCALE * SCALE;
         let (small, large): (Vec<_>, Vec<_>) = std::mem::take(&mut surfaces.internal)
             .into_iter()
             .partition(|ex| area(ex) <= min_area);
         surfaces.internal = large;
         surfaces.internal_solid.extend(small);
+    }
+}
+
+/// `PrintObject::detect_surfaces_type` in spiral vase mode: of the `bottom` layers only the ones
+/// below the last keep their detected types; the last bottom layer (when there are several) is a
+/// top surface, so it prints with the top pattern, and every layer above it is internal.
+fn spiral_vase_types(
+    slices: &mut [TypedSlices],
+    surfaces: &mut [FillSurfaces],
+    outlines: &[Vec<ExPolygon>],
+    fill: &[Vec<ExPolygon>],
+    bottom: usize,
+) {
+    let detected = if bottom > 1 { bottom - 1 } else { bottom };
+    for i in detected..slices.len() {
+        let clipped = if fill[i].is_empty() {
+            Vec::new()
+        } else {
+            intersection_ex(&outlines[i], &fill[i])
+        };
+        if bottom > 1 && i == bottom - 1 {
+            slices[i] = TypedSlices {
+                top: outlines[i].clone(),
+                ..TypedSlices::default()
+            };
+            surfaces[i] = FillSurfaces {
+                top: clipped,
+                ..FillSurfaces::default()
+            };
+        } else {
+            slices[i] = TypedSlices::default();
+            surfaces[i] = FillSurfaces {
+                internal: clipped,
+                ..FillSurfaces::default()
+            };
+        }
     }
 }
 

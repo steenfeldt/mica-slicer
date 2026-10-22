@@ -28,6 +28,7 @@
 // Source: prusaslicer@b028299c77 src/libslic3r/GCode.cpp :: GCodeGenerator::needs_retraction
 // Changes: Normal Prusa support travels inside the union of support islands skip retraction;
 // Changes: interface travels still retract. Organic retains its previously validated motion.
+// Changes: Spiral vase: no ramping layer change on a spiral layer (change_layer's vase_mode), set per layer.
 
 //! Ramped lift reaches full clearance before entering an obstacle, and restores Z at destination.
 use mica_core::{
@@ -218,7 +219,7 @@ impl<'a> TravelPlanner<'a> {
                 .bool("filament_travel_lift_before_obstacle")
                 .or_else(|| c.bool("travel_lift_before_obstacle"))
                 .unwrap_or(false),
-            vase: c.bool("spiral_vase").unwrap_or(false),
+            vase: false,
             lift,
             slope: extruder_float(c, "travel_slope"),
             orca,
@@ -592,6 +593,18 @@ impl<'a> TravelPlanner<'a> {
     }
     /// `layer_change` along an explicit XY route from `from` to `to`. On the Prusa path
     /// `from[2]` is the previous layer's print_z (GCodeGenerator keeps it as a float).
+    /// Whether layer changes ramp on this printer (`travel_ramping_lift`, PrusaSlicer rules).
+    pub fn ramps(&self) -> bool {
+        self.ramping
+    }
+
+    /// A spiral vase layer (`process_layer`'s `spiral_vase_enable`): its layer change does not
+    /// ramp (`change_layer`'s `vase_mode`).
+    pub fn spiral_layer(mut self, on: bool) -> Self {
+        self.vase = on;
+        self
+    }
+
     pub fn layer_change_along(
         &self,
         from: [f64; 3],

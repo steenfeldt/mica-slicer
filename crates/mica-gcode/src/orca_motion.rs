@@ -14,6 +14,8 @@
 // Source: orca@8500fcdcca src/libslic3r/PrintObject.cpp :: PrintObject::get_certain_layers
 // Changes: Slope and lifted XYZ travels at the travel speed, not limited by travel_speed_z (as travel_to_xyz).
 // Changes: Auto Lift probes the pre-wipe travel over the largest z_hop; support travels inside a support island keep the filament, interfaces always retract.
+// Source: orca@8500fcdcca src/libslic3r/GCodeWriter.cpp :: GCodeWriter::lazy_lift
+// Changes: Spiral vase prints lift at once, straight up, whatever the lift type.
 
 use crate::writer::Writer;
 use mica_core::{
@@ -390,6 +392,8 @@ pub(crate) struct Travel {
     /// `PrintObject::detect_overhangs_for_lift`'s `line_width`, when configured.
     pub lift_width: Option<f64>,
     pub geometry: Arc<TravelGeometry>,
+    /// Spiral vase print: `GCodeWriter::lazy_lift(.., spiral_vase)` lifts at once, straight up.
+    spiral_vase: bool,
 }
 
 /// The largest value of a per-tool option over all tools (retained plate-wide text first).
@@ -450,6 +454,7 @@ impl Travel {
             arc: c.bool("enable_arc_fitting").unwrap_or(false),
             resolution: mica_core::settings::gcode_resolution(c, 0.0125),
             geometry: Arc::default(),
+            spiral_vase: mica_core::spiral_vase::enabled(c),
         })
     }
     /// `pairs` gives the shared pair cache and the source index of `here` (whose pair is
@@ -579,7 +584,11 @@ impl Travel {
         // Auto Lift's collision query is only consumed by an actual rising hop.
         // Width-split Arachne joints usually arrive at the current position/Z.
         let hop = rise > 0. && lift > 0. && distance > 1e-9;
-        if hop {
+        if hop && self.spiral_vase {
+            // GCodeWriter::lazy_lift in a spiral vase print: "lift Z" now, whatever the lift
+            // type; the travel then moves in XY and the extrusion unlifts.
+            w.move_z_force(target, z_speed);
+        } else if hop {
             let spiral = match self.hop {
                 Hop::Spiral => true,
                 Hop::Auto => {
@@ -629,7 +638,7 @@ impl Travel {
             }
         }
         for (i, &(x, y)) in route.iter().enumerate().skip(1) {
-            if hop && i == 1 {
+            if hop && i == 1 && !self.spiral_vase {
                 // travel_to_xyz after a lift always writes the lifted Z (emit_xyz(target)).
                 w.travel_to_xyz_force([x, y, target], speed, 0.);
             } else {

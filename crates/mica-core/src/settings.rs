@@ -208,6 +208,9 @@ pub struct PrintSettings {
     pub gap_fill_enabled: bool,
     /// Detect features too thin for a wall loop and print them as single variable-width lines.
     pub thin_walls: bool,
+    /// Spiral vase (PrusaSlicer `spiral_vase`, Orca `spiral_mode`): above the solid bottom, one
+    /// wall around the largest outline, raised continuously (`crate::spiral_vase`).
+    pub spiral_vase: bool,
 
     // Top / bottom
     pub top_solid_layers: usize,
@@ -419,6 +422,7 @@ impl PrintSettings {
             precise_outer_wall: false,
             gap_fill_enabled: true,
             thin_walls: false,
+            spiral_vase: false,
             top_solid_layers: 5,
             bottom_solid_layers: 3,
             top_solid_min_thickness: 0.7,

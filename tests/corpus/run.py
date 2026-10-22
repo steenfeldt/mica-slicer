@@ -80,6 +80,8 @@ def generate(directory):
     sequential_cubes.generate_small(directory / 'sequential_cubes_small.3mf')
     import colormix
     colormix.generate(directory)
+    import vase
+    vase.generate(directory / 'vase.stl')
 
 
 def model_path(case, temp):

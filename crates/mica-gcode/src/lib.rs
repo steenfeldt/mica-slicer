@@ -32,6 +32,7 @@ mod seam;
 mod sequential;
 mod small_area;
 pub mod smooth_path;
+pub mod spiral_vase;
 mod support_order;
 pub mod templates;
 pub mod thumbnails;
