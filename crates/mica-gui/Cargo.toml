@@ -53,6 +53,11 @@ arboard = { version = "3.7.0", default-features = false }
 # through winit and muda).
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# The window frame on Wayland desktops that leave it to the app (GNOME): libadwaita-style title
+# bar, rounded corners and buttons instead of winit's plain fallback frame. KDE draws its own.
+winit = { version = "0.30.13", default-features = false, features = ["wayland-csd-adwaita"] }
+
 [dev-dependencies]
 mica-testkit.workspace = true
 
