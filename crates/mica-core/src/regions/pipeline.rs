@@ -24,6 +24,7 @@
 // Copyright (c) Prusa Research 2016 - 2023 Vojtěch Bubník @bubnikv, Pavel Mikuš @Godrak, Lukáš Hejl @hejllukas
 // Copyright (c) Slic3r 2014 - 2015 Alessandro Ranellucci @alranel
 // Copyright (c) 2015 Maksim Derbasov @ntfshard
+// Changes: Spiral vase: walls know their layer's print Z (LayerRegion::make_perimeters), and bottom layers start where the layer below ended.
 //
 // ported from lib/Slic3r/Layer.pm:
 // Copyright (c) Prusa Research 2016 - 2022 Vojtěch Bubník @bubnikv
@@ -72,6 +73,9 @@ pub(crate) struct PreparedRegions {
     /// Layer toolpaths generated ahead of the tool-usage prepass ([`PreparedRegions::warm`]),
     /// with their retained bytes; [`PreparedRegions::layer`] moves them out on first use.
     warm: Vec<std::sync::Mutex<Option<(WarmLayer, usize)>>>,
+    /// Spiral vase: where each bottom layer's toolpaths start (the previous layer's end), as
+    /// `PreparedObject::spiral_starts`.
+    pub(crate) starts: Vec<Point>,
 }
 
 /// One layer's toolpaths and the region of each path, as [`PreparedRegions::layer`] returns them.
@@ -345,6 +349,7 @@ impl PreparedRegions {
             fuzzy,
             wall_cache: Vec::new(),
             warm: Vec::new(),
+            starts: Vec::new(),
         };
         let walls_timer = crate::timing::Span::new(crate::timing::Stage::RegionWalls);
         // Walls of every layer first (0 .. 0.6 of the stage), then one step per region.
@@ -360,7 +365,7 @@ impl PreparedRegions {
                 ticker.tick();
                 for group in &out.wall_groups {
                     let (id, mut walls) =
-                        out.generate_walls(group, i, outlines, heights[i], origin);
+                        out.generate_walls(group, i, outlines, (tops[i], heights[i]), origin);
                     let Some(id) = id else {
                         cached.push(None);
                         continue;
@@ -539,7 +544,7 @@ impl PreparedRegions {
         group: &[usize],
         i: usize,
         outlines: &[Vec<ExPolygon>],
-        height: f64,
+        (print_z, height): (f64, f64),
         origin: Point,
     ) -> (Option<usize>, Vec<(ExPolygon, IslandWalls)>) {
         let active: Vec<_> = self.layers[i]
@@ -567,6 +572,7 @@ impl PreparedRegions {
                 outlines,
                 &self.table[best.region].settings,
                 i,
+                print_z,
                 height,
                 origin,
                 &crate::painting::query::FuzzyLayer {
@@ -696,7 +702,7 @@ impl PreparedRegions {
                             &self.wall_groups[gi],
                             i,
                             outlines,
-                            heights[i],
+                            (tops[i], heights[i]),
                             origin,
                         );
                         for (_, w) in &mut walls {
@@ -789,7 +795,7 @@ impl PreparedRegions {
 
         let mut paths = vec![];
         let mut ids = vec![];
-        let mut pos = Point::default();
+        let mut pos = self.starts.get(i).copied().unwrap_or_default();
         for slice in slice_order
             .into_iter()
             .chain(std::iter::once(lslices.len()))
@@ -911,7 +917,7 @@ impl PreparedRegions {
                             &self.wall_groups[gi],
                             i,
                             outlines,
-                            heights[i],
+                            (tops[i], heights[i]),
                             origin,
                         );
                         id.map(|id| (id, walls))
@@ -965,7 +971,7 @@ impl PreparedRegions {
 
         let mut paths = vec![];
         let mut ids = vec![];
-        let mut pos = Point::default();
+        let mut pos = self.starts.get(i).copied().unwrap_or_default();
         let no_fill = FillAreas::new(&FillSurfaces::default());
         for slice in slice_order
             .into_iter()

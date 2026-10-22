@@ -37,6 +37,10 @@
 // Changes: Orca ironing is a separate per-island pass after fills, chained from their endpoint.
 // Changes: Brick layers: a per-object plan of raised walls, applied to each finished layer.
 // Changes: An object without regions classifies its surfaces beside the seams and keeps those walls for its first toolpaths; generated supports let region preparation go on to the prepass layers.
+// Source: prusaslicer@b028299c77 src/libslic3r/PrintObjectSlice.cpp :: slice_volumes
+// Source: prusaslicer@b028299c77 src/libslic3r/LayerRegion.cpp :: LayerRegion::make_perimeters
+// Source: prusaslicer@b028299c77 src/libslic3r/GCode.cpp :: SmoothPathGenerator::operator()
+// Changes: Spiral vase: layers above the bottom sliced to their largest outline, classic walls on spiral layers, no seam gap on spiral layers, and bottom layers starting where the layer below ended (the last position carried from layer to layer).
 
 //! The slicing pipeline for one object: mesh → layers → walls → top/bottom → infill → ordered toolpaths.
 //!
@@ -131,6 +135,17 @@ pub trait LayerSource: Sync {
     /// Called by the exporter once a layer's speeds and fans are final, before its G-code is
     /// written. `layer_time_s` is the layer's estimated print time after cooling slowdown.
     fn emitted(&self, _layer: usize, _paths: &[PathEmission], _layer_time_s: f64) {}
+    /// Called by the exporter, before [`Self::emitted`], for a layer it prints as a spiral vase
+    /// spiral (Z rising over the layer), with the layer as it prints it (its loop starts where
+    /// the previous layer ended); `last`: the print's last layer, which also prints a
+    /// finishing loop at its own height.
+    fn spiral_layer(
+        &self,
+        _layer: usize,
+        _scheduled: &crate::print_job::ScheduledLayer,
+        _last: bool,
+    ) {
+    }
     fn print_job(&self) -> Option<&crate::print_job::PreparedPrint> {
         None
     }
@@ -246,6 +261,10 @@ pub struct PreparedObject {
     displacement_warnings: Vec<String>,
     /// Brick layers: where this object's raised inner walls print raised.
     brick: Option<crate::brick_layers::Plan>,
+    /// Spiral vase: where each bottom layer's toolpaths start, the end of the layer below (as
+    /// both slicers carry the last position from layer to layer, and spiral vase splits every
+    /// loop at the point nearest it). The exporter carries it on over the spiral layers.
+    spiral_starts: Vec<Point>,
 }
 
 /// Slices a mesh that is already placed on the bed (resting on z = 0) into outlines.
@@ -487,7 +506,16 @@ pub(crate) fn prepare_with_source(
         };
         check(observer)?;
         let dropped = slices.iter().map(|l| l.dropped_chains).sum();
-        (slices.into_iter().map(|l| l.islands).collect(), dropped)
+        let mut outlines: Vec<Vec<ExPolygon>> = slices.into_iter().map(|l| l.islands).collect();
+        // Spiral vase: above the bottom layers the object is sliced to its largest outline,
+        // holes closed (slice_volumes' PositiveLargestContour).
+        if s.spiral_vase {
+            let from = crate::spiral_vase::slice_from_layer(s, &mid_zs);
+            for islands in outlines.iter_mut().skip(from) {
+                *islands = crate::spiral_vase::largest_contour(islands);
+            }
+        }
+        (outlines, dropped)
     };
     // Negative volumes can remove the top of a model entirely.
     while outlines.last().is_some_and(Vec::is_empty) {
@@ -730,11 +758,13 @@ pub(crate) fn prepare_with_source(
             .unwrap_or_default(),
         brick: None,
         plain_walls: Vec::new(),
+        spiral_starts: Vec::new(),
     };
     if let Some(plain) = plain {
         (obj.surfaces, obj.infill, obj.plain_walls) = plain?;
     }
     obj.brick = obj.brick_plan();
+    obj.chain_spiral_starts();
     Ok(obj)
 }
 
@@ -958,6 +988,7 @@ impl PlainParts<'_> {
                 self.outlines,
                 s,
                 i,
+                self.tops[i],
                 self.heights[i],
                 self.origin,
                 &crate::texture_skin::Painting(t),
@@ -968,6 +999,7 @@ impl PlainParts<'_> {
             self.outlines,
             s,
             i,
+            self.tops[i],
             self.heights[i],
             self.origin,
         )
@@ -1051,6 +1083,30 @@ impl PlainParts<'_> {
 }
 
 impl PreparedObject {
+    /// Spiral vase: the start of each bottom layer's toolpaths, generated in order from the
+    /// end of the one below ([`PreparedObject::spiral_starts`]). A raft is not accounted for.
+    fn chain_spiral_starts(&mut self) {
+        let s = &self.settings;
+        if !s.spiral_vase || s.raft_layers > 0 {
+            return;
+        }
+        let n = self.tops.len();
+        let bottom = (0..n)
+            .find(|&i| crate::spiral_vase::spiral_layer(s, i))
+            .unwrap_or(n);
+        let mut pos = Point::default();
+        for i in 0..bottom {
+            self.spiral_starts.push(pos);
+            if let Some(regions) = &mut self.regions {
+                regions.starts.push(pos);
+            }
+            let layer = self.layer(i);
+            if let Some(end) = layer.paths.last().and_then(|p| p.points.last()) {
+                pos = *end;
+            }
+        }
+    }
+
     /// Infill areas of layer `i` by type, indexed for lookup per island.
     fn fill_areas(&self, i: usize) -> FillAreas {
         FillAreas::new(&self.surfaces[i])
@@ -1077,7 +1133,7 @@ impl PreparedObject {
         let areas = self.fill_areas(i);
         let f = LayerFlows::new(s, i, self.heights[i]);
         let mut paths = Vec::new();
-        let mut pos = Point::default();
+        let mut pos = self.spiral_starts.get(i).copied().unwrap_or_default();
         let mut remaining: Vec<&(ExPolygon, IslandWalls)> = walls.iter().collect();
         if !s.adhesion.orca {
             // Layer::make_slices: lslice_indices_sorted_by_print_order = chain_expolygons(lslices).
@@ -1461,8 +1517,13 @@ fn seam_arachne_run(
     if tail.points.len() >= 2 {
         out.push(tail);
     }
-    // Seam gap: stop short of the start so the loop doesn't extrude onto itself.
-    let mut gap = scale(s.seam.gap.resolve(s.nozzle_diameter, 1.0)) as f64;
+    // Seam gap: stop short of the start so the loop doesn't extrude onto itself (not on a
+    // spiral vase layer, whose loop runs on into the next layer).
+    let mut gap = if crate::spiral_vase::spiral_layer(s, layer.index) {
+        0.0
+    } else {
+        scale(s.seam.gap.resolve(s.nozzle_diameter, 1.0)) as f64
+    };
     while gap > 0.0 {
         let Some(p) = out.last_mut() else { break };
         let len = crate::geometry::polyline_length(&p.points);
@@ -1904,6 +1965,7 @@ pub(crate) fn make_region_walls(
     outlines: &[Vec<ExPolygon>],
     s: &PrintSettings,
     i: usize,
+    print_z: f64,
     height: f64,
     origin: Point,
 ) -> Vec<(ExPolygon, IslandWalls)> {
@@ -1912,22 +1974,38 @@ pub(crate) fn make_region_walls(
         outlines,
         s,
         i,
+        print_z,
         height,
         origin,
         &crate::fuzzy_skin::NoPainting,
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn make_region_walls_with_painting(
     here: &[ExPolygon],
     outlines: &[Vec<ExPolygon>],
     s: &PrintSettings,
     i: usize,
+    print_z: f64,
     height: f64,
     origin: Point,
     painting: &dyn crate::fuzzy_skin::FuzzySkinPainting,
 ) -> Vec<(ExPolygon, IslandWalls)> {
     let _timing = crate::timing::Span::new(crate::timing::Stage::Walls);
+    // Spiral vase layers: LayerRegion::make_perimeters runs the classic generator (never
+    // Arachne) with spiral_vase set.
+    let spiral = crate::spiral_vase::wall_layer(s, i, print_z);
+    let classic;
+    let s = if spiral && s.perimeter_generator != crate::settings::PerimeterGenerator::Classic {
+        classic = PrintSettings {
+            perimeter_generator: crate::settings::PerimeterGenerator::Classic,
+            ..s.clone()
+        };
+        &classic
+    } else {
+        s
+    };
     let f = LayerFlows::new(s, i, height);
     let params = WallParams {
         perimeters: s.perimeters,
@@ -1940,6 +2018,7 @@ pub(crate) fn make_region_walls_with_painting(
         gap_fill: s.has_gap_fill(),
         filter_out_gap_fill: s.small_features.filter_out_gap_fill,
         fill_density: s.fill_density,
+        spiral_vase: spiral,
     };
     if here.is_empty() {
         return vec![];

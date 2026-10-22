@@ -181,7 +181,7 @@ Mica user profile (TOML, only the differences, `inherits` = system preset) and s
 **This plate.** "Settings for ▾" offers *This plate* next to *All objects* and the objects. It
 lists only the current plate's own settings (`Plate::overrides`), each with the changed marker,
 ↺ / × back to the global value and "All plates: …" under it; "+ Add plate setting" offers
-Orca's plate options first (bed type on printers with bed types, print sequence, spiral vase),
+Orca's plate options first (bed type and spiral vase on Orca-rules printers, print sequence),
 then the object-override groups; searching adds any print setting. They apply to that plate's
 slice only (`App::plate_config`; a bed type re-resolves the Orca bundle on that bed, so bed
 temperatures follow). Saved as Orca's own plate keys in `model_settings.config` (`bed_type`,

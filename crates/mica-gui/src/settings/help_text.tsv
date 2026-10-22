@@ -303,7 +303,7 @@ solid_infill_every_layers	Adds a solid layer every this many layers, which stiff
 solid_infill_extruder	The tool that prints solid infill.
 solid_infill_extrusion_width	Line width of internal solid infill, in mm or as a percentage of the layer height. 0 uses the default line width.
 solid_infill_speed	Speed of solid infill inside the part, which is not the visible top or bottom surface.
-spiral_vase	Prints the model as a single continuous wall that spirals upward, with a solid bottom and no seam. Ideal for vases and containers; the model gets no top and no infill.
+spiral_vase	One wall printed as a continuous spiral that rises with every move, so there is no seam. The bottom layers stay solid; there is no top and no infill. Prints one object at a time, without supports.
 staggered_inner_seams	Shifts the seams of inner walls back step by step, in a zigzag, so they don't stack directly behind the outer seam.
 standby_temperature_delta	How much tools that are waiting cool down, when ooze prevention is on. A filament's own idle temperature takes precedence.
 start_filament_gcode	Custom G-code run each time this filament starts printing, after a tool change or at the start of the print.

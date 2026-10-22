@@ -641,7 +641,7 @@ fn slice_job(a: SliceArgs, job: &mica_core::job::Boundary) -> Result<Option<Slic
     for warning in mica_core::safety::config_warnings(&config) {
         eprintln!("warning: {warning}");
     }
-    let settings = PrintSettings::from_config(&config).map_err(|e| e.to_string())?;
+    let mut settings = PrintSettings::from_config(&config).map_err(|e| e.to_string())?;
     // The GUI places models by the same rule (`Bed::center`).
     let center = a
         .center
@@ -660,10 +660,14 @@ fn slice_job(a: SliceArgs, job: &mica_core::job::Boundary) -> Result<Option<Slic
             return Ok(None);
         }
     }
+    // Spiral vase forces its settings (normalize_fdm) for slicing; the project export above
+    // kept the user's values.
+    if mica_core::spiral_vase::normalize(&mut config) {
+        settings = PrintSettings::from_config(&config).map_err(|e| e.to_string())?;
+    }
     // Features turned off in Preferences slice without them; the project export above kept
     // their data.
     use mica_profiles::features::Feature;
-    let mut settings = settings;
     let config_textures = mica_core::features::uses_textures(&config, &[]);
     if !a.features.textures {
         mica_core::features::config_without_textures(&mut config);

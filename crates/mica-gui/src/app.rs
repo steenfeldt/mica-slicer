@@ -6,6 +6,8 @@
 // Source: orca@8500fcdcca src/slic3r/GUI/3DScene.cpp :: adjust_color_for_rendering
 // Changes: Near-black display colours lifted so the brightest channel reaches 0.2, keeping the hue (Orca greys them).
 // Changes: Engine choices read mica_slicing_rules (mica_core::rules), not gcode_flavor or the presence of Orca keys (docs/slicing-rules.md).
+// Source: prusaslicer@b028299c77 src/slic3r/GUI/ConfigManipulation.cpp :: ConfigManipulation::update_print_fff_config
+// Changes: Turning spiral vase on in the print settings also sets what it needs (mica_core::spiral_vase::companions) in the same undo step, with a notice instead of a dialog.
 
 //! Application state and lifecycle: profiles and preferences, plates and objects, undo,
 //! background slicing (manual and automatic), and the top-level window layout. The panels
@@ -1898,6 +1900,29 @@ impl App {
                             self.overlays.get_mut(target).remove(p.prusa);
                         }
                         Edit::Reset(key)
+                    }
+                    // Turning spiral vase on sets what it needs in the same step, as both
+                    // slicers' settings dialogs offer to (ConfigManipulation).
+                    Edit::Set { key, raw }
+                        if key == "spiral_vase" && matches!(raw.trim(), "1" | "true") =>
+                    {
+                        let companions = self
+                            .effective_config()
+                            .map(mica_core::spiral_vase::companions)
+                            .unwrap_or_default();
+                        if !companions.is_empty() {
+                            let names: Vec<String> =
+                                companions.iter().map(|(k, _)| plain_label(k)).collect();
+                            self.notify_info(format!(
+                                "Spiral vase is on: it prints one wall without top layers, infill or supports, so these were set for it: {}.",
+                                names.join(", ")
+                            ));
+                        }
+                        for (k, v) in companions {
+                            written.push(k.clone());
+                            self.overlays.get_mut(target).insert(k, v);
+                        }
+                        Edit::Set { key, raw }
                     }
                     edit => edit,
                 };

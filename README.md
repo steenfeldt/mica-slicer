@@ -37,7 +37,6 @@ have not been checked print by print. Which slicer's rules a printer follows is 
 
 Not supported yet:
 
-- **Spiral vase.** A profile or project with it on slices as a normal print, with a warning.
 - **Absolute extrusion (M82).** Turn on *Use relative E distances* in Printer settings;
   Mica refuses the slice otherwise.
 - **MMU** (single-extruder multi-material, e.g. the Prusa MMU3). Printers with one nozzle

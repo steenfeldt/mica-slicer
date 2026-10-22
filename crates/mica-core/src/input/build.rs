@@ -3,6 +3,9 @@
 // Source: orca@8500fcdcca src/libslic3r/PrintConfig.cpp :: DynamicPrintConfig::normalize_fdm_2
 // Source: orca@8500fcdcca src/libslic3r/Print.cpp :: Print::extruders, Print::support_material_extruders
 // Changes: Only the independent support layer height is normalized here; the tower itself is decided by the print job.
+// Source: prusaslicer@b028299c77 src/libslic3r/Print.cpp :: Print::validate
+// Source: orca@8500fcdcca src/libslic3r/Print.cpp :: Print::validate
+// Changes: Spiral vase checks (supports, several objects, several regions or filaments) through mica_core::spiral_vase, before and after the preparation.
 
 //! The one way the CLI and the GUI turn a plate's objects and its configuration into a print:
 //! placement checks, tool clamping, instance sharing, parallel preparation, the single-object
@@ -106,6 +109,20 @@ pub fn prepare_plate<'o>(
         })
         .collect();
     let mut objects = objects;
+    // Spiral vase refuses supports and several objects before any geometry work; its region
+    // check follows the preparation.
+    if crate::spiral_vase::enabled(config) {
+        crate::spiral_vase::validate_config(config)?;
+        let infos: Vec<_> = objects
+            .iter()
+            .map(|o| crate::spiral_vase::ObjectInfo {
+                name: &o.name,
+                config: &o.config,
+                regions: Vec::new(),
+            })
+            .collect();
+        crate::spiral_vase::validate_objects(config, &infos)?;
+    }
     normalize_orca_tower(&mut objects, config);
     let mut warnings = Vec::new();
     let mut preflight = Vec::new();
@@ -173,6 +190,7 @@ pub fn prepare_plate<'o>(
         out[i] = Some(first.instance(o.name, o.object_id, o.instance_id, o.mesh, shift));
     }
     let objects: Vec<PrintObject> = out.into_iter().flatten().collect();
+    spiral_vase_check(&objects, config)?;
     for object in &objects {
         if object.prepared.report.dropped_chains > 0 {
             warnings.push(format!(
@@ -195,6 +213,41 @@ pub fn prepare_plate<'o>(
         preflight,
         notes,
     })
+}
+
+/// `Print::validate`'s spiral vase region check (`crate::spiral_vase`): one set of wall settings
+/// and one filament per object.
+fn spiral_vase_check(objects: &[PrintObject], config: &Config) -> Result<(), String> {
+    if !crate::spiral_vase::enabled(config) {
+        return Ok(());
+    }
+    let infos: Vec<crate::spiral_vase::ObjectInfo<'_>> = objects
+        .iter()
+        .map(|o| {
+            let prepared = &o.prepared;
+            let regions = if prepared.has_regions() {
+                (0..prepared.region_count())
+                    .filter_map(|id| prepared.region(id))
+                    .flat_map(|r| {
+                        let tools: Vec<_> = if r.by_tool.len() > 1 {
+                            r.by_tool.iter().map(|(_, s)| (s, None)).collect()
+                        } else {
+                            vec![(&r.settings, r.tools.0[0])]
+                        };
+                        tools
+                    })
+                    .collect()
+            } else {
+                vec![(prepared.settings(), o.tools.0[0])]
+            };
+            crate::spiral_vase::ObjectInfo {
+                name: &o.name,
+                config: &o.config,
+                regions,
+            }
+        })
+        .collect();
+    crate::spiral_vase::validate_objects(config, &infos)
 }
 
 /// OrcaSlicer's `DynamicPrintConfig::normalize_fdm_2`, applied when the print is set up

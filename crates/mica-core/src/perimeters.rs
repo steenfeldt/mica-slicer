@@ -14,6 +14,8 @@
 // Source: orca@8500fcdcca src/libslic3r/PerimeterGenerator.cpp :: PerimeterGenerator::split_top_surfaces, traverse_loops
 // Changes: Classic single wall on top surfaces (Orca and Prusa variants), Orca offset2 inner walls,
 // Changes: precise_outer_wall spacing, fill_no_overlap, and overhang splitting of closed classic loops.
+// Source: prusaslicer@b028299c77 src/libslic3r/ExPolygon.cpp :: keep_largest_contour_only
+// Changes: Spiral vase layers keep only the largest outer-wall offset (process_classic).
 
 //! Wall loops ("perimeters"), thin walls and gap fill for one island.
 
@@ -77,6 +79,9 @@ pub struct WallParams {
     pub filter_out_gap_fill: f64,
     /// Sparse infill density 0–1; with none, no gaps are looked for inside the innermost loop.
     pub fill_density: f64,
+    /// A spiral vase layer (`crate::spiral_vase::wall_layer`): the outer wall keeps only the
+    /// largest of the parts its offset splits into (`PerimeterGenerator::process_classic`).
+    pub spiral_vase: bool,
 }
 
 /// Select the configured wall generator. The original `make_walls` API remains explicitly classic.
@@ -388,6 +393,11 @@ fn make_walls_classic(
                     for ex in &narrow {
                         thin_walls.extend(medial_axis(ex, min_width, ext_width + ext_spacing2));
                     }
+                }
+                let mut offsets = offsets;
+                if p.spiral_vase {
+                    // Spiral vase: one loop, around the largest part only.
+                    crate::spiral_vase::keep_largest_contour_only(&mut offsets);
                 }
                 offsets
             } else {
@@ -882,6 +892,7 @@ mod tests {
             gap_fill: true,
             filter_out_gap_fill: 0.,
             fill_density: 0.15,
+            spiral_vase: false,
         }
     }
 

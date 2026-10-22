@@ -61,6 +61,9 @@
 // Changes: The time analysis reads the first-pass text on its own thread while it is written, instead of reading the finished file again.
 // Source: prusaslicer@b028299c77 src/libslic3r/BuildVolume.cpp :: BuildVolume::all_paths_inside
 // Changes: The printable-area check tests extrusion centerlines against the bed outline, Orca exclusion areas and the height (mica_core::build_volume) and names the feature, its object and where.
+// Source: prusaslicer@b028299c77 src/libslic3r/GCode.cpp :: GCodeGenerator::_do_export, GCodeGenerator::process_layer, GCodeGenerator::change_layer, GCodeGenerator::travel_to_first_position
+// Source: orca@8500fcdcca src/libslic3r/GCode.cpp :: GCode::_do_export, GCode::process_layer, GCode::change_layer
+// Changes: Spiral vase: each layer's G-code from its layer change passes the SpiralVase post-processor; process_layer's enable condition; no ramping layer change on spiral layers; the move to the first point without travel acceleration; Orca moves to the layer Z in change_layer; the last layer's label stop after the post-processor.
 
 //! Turns sliced layers into a complete G-code program, running the profile's G-code templates.
 
@@ -919,13 +922,26 @@ fn export(
     // AvoidCrossingPerimeters' one-shot modifiers and GCodeGenerator::last_position (unquantized).
     let mut acp = AcpState::default();
     let mut acp_from: Option<(f64, f64)> = None;
+    // Spiral vase: every layer's G-code passes through the post-processor (SpiralVase).
+    let mut spiral = crate::spiral_vase::SpiralVase::new(config);
     // The next batch is fetched and prepared on a helper thread while this thread emits the current
     // one. Preparation only depends on the immutable source and on the overhang (curl) history as
     // left by the previous batch, which travels with the task; emission never touches either, so the
     // batches are prepared in the same order with the same state as a serial fetch.
+    let spiral_print = spiral.is_some();
     let fetch = |range: std::ops::Range<usize>, mut overhangs: crate::export_batch::Carry| {
         let mut batch = obj.scheduled_toolpaths(range.clone());
         let prepared = batch_parameters.prepare(&mut batch, range.start, &mut overhangs);
+        if spiral_print {
+            // The spiral layers as they print (their loops start where the layer below
+            // ended), for the preview.
+            for (k, scheduled) in batch.iter().enumerate() {
+                let li = range.start + k;
+                if spiral_candidate(s, scheduled, obj.layer_outlines(li)) {
+                    obj.spiral_layer(li, scheduled, li + 1 == layer_count);
+                }
+            }
+        }
         (batch, prepared, overhangs)
     };
     let fetch = &fetch;
@@ -1058,6 +1074,9 @@ fn export(
                 }
             }
 
+            // process_layer: whether this layer becomes a spiral.
+            let spiral_on = spiral.is_some()
+                && spiral_layer_enabled(s, scheduled, obj.layer_outlines(li), multi.as_ref(), li);
             let travel_timer = mica_core::timing::Span::new(mica_core::timing::Stage::ExportTravel);
             let mut travel_geometry = prepared.travel;
             let acp_geometry = |i: usize| acp_layer_geometry(obj, i, s);
@@ -1071,12 +1090,8 @@ fn export(
                 obj.layer_outlines(li),
             )
             .with_source_cached(obj, li, &mut travel_geometry, Some(&overhang_pairs))
-            .with_prusa_avoid_crossing(
-                config,
-                acp_current,
-                acp_previous,
-                acp_external_width,
-            );
+            .with_prusa_avoid_crossing(config, acp_current, acp_previous, acp_external_width)
+            .spiral_layer(spiral_on);
             let tool_travels = multi.as_ref().map(|m| {
                 m.tools
                     .iter()
@@ -1094,6 +1109,7 @@ fn export(
                             acp_previous,
                             acp_external_width,
                         )
+                        .spiral_layer(spiral_on)
                     })
                     .collect::<Vec<_>>()
             });
@@ -1469,7 +1485,10 @@ fn export(
                 for &point in &points[..points.len() - 1] {
                     w.travel_to_xyz_force(point, travel_speed, travel_speed_z);
                 }
-            } else if object_start.is_none() && (travels.is_orca() == first) {
+            } else if object_start.is_none()
+                && (travels.is_orca() == first || (travels.is_orca() && spiral.is_some()))
+            {
+                // GCode::change_layer (Orca): a spiral vase print moves to the layer's Z at once.
                 // GCodeGenerator::change_layer moves no Z on the first layer (it only adds
                 // z_offset to the writer's position); the move to the first point lowers it.
                 w.move_z(z, travel_speed_z);
@@ -1620,9 +1639,26 @@ fn export(
                     && (multi.as_ref().is_none_or(|m| m.job.ordering.used.len() < 2)
                         || (p[p.len() - 2][2] - z).abs() < 0.0005)
             });
+            // travel_to_first_position on a spiral vase layer of a ramping printer: change_layer
+            // did not ramp, so the nozzle moves straight to the first point (a move the spiral
+            // drops) at the layer's Z (already there: CoolingBuffer drops the repeated Z).
+            let spiral_arrival = spiral_on && !orca && travels.ramps() && w.position().is_some();
             for (index, path) in layer.paths.iter().enumerate() {
                 // Raised walls of an earlier layer stand below this layer: travels may drop again.
                 w.settle_raised(layer.print_z);
+                if index == 0 && spiral_arrival {
+                    if travel_labels {
+                        let text =
+                            label_change(&mut multi, &mut single_label, path_label(0), config);
+                        w.raw_nonempty(&text);
+                    }
+                    let (sx, sy) = mm(path.points[0]);
+                    w.travel_to_xy_force_line(sx, sy, travel_speed);
+                    let first_z = crate::travels::scaled_z(crate::seam::start_z(path, layer));
+                    if (w.z() - first_z).abs() > 1e-9 {
+                        w.travel_to_z_force(first_z, travel_speed_z);
+                    }
+                }
                 if index == 0 && arrive {
                     // travel_to_first_position: insert_gcode before the forced XY and Z moves.
                     if travel_labels {
@@ -1939,7 +1975,8 @@ fn export(
                         (sx, sy),
                         travel_from,
                         index,
-                        (far || (travels.is_orca() && index == 0)) && s.retract_length > 0.0,
+                        (far || (travels.is_orca() && index == 0 && layer_retract))
+                            && s.retract_length > 0.0,
                         travel_speed,
                         travel_speed_z,
                     );
@@ -2093,9 +2130,12 @@ fn export(
             if !orca {
                 w.set_acceleration(s.default_acceleration);
             }
+            // _do_export's label stop after the last layer comes after the spiral vase
+            // post-processor (outside the layer's G-code).
+            let last_of_spiral = spiral.is_some() && li + 1 == layer_count;
             if travel_labels {
                 // _do_export: maybe_stop_instance after the last layer.
-                if li + 1 == layer_count && !is_multi {
+                if li + 1 == layer_count && !is_multi && !last_of_spiral {
                     let text = label_change(&mut multi, &mut single_label, None, config);
                     w.raw_nonempty(&text);
                 }
@@ -2128,8 +2168,35 @@ fn export(
                 }
                 // PrusaSlicer keeps the open label across layers (maybe_change_instance only
                 // switches it), closing it after the last layer; Orca closes it every layer.
-                if orca || li + 1 == layer_count {
+                if orca || (li + 1 == layer_count && !last_of_spiral) {
                     m.end_label(&mut w, config);
+                }
+            }
+            if let Some(spiral) = &mut spiral {
+                // The layer's G-code from its layer change on (the cooling buffer's fan lines and
+                // a move to the next object come before it, outside process_layer's result).
+                spiral.enable(spiral_on);
+                let text = w.take_output();
+                let start = text
+                    .find(";LAYER_CHANGE\n")
+                    .filter(|&i| i == 0 || text.as_bytes()[i - 1] == b'\n')
+                    .unwrap_or(text.len());
+                let (head, body) = text.split_at(start);
+                spiral.follow(head);
+                let processed = spiral.process_layer(body, li + 1 == layer_count);
+                let added =
+                    crate::spiral_vase::extruded(&processed) - crate::spiral_vase::extruded(body);
+                w.restore_output(format!("{head}{processed}"), added);
+                if last_of_spiral {
+                    if travel_labels && !is_multi {
+                        let text = label_change(&mut multi, &mut single_label, None, config);
+                        w.raw_nonempty(&text);
+                    }
+                    if let Some(m) = &mut multi
+                        && !orca
+                    {
+                        m.end_label(&mut w, config);
+                    }
                 }
             }
         }
@@ -2487,6 +2554,51 @@ impl<W: std::io::Write> std::io::Write for EncoderSink<W> {
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
+}
+
+/// `process_layer`'s spiral vase condition: the settings allow a spiral on this layer
+/// (`mica_core::spiral_vase::spiral_layer`), it prints one object (`layers.size() == 1`) without
+/// supports, its region printed one loop of one island and no fills, and (Orca) it changes no
+/// tool.
+fn spiral_layer_enabled(
+    s: &PrintSettings,
+    scheduled: &mica_core::print_job::ScheduledLayer,
+    outlines: Option<&[mica_core::geometry::ExPolygon]>,
+    multi: Option<&crate::multi::Multi>,
+    li: usize,
+) -> bool {
+    let tool_change = multi.is_some_and(|m| {
+        m.job.ordering.layers[li]
+            .extruders
+            .iter()
+            .any(|&t| t != m.active)
+    });
+    spiral_candidate(s, scheduled, outlines) && !tool_change
+}
+
+/// [`spiral_layer_enabled`] without the tool change (known only while writing).
+fn spiral_candidate(
+    s: &PrintSettings,
+    scheduled: &mica_core::print_job::ScheduledLayer,
+    outlines: Option<&[mica_core::geometry::ExPolygon]>,
+) -> bool {
+    let layer = &scheduled.layer;
+    if !mica_core::spiral_vase::spiral_layer(s, layer.index) || layer.paths.is_empty() {
+        return false;
+    }
+    let mut objects = scheduled.assignments.iter().map(|a| a.object);
+    if let Some(first) = objects.next()
+        && objects.any(|o| o != first)
+    {
+        return false;
+    }
+    let walls_only = layer.paths.iter().all(|p| {
+        matches!(
+            p.role,
+            Role::ExternalPerimeter | Role::Perimeter | Role::OverhangPerimeter
+        )
+    });
+    walls_only && outlines.is_none_or(|o| o.len() <= 1)
 }
 
 /// `GCodeGenerator::gcode_to_point`: a G-code position back to scaled object coordinates, which

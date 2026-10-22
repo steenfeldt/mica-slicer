@@ -509,6 +509,9 @@ pub fn slice_with_custom_gcode(
     if objects.is_empty() {
         return Err("Open a model first".into());
     }
+    // Spiral vase forces its settings for the slice, as the CLI does (normalize_fdm).
+    let mut config = config;
+    mica_core::spiral_vase::normalize(&mut config);
     // Tools beyond the printer's count print with its last tool (mixed colors are tools
     // after the physical ones).
     let count = config.vector_len("nozzle_diameter").max(1);
@@ -569,6 +572,7 @@ pub fn slice_with_custom_gcode(
         error: Mutex::new(None),
         settings,
         pending: Mutex::new(BTreeMap::new()),
+        spirals: Mutex::new(BTreeMap::new()),
         cancel,
         report,
     };
@@ -632,6 +636,7 @@ pub fn slice_calibration(
         error: Mutex::new(None),
         settings,
         pending: Mutex::new(BTreeMap::new()),
+        spirals: Mutex::new(BTreeMap::new()),
         cancel,
         report,
     };
@@ -797,6 +802,9 @@ struct Capture<'a, S: LayerSource> {
     /// Layers handed to the exporter and not yet reported back with their emitted speeds
     /// (at most one export batch).
     pending: Mutex<BTreeMap<usize, ScheduledLayer>>,
+    /// Spiral vase layers the exporter reported (`true`: the last layer, with its finishing
+    /// loop), until they reach the preview.
+    spirals: Mutex<BTreeMap<usize, bool>>,
     cancel: &'a AtomicBool,
     report: Report<'a>,
 }
@@ -804,6 +812,7 @@ impl<S: LayerSource> Capture<'_, S> {
     /// Writes a layer to the preview, with the exporter's speeds when it reported them.
     fn record(
         &self,
+        index: usize,
         layer: &ScheduledLayer,
         emitted: Option<(&[mica_core::print::PathEmission], f64)>,
     ) {
@@ -821,8 +830,15 @@ impl<S: LayerSource> Capture<'_, S> {
                         .and_then(|c| c.temperature)
                 })
                 .collect();
+            let spiral = self
+                .spirals
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .remove(&index);
             let result = match emitted {
-                Some((paths, time)) => builder.push_emitted(layer, &self.settings, paths, time),
+                Some((paths, time)) => {
+                    builder.push_emitted(layer, &self.settings, paths, time, spiral)
+                }
                 None => builder.push(layer, &self.settings),
             }
             .and_then(|()| {
@@ -842,8 +858,8 @@ impl<S: LayerSource> Capture<'_, S> {
     /// Layers the exporter never reported (none in practice) still reach the preview.
     fn flush_pending(&self) {
         let pending = std::mem::take(&mut *self.pending.lock().unwrap_or_else(|p| p.into_inner()));
-        for layer in pending.values() {
-            self.record(layer, None);
+        for (&index, layer) in &pending {
+            self.record(index, layer, None);
         }
     }
 }
@@ -866,8 +882,23 @@ impl<S: LayerSource> LayerSource for Capture<'_, S> {
             .unwrap_or_else(|p| p.into_inner())
             .remove(&layer)
         {
-            self.record(&l, Some((paths, layer_time_s)));
+            self.record(layer, &l, Some((paths, layer_time_s)));
         }
+    }
+    fn spiral_layer(&self, layer: usize, scheduled: &ScheduledLayer, last: bool) {
+        // The exporter's copy: a spiral's loop starts where the previous layer ended.
+        if let Some(pending) = self
+            .pending
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get_mut(&layer)
+        {
+            *pending = scheduled.clone();
+        }
+        self.spirals
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(layer, last);
     }
     fn print_job(&self) -> Option<&PreparedPrint> {
         self.source.print_job()

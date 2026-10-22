@@ -87,6 +87,10 @@ pub struct Profile {
     pub progress_required: bool,
     /// Optional known tower XY bounds (including brim). Omit when the footprint is unknown.
     pub tower: Option<[(f64, f64); 2]>,
+    /// Spiral vase: Z rises within a layer, the first spiral layer ramps its flow in and the
+    /// last layer prints once more at its own height while its flow ramps out
+    /// (`mica_gcode::spiral_vase`). Also turned on by the file's own configuration.
+    pub spiral_vase: bool,
 }
 impl Profile {
     pub fn from_config(c: &Config) -> Result<Self, String> {
@@ -158,6 +162,7 @@ impl Profile {
                 .string("printer_notes")
                 .is_some_and(|v| v.contains("PRINTER_MODEL_XL")),
             progress_required: !c.bool("disable_m73").unwrap_or(false),
+            spiral_vase: mica_core::spiral_vase::enabled(c),
             tower: None,
         })
     }
@@ -226,6 +231,13 @@ struct Simulator<'a> {
     filament_change_prime: bool,
     totals: Option<Vec<f64>>,
     thumbnail: Option<TextThumbnail>,
+    /// Spiral vase checks (`Profile::spiral_vase` or the file's configuration).
+    vase: bool,
+    /// The current and the previous layer extruded below their layer marker (a spiral).
+    spiral_layer: bool,
+    previous_spiral_layer: bool,
+    /// The finishing loop of a spiral vase: the last layer once more at the same Z.
+    vase_finish: bool,
 }
 impl<'a> Simulator<'a> {
     fn new(p: &'a Profile) -> Self {
@@ -276,6 +288,10 @@ impl<'a> Simulator<'a> {
             filament_change_prime: false,
             totals: None,
             thumbnail: None,
+            vase: p.spiral_vase,
+            spiral_layer: false,
+            previous_spiral_layer: false,
+            vase_finish: false,
         }
     }
     fn issue(&mut self, severity: Severity, rule: &'static str, message: impl Into<String>) {
@@ -338,10 +354,17 @@ impl<'a> Simulator<'a> {
         if text == "EXECUTABLE_BLOCK_START" {
             self.executable = true;
         }
+        // The file's own configuration (a binary file's metadata comes before its G-code).
+        if matches!(text, "spiral_vase = 1" | "spiral_mode = 1") {
+            self.vase = true;
+        }
         if text == "LAYER_CHANGE" || text == "CHANGE_LAYER" {
             if self.pending_layer {
                 self.error("layer-marker", "layer change has no Z marker");
             }
+            self.previous_spiral_layer = self.spiral_layer;
+            self.spiral_layer = false;
+            self.vase_finish = false;
             self.pending_layer = true;
             self.report.layers += 1;
             self.custom = false;
@@ -354,7 +377,10 @@ impl<'a> Simulator<'a> {
                 if !z.is_finite() || z <= 0. || z > self.p.max_z + 0.01 {
                     self.error("layer-z", format!("invalid layer Z {z}"));
                 }
-                if self.layer_z.is_some_and(|old| z < old + 0.0001) {
+                if self.vase && self.layer_z.is_some_and(|old| (z - old).abs() < 0.0001) {
+                    // Spiral vase: the finishing loop repeats the last layer's marker.
+                    self.vase_finish = true;
+                } else if self.layer_z.is_some_and(|old| z < old + 0.0001) {
                     // A sequentially printed object starts again from the bed. That is only
                     // safe once the head rose above everything printed and stayed there.
                     // A wipe may stay low; a travel to the next object may not.
@@ -873,12 +899,34 @@ fn read_text(mut reader: impl BufRead, simulator: &mut Simulator<'_>) {
         }
     }
 }
+/// Whether the configuration block at the end of a text G-code file turns spiral vase on
+/// (PrusaSlicer `; spiral_vase = 1`, OrcaSlicer `; spiral_mode = 1`).
+fn declares_spiral_vase(path: &Path) -> std::io::Result<bool> {
+    use std::io::{Seek, SeekFrom};
+    let mut file = std::fs::File::open(path)?;
+    let length = file.seek(SeekFrom::End(0))?;
+    file.seek(SeekFrom::Start(length.saturating_sub(1 << 20)))?;
+    let mut tail = Vec::new();
+    file.read_to_end(&mut tail)?;
+    Ok(String::from_utf8_lossy(&tail)
+        .lines()
+        .any(|l| matches!(l.trim(), "; spiral_vase = 1" | "; spiral_mode = 1")))
+}
+
 /// Detect binary magic (or .bgcode extension) and validate with bounded blocks and diagnostics.
 pub fn validate_file(path: &Path, profile: &Profile) -> std::io::Result<Report> {
     let mut reader = std::io::BufReader::new(std::fs::File::open(path)?);
     let binary =
         reader.fill_buf()?.starts_with(b"GCDE") || path.extension().is_some_and(|s| s == "bgcode");
     if !binary {
+        // A text file's configuration comes after its G-code: look there for spiral vase.
+        if !profile.spiral_vase && declares_spiral_vase(path)? {
+            let vase = Profile {
+                spiral_vase: true,
+                ..profile.clone()
+            };
+            return Ok(validate_text(reader, &vase));
+        }
         return Ok(validate_text(reader, profile));
     }
     let mut sim = Simulator::new(profile);

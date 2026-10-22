@@ -4,7 +4,7 @@
 // Source: orca@8500fcdcca src/libslic3r/Format/bbs_3mf.cpp :: _BBS_3MF_Exporter::_add_model_config_file_to_archive
 // Source: orca@8500fcdcca src/slic3r/GUI/PartPlate.cpp :: PartPlate::set_bed_type
 // Source: orca@8500fcdcca src/slic3r/GUI/PlateSettingsDialog.cpp :: PlateSettingsDialog::PlateSettingsDialog
-// Changes: Only the plate keys and their values (bed_type, print_sequence, spiral_mode as Orca writes them in model_settings.config; "same as global" = key absent), mapped onto Mica's canonical option names; any other plate override travels as a mica_override: key Orca ignores; spiral vase is carried through but not offered (Mica does not print it yet). Original Rust.
+// Changes: Only the plate keys and their values (bed_type, print_sequence, spiral_mode as Orca writes them in model_settings.config; "same as global" = key absent), mapped onto Mica's canonical option names; any other plate override travels as a mica_override: key Orca ignores; spiral vase is offered for Orca-rules printers. Original Rust.
 
 //! A plate's own settings, as OrcaSlicer's plate settings dialog has them: each plate may
 //! override plate-level options (bed type, print sequence, spiral vase…) and, in Mica, any
@@ -29,10 +29,18 @@ pub const BED_TYPE: &str = "curr_bed_type";
 const PREFIX: &str = "mica_override:";
 
 /// Options offered for a plate, in the order of Orca's plate settings dialog. The bed type
-/// is only offered on printers with bed types. Orca's spiral vase is not offered: Mica does
-/// not print it yet (`settings::unimplemented`); a project's `spiral_mode` still loads and
-/// saves, and the slice warns about it.
-pub const PLATE_OPTIONS: [&str; 2] = [BED_TYPE, "complete_objects"];
+/// and spiral vase (Orca's plate `spiral_mode`) are only offered on printers with OrcaSlicer
+/// rules (`offered`).
+pub const PLATE_OPTIONS: [&str; 3] = [BED_TYPE, "complete_objects", SPIRAL_VASE];
+
+/// The plate key of spiral vase (Orca's `spiral_mode` in the 3MF).
+pub const SPIRAL_VASE: &str = "spiral_vase";
+
+/// Whether a plate option is offered on this printer: bed types and the plate's spiral vase
+/// are Orca's plate settings.
+pub fn offered(key: &str, orca: bool) -> bool {
+    orca || !matches!(key, BED_TYPE | SPIRAL_VASE)
+}
 
 /// Plain label of a plate option.
 pub fn label(key: &str) -> String {
@@ -121,6 +129,15 @@ pub fn bed_type(overrides: &Settings) -> Option<&str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Bed type and spiral vase are Orca's plate settings; print order is offered everywhere.
+    #[test]
+    fn orca_plate_options_are_offered_on_orca_printers() {
+        assert!(offered(SPIRAL_VASE, true) && offered(BED_TYPE, true));
+        assert!(!offered(SPIRAL_VASE, false) && !offered(BED_TYPE, false));
+        assert!(offered("complete_objects", false));
+        assert_eq!(label(SPIRAL_VASE), "Spiral vase");
+    }
 
     #[test]
     fn orca_plate_keys_become_overrides_and_back() {

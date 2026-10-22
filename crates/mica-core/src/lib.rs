@@ -44,6 +44,7 @@ pub mod shells;
 pub mod shortest_path;
 pub mod slice;
 pub mod small_features;
+pub mod spiral_vase;
 pub mod support;
 pub mod threemf;
 pub mod tool_ordering;

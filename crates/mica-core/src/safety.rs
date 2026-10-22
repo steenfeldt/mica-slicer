@@ -419,13 +419,6 @@ pub fn unsupported_settings(c: &Config) -> Vec<String> {
         })
     };
     let mut out = Vec::new();
-    if c.bool("spiral_vase").unwrap_or(false) {
-        out.push(
-            "Spiral vase isn't supported yet; this slices as a normal print with walls, infill \
-             and top layers"
-                .into(),
-        );
-    }
     if any_text("post_process") {
         out.push("Post-processing scripts aren't run yet; the G-code is saved without them".into());
     }

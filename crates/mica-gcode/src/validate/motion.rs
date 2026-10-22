@@ -307,6 +307,14 @@ impl Simulator<'_> {
             }
             return;
         }
+        if printing
+            && self.vase
+            && self.known[2]
+            && self.layer_z.is_some_and(|z| self.xyz[2] < z - 0.001)
+        {
+            // Spiral vase: this layer's extrusions rise from the previous layer's height.
+            self.spiral_layer = true;
+        }
         if printing && self.known[2] {
             self.printed_z = self.printed_z.max(self.xyz[2]);
             self.since_extrusion_z = self.xyz[2];
@@ -422,11 +430,16 @@ impl Simulator<'_> {
             return;
         }
         self.filament_change_prime = false;
+        // Spiral vase ramps the flow in over its first spiral layer and out over the finishing
+        // loop: those moves extrude less than their width and height on purpose.
+        let vase_ramp =
+            self.vase && (self.vase_finish || (self.spiral_layer && !self.previous_spiral_layer));
         if !was_known[0]
             || !was_known[1]
             || distance < 0.25
             || self.wipe
             || self.tower
+            || vase_ramp
             || self.role.to_lowercase().contains("ironing")
         {
             return;

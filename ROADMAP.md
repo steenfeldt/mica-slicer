@@ -42,7 +42,8 @@ OrcaSlicer's for the Orca-profiled ones. One setting picks them
   wipe and prime towers, mixed colors (PrusaSlicer's ColorMix).
 - Skirt, brim and brim ears, variable layer height, per-layer color changes, pauses and custom
   G-code, object labels for canceling single objects, sequential printing (one object after
-  the other, with clearance checks).
+  the other, with clearance checks), spiral vase (one wall rising continuously, also per plate
+  on Orca printers).
 - Thumbnails, time and filament estimates, Prusa binary G-code, a G-code validator.
 - Calibration tests (flow, pressure advance, temperature tower, retraction, maximum volumetric
   speed).
@@ -66,7 +67,6 @@ The command line (`mica slice`) and the app produce the same G-code byte for byt
 
 ## Not supported yet
 
-- **Spiral vase.** A profile or project with it on slices as a normal print, with a warning.
 - **Absolute extrusion (M82).** Turn on *Use relative E distances*; Mica refuses the slice
   otherwise.
 - **MMU** (single-extruder multi-material, e.g. the Prusa MMU3). Printers with one nozzle per
