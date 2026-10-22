@@ -102,3 +102,8 @@ entitlements = "packaging/macos/entitlements.plist"
 [package.metadata.packager.nsis]
 # Per-user install (no administrator prompt), so updates install without one too.
 installer-mode = "currentUser"
+# Mica's icon on the installer and the uninstaller (the shortcuts take the exe's own icon,
+# embedded by build.rs) and a dark sidebar on the welcome and finish pages.
+installer-icon = "assets/icon/mica.ico"
+sidebar-image = "packaging/windows/installer-sidebar.bmp"
+preinstall-section = 'UninstallIcon "${INSTALLERICON}"'

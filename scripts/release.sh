@@ -384,6 +384,11 @@ build_windows() {
     die "mica-gui.exe needs the Visual C++ runtime DLLs (not shipped): $(printf '%s ' $imports)"
   fi
   echo "ok: mica-gui.exe needs only Windows' own DLLs"
+  # The icon (Explorer, taskbar, the installer's shortcuts) and version info come from
+  # crates/mica-gui/build.rs.
+  [ "$(llvm-readobj --coff-resources "$bin/mica-gui.exe" | grep -c -E 'Type: (GROUP_ICON|VERSIONINFO) ')" = 2 ] \
+    || die "mica-gui.exe has no embedded icon or version info (crates/mica-gui/build.rs)"
+  echo "ok: mica-gui.exe has its icon and version info"
   say "Windows: NSIS installer"
   local out="$dist/windows"
   rm -rf "$out" "$dist"/MicaSlicer_*-setup.exe
