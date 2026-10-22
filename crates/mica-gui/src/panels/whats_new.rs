@@ -153,10 +153,11 @@ mod tests {
 
     #[test]
     fn python_reads_the_same_section() {
-        if std::process::Command::new("python3")
+        // On Windows `python3` may be the Store placeholder, which starts but fails.
+        if !std::process::Command::new("python3")
             .arg("--version")
             .output()
-            .is_err()
+            .is_ok_and(|o| o.status.success())
         {
             eprintln!("skipped: no python3");
             return;
@@ -172,7 +173,10 @@ mod tests {
             .unwrap();
         assert!(out.status.success(), "{out:?}");
         assert_eq!(
-            String::from_utf8_lossy(&out.stdout).trim_end(),
+            // Python on Windows writes `\r\n` line ends.
+            String::from_utf8_lossy(&out.stdout)
+                .replace("\r\n", "\n")
+                .trim_end(),
             notes().unwrap()
         );
     }
