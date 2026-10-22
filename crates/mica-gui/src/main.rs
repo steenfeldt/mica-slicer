@@ -80,6 +80,9 @@ mod slice_error_tests;
 mod state;
 mod textures;
 mod theme;
+mod tour;
+#[cfg(test)]
+mod tour_tests;
 mod tower;
 mod tree;
 mod updater;
@@ -100,7 +103,7 @@ const USAGE: &str = "Mica Slicer
            [--filament-editor N] [--all-printers] [--light] [--size WxH] [--scale S] [--crop W]
            [--tower X,Y[,R]] [--select-tower] [--command tower-free|tower-disable|tower-settings]
            [--preferences] [--auto-slice] [--theme dark|light|follow-system] [--new-project]
-           [--welcome] [--whats-new]
+           [--welcome] [--whats-new] [--tour N]
            [--library] [--library-list] [--library-search T] [--library-select N] [--library-filter F]
            [--library-group G] [--library-project NAME]
   mica-gui --screenshot-3d out.png model.stl [--preview] [--xl] [--color tool|feature|speed|fan|width|height|layertime]

@@ -86,7 +86,7 @@ impl Viewport {
             self.plate_rename = None;
         }
         let mut probe = PlateProbe::default();
-        egui::Area::new(ui.scope_id().with("plate bar"))
+        let bar = egui::Area::new(ui.scope_id().with("plate bar"))
             .order(egui::Order::Middle)
             .fixed_pos(Pos2::new(rect.center().x, rect.bottom() - 14.))
             .pivot(Align2::CENTER_BOTTOM)
@@ -206,6 +206,7 @@ impl Viewport {
                         });
                     });
             });
+        crate::tour::anchor(ui, crate::tour::Anchor::PlateBar, bar.response.rect);
         self.plate_probe = probe;
     }
 

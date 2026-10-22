@@ -66,6 +66,8 @@
 //! the Credits search (or the Licenses search), `--about-licenses` opens the Open-source licenses
 //! view (every crate), `--about-license ID` shows that
 //! license's text; `--brick-layers` turns the hidden Brick layers feature on.
+//! `--tour N` shows step N (one-based) of the quick tour, settled, on the sample plate (the
+//! Benchy when nothing was loaded; step 6 slices it first, as the tour does).
 //! `--welcome` opens the Welcome window (with `--import-home`, its Import card shows when that
 //! home has presets); `--whats-new` opens What's new in this version.
 //! `--import-home DIR` looks for other slicers' presets under DIR (a fake home folder) and
@@ -329,6 +331,8 @@ struct Args {
     brick_layers: bool,
     /// The Welcome window, What's new.
     welcome: bool,
+    /// One-based quick tour step to show (`--tour N`).
+    tour: Option<usize>,
     whats_new: bool,
     auto_slice: bool,
     theme: Option<String>,
@@ -802,6 +806,22 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--about-license" => a.about_license = Some(value(&mut iter, "--about-license")?),
             "--brick-layers" => a.brick_layers = true,
             "--welcome" => a.welcome = true,
+            "--tour" => {
+                let n: usize = value(&mut iter, "--tour")?
+                    .parse()
+                    .map_err(|_| "--tour N (1-7)")?;
+                if !(1..=crate::tour::TOUR_STEPS.len()).contains(&n) {
+                    return Err(format!(
+                        "--tour: steps are 1-{}",
+                        crate::tour::TOUR_STEPS.len()
+                    ));
+                }
+                // The Preview step shows a sliced plate.
+                if crate::tour::TOUR_STEPS[n - 1].view == crate::tour::View::Preview {
+                    a.preview = true;
+                }
+                a.tour = Some(n);
+            }
             "--whats-new" => a.whats_new = true,
             "--auto-slice" => a.auto_slice = true,
             "--theme" => a.theme = Some(value(&mut iter, "--theme")?),
@@ -1780,6 +1800,11 @@ pub fn run(args: &[String]) -> Result<(), String> {
         let info = parse_layer_gcode(spec, tools, object_tools, base, &colors)?;
         app.plates.current_mut().custom_gcode = info;
     }
+    if a.tour.is_some() {
+        // The tour's sample plate, before `--preview` slices it.
+        app.tour_sample();
+        app.select(None, false);
+    }
     if a.preview && app.plates.current().finished.is_some() {
         // Already sliced (a calibration plate): just show it.
         app.preview = true;
@@ -1977,6 +2002,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
     }
     if a.deselect {
         app.select(None, false);
+    }
+    if let Some(n) = a.tour {
+        app.start_tour(&ctx);
+        app.tour_jump(n - 1, &ctx);
     }
     let crop = Crop {
         width: a.crop,

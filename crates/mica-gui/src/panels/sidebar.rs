@@ -95,8 +95,15 @@ impl App {
                 .show(ui, |ui| {
                     ui.spacing_mut().item_spacing = Vec2::new(8., 0.);
                     self.project_card(ui);
-                    self.printer_card(ui);
-                    self.filament_card(ui);
+                    let cards = ui.scope(|ui| {
+                        self.printer_card(ui);
+                        self.filament_card(ui);
+                    });
+                    crate::tour::anchor(
+                        ui,
+                        crate::tour::Anchor::PrinterFilament,
+                        cards.response.rect,
+                    );
                     self.process_card(ui);
                     if !self.notices.is_empty() {
                         ui.add_space(8.);
@@ -870,6 +877,8 @@ impl App {
         // every scope shows the topic rail with its own search.
         let bar = !tower && self.selected.is_some();
         let global = !tower && (bar || !self.editor.plate_mode);
+        // Where the scope line starts: the quick tour's settings step shows from there down.
+        let mut scope_top = None;
         // Header + combo + scope + search: the card's own padding; the list runs edge to edge.
         egui::Frame::new()
             .inner_margin(egui::Margin {
@@ -971,6 +980,7 @@ impl App {
                         }
                     });
                 ui.add_space(10.);
+                scope_top = Some(ui.cursor().top());
                 if bar {
                     self.scope_bar(ui);
                 } else {
@@ -1008,6 +1018,11 @@ impl App {
             self.plate_overrides(ui);
         } else {
             self.settings_list(ui);
+        }
+        if let Some(top) = scope_top {
+            let x = ui.max_rect().x_range();
+            let r = Rect::from_x_y_ranges(x, (top - 4.)..=ui.cursor().top());
+            crate::tour::anchor(ui, crate::tour::Anchor::Settings, r);
         }
         if save && let Err(e) = self.save_profile(PresetKind::Print, 0, &current) {
             self.notify_error("The profile was not saved", e);

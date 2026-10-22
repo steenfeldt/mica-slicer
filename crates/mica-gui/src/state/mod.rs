@@ -83,6 +83,9 @@ pub struct Prefs {
     pub visible_filaments: std::collections::BTreeMap<String, Vec<String>>,
     /// The Welcome window was closed once (it opens by itself only on the first launch).
     pub welcome_seen: bool,
+    /// The quick tour ran once (Welcome › Take a quick tour, Help › Show quick tour); it never
+    /// starts by itself.
+    pub tour_seen: bool,
     /// The Mica version that ran last: a different one shows its What's new once.
     pub last_version: String,
 }
@@ -264,6 +267,7 @@ impl Default for Prefs {
             toolbar_size: ToolbarSize::default(),
             visible_filaments: Default::default(),
             welcome_seen: false,
+            tour_seen: false,
             last_version: String::new(),
         }
     }

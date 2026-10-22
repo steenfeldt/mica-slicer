@@ -4,7 +4,8 @@
 //! The Welcome window, the first thing a new user sees (and Help › Welcome to Mica…): what
 //! Mica is, that it is alpha (pre-release) software, and three ways to start: add a printer,
 //! import profiles from PrusaSlicer / OrcaSlicer (only when there are some), or put a Benchy on
-//! the plate. Closing it (Get started, Esc, or one of the starts) marks it seen in mica.toml.
+//! the plate. Closing it (Get started, Esc, one of the starts, or Take a quick tour, which
+//! starts the tour in `tour.rs`) marks it seen in mica.toml.
 //!
 //! At launch, [`App::launch_windows`] picks at most one window: Welcome on the first launch,
 //! else What's new once per new version (`whats_new.rs`). Only the real window calls it; tests,
@@ -141,6 +142,7 @@ impl App {
             && !widgets::field_editing(ctx)
             && !ctx.egui_wants_keyboard_input();
         let mut start = None;
+        let mut tour = false;
         egui::Window::new("Welcome to Mica Slicer")
             .id(egui::Id::unique("mica-welcome"))
             .title_bar(false)
@@ -209,10 +211,20 @@ impl App {
                         if widgets::primary_button(ui, "Get started", true).clicked() {
                             close = true;
                         }
+                        if widgets::button(ui, "Take a quick tour", true)
+                            .on_hover_text(
+                                "A short walk through the main window, on a sample plate",
+                            )
+                            .clicked()
+                        {
+                            tour = true;
+                        }
                     });
                 });
             });
-        if let Some(s) = start {
+        if tour {
+            self.start_tour(ctx);
+        } else if let Some(s) = start {
             self.welcome_start(s);
         } else if close {
             self.close_welcome();
