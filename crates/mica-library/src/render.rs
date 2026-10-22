@@ -133,6 +133,7 @@ pub fn load_preview(kind: Kind, data: &[u8]) -> Result<PreviewMesh, String> {
         .map(|&t| {
             t.checked_sub(1)
                 .and_then(|i| colours.get(i).copied().flatten())
+                .map(display_colour)
                 .unwrap_or(VIOLET)
         })
         .collect();
@@ -349,9 +350,9 @@ mod tests {
         assert_eq!(c.len(), p.mesh.faces.len());
         let count = |rgb: [u8; 3]| c.iter().filter(|&&x| x == rgb).count();
         // Cube 1: 8 unpainted faces in tool 1, one side tool 2, one side tool 3; cube 2
-        // all tool 2.
+        // all tool 2 (black, drawn lifted to dark grey like Prepare).
         assert_eq!(count([0xCB, 0x8F, 0x29]), 8);
-        assert_eq!(count([0, 0, 0]), 2 + 12);
+        assert_eq!(count([51, 51, 51]), 2 + 12);
         assert_eq!(count([0xFF, 0xFF, 0xFF]), 2);
         assert!(!c.contains(&VIOLET) && !c.contains(&[0xFC, 0xE9, 0x4F]));
         // Simplifying keeps each face's colour.
@@ -392,5 +393,27 @@ mod tests {
             render_file(Kind::Stl, &dir.path().join("gone.stl"), 12, DEFAULT_BUDGET),
             Rendered::Unavailable
         ));
+    }
+}
+
+/// A filament colour as the preview draws it: near-black lifted so its shading stays visible on
+/// the dark panel, keeping the hue (the same rule as Prepare's `display_colour` in mica-gui).
+pub fn display_colour(c: [u8; 3]) -> [u8; 3] {
+    const FLOOR: u8 = 51; // 0.2 of 255
+    let max = c[0].max(c[1]).max(c[2]);
+    if max >= FLOOR {
+        return c;
+    }
+    let lift = FLOOR - max;
+    c.map(|v| v + lift)
+}
+
+#[cfg(test)]
+mod display_colour_tests {
+    #[test]
+    fn near_black_is_lifted_and_keeps_its_hue() {
+        assert_eq!(super::display_colour([0, 0, 0]), [51, 51, 51]);
+        assert_eq!(super::display_colour([5, 8, 30]), [26, 29, 51]);
+        assert_eq!(super::display_colour([253, 128, 8]), [253, 128, 8]);
     }
 }
