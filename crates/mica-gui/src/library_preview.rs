@@ -13,12 +13,19 @@
 //! face, so once the zoom has settled the thread draws a finer mesh: the full one when it is
 //! light enough to turn smoothly, else one clustered fine enough for the zoom. The model as
 //! read stays in memory for that while it is shown.
+//!
+//! A project with several plates shows its first plate and a switcher; another plate is made
+//! from the project as read (kept while the preview shows it, so a switch does not read and
+//! unzip the file again) through the same pipeline, and fades in over the last picture once
+//! its first frame is drawn. Only the shown plate's meshes are kept. The view (turn and zoom)
+//! stays when switching: the zoom is relative to each plate's framing, so the new plate shows
+//! from the same side at the same relative size.
 
 use crate::theme;
 use eframe::egui::{self, Align2, Pos2, Rect, Sense, Stroke, Vec2};
 use mica_gcode::thumbnails::{Fit, Orbit};
 use mica_library::Kind;
-use mica_library::render::PreviewMesh;
+use mica_library::render::{PreviewMesh, PreviewProject};
 use std::path::PathBuf;
 use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
@@ -62,8 +69,12 @@ const LIMITS: Limits = Limits {
     full_detail: FULL_DETAIL,
 };
 
-/// How long the embedded thumbnail fades into the coloured 3D view.
+/// How long the embedded thumbnail fades into the coloured 3D view (and one plate into
+/// another).
 const CROSSFADE: Duration = Duration::from_millis(250);
+
+/// A plate that takes longer than this to show says it is loading.
+const SAY_LOADING: Duration = Duration::from_millis(150);
 
 /// The orbit view: degrees and a magnification.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -105,8 +116,11 @@ enum State {
 enum Request {
     /// A picture of this view and size.
     Draw(View, [u16; 2]),
-    /// A mesh at least this detailed (cells along the largest side, see [`Meshes`]).
-    Detail(u32),
+    /// A mesh of this plate at least this detailed (cells along the largest side, see
+    /// [`Meshes`]); ignored once another plate is drawn.
+    Detail(usize, u32),
+    /// Show this plate (zero-based) from now on.
+    Plate(usize),
 }
 
 /// The facts, the detail of the first mesh drawn, and the model as read (held by the
@@ -114,10 +128,15 @@ enum Request {
 type Loaded = (Facts, Option<u32>, std::sync::Weak<PreviewMesh>);
 
 enum Reply {
-    Loaded(Result<Loaded, String>),
+    /// A project's plates by name (only for more than one), and the project as read (held by
+    /// the thread; tests check it is freed).
+    Plates(Vec<String>, std::sync::Weak<PreviewProject>),
+    /// This plate's mesh (zero-based; 0 for a model without plates) is what is drawn now.
+    Loaded(usize, Result<Loaded, String>),
     /// The mesh drawn now has this detail; `true`: the finest it will get.
     Detail(Option<u32>, bool),
-    Frame(View, [u16; 2], egui::ColorImage),
+    /// A picture of this plate.
+    Frame(usize, View, [u16; 2], egui::ColorImage),
     /// The picture for this view and size could not be drawn.
     Failed(View, [u16; 2], String),
 }
@@ -149,6 +168,21 @@ pub struct Preview {
     detail: Option<u32>,
     /// The finest detail asked for; `u32::MAX` once the thread has said it goes no finer.
     asked: u32,
+    /// A project's plates by name (empty: one plate, or not a project).
+    plates: Vec<String>,
+    /// The plate wanted (zero-based), the one the thread's mesh is of (what `state` and
+    /// `detail` describe), and the one of the picture shown with its facts.
+    plate: usize,
+    thread_plate: usize,
+    shown_plate: Option<usize>,
+    shown_facts: Option<Facts>,
+    /// The last plate's picture while the new one fades in over it, and since when.
+    previous: Option<egui::TextureHandle>,
+    switched: Option<Instant>,
+    /// When the plate wanted was asked for.
+    plate_asked: Option<Instant>,
+    #[cfg(test)]
+    retained_project: std::sync::Weak<PreviewProject>,
     /// A finer mesh wanted for this zoom and picture size, since when: asked for once they
     /// have stayed put for [`ZOOM_SETTLE`].
     refine: Option<(f32, [u16; 2], Instant)>,
@@ -262,37 +296,86 @@ impl Preview {
         let spawned = std::thread::Builder::new()
             .name("mica-library-preview".into())
             .spawn(move || {
-                let mut meshes = match mica_library::render::load_preview_file(kind, &path) {
-                    Ok(m) => Meshes::new(m, limits),
-                    Err(e) => {
-                        let _ = replies.send(Reply::Loaded(Err(e)));
-                        ctx.request_repaint();
-                        return;
-                    }
+                // A project with several plates is kept as read, to make another plate.
+                let (first, project) = match kind {
+                    Kind::ThreeMf => match PreviewProject::read_file(&path) {
+                        Ok(p) => {
+                            let first = p.plate(0);
+                            let names = p.plate_names().to_vec();
+                            if names.len() > 1 {
+                                let p = Arc::new(p);
+                                let weak = Arc::downgrade(&p);
+                                if replies.send(Reply::Plates(names, weak)).is_err() {
+                                    return;
+                                }
+                                (first, Some(p))
+                            } else {
+                                (first, None)
+                            }
+                        }
+                        Err(e) => (Err(e), None),
+                    },
+                    _ => (mica_library::render::load_preview_file(kind, &path), None),
                 };
-                let m = &meshes.full;
-                let (lo, hi) = m.mesh.bounds();
-                let facts = Facts {
-                    size: std::array::from_fn(|i| hi[i] - lo[i]),
-                    triangles: m.triangles,
-                    coloured: m.face_colours.is_some(),
+                // Sends what was loaded; the meshes to draw, if any.
+                let loaded = |plate: usize, m: Result<PreviewMesh, String>| {
+                    let (meshes, reply) = match m {
+                        Ok(m) => {
+                            let meshes = Meshes::new(m, limits);
+                            let m = &meshes.full;
+                            let (lo, hi) = m.mesh.bounds();
+                            let facts = Facts {
+                                size: std::array::from_fn(|i| hi[i] - lo[i]),
+                                triangles: m.triangles,
+                                coloured: m.face_colours.is_some(),
+                            };
+                            let reply = Ok((facts, meshes.detail, Arc::downgrade(m)));
+                            (Some(meshes), reply)
+                        }
+                        Err(e) => (None, Err(e)),
+                    };
+                    let sent = replies.send(Reply::Loaded(plate, reply)).is_ok();
+                    ctx.request_repaint();
+                    sent.then_some(meshes)
                 };
-                let loaded = (facts, meshes.detail, Arc::downgrade(m));
-                if replies.send(Reply::Loaded(Ok(loaded))).is_err() {
+                let Some(mut meshes) = loaded(0, first) else {
+                    return;
+                };
+                if meshes.is_none() && project.is_none() {
                     return;
                 }
-                ctx.request_repaint();
-                // Draw the newest request (after a finer mesh, if one was asked for); end
-                // when the preview is dropped.
+                let mut plate = 0;
+                // Draw the newest request (after another plate or a finer mesh, if one was
+                // asked for); end when the preview is dropped.
                 let mut last = None;
                 while let Ok(first) = requests.recv() {
-                    let (mut draw, mut detail) = (None, None);
+                    let (mut draw, mut details, mut switch) = (None, vec![], None);
                     for req in std::iter::once(first).chain(requests.try_iter()) {
                         match req {
                             Request::Draw(view, size) => draw = Some((view, size)),
-                            Request::Detail(cells) => detail = detail.max(Some(cells)),
+                            Request::Detail(p, cells) => details.push((p, cells)),
+                            Request::Plate(p) => switch = Some(p),
                         }
                     }
+                    if let (Some(p), Some(project)) = (switch, &project)
+                        && (p != plate || meshes.is_none())
+                    {
+                        // Only the shown plate's meshes are kept: the last ones go first.
+                        drop(meshes.take());
+                        plate = p;
+                        match loaded(p, project.plate(p)) {
+                            Some(m) => meshes = m,
+                            None => return,
+                        }
+                    }
+                    let Some(meshes) = meshes.as_mut() else {
+                        continue;
+                    };
+                    let detail = details
+                        .into_iter()
+                        .filter(|&(p, _)| p == plate)
+                        .map(|(_, cells)| cells)
+                        .max();
                     if let Some(cells) = detail {
                         let finest = meshes.refine(cells);
                         if replies.send(Reply::Detail(meshes.detail, finest)).is_err() {
@@ -329,7 +412,10 @@ impl Preview {
                         [usize::from(img.width), usize::from(img.height)],
                         &img.rgba,
                     );
-                    if replies.send(Reply::Frame(view, [w, h], image)).is_err() {
+                    if replies
+                        .send(Reply::Frame(plate, view, [w, h], image))
+                        .is_err()
+                    {
                         return;
                     }
                     ctx.request_repaint();
@@ -348,8 +434,18 @@ impl Preview {
             detail: None,
             asked: 0,
             refine: None,
+            plates: vec![],
+            plate: 0,
+            thread_plate: 0,
+            shown_plate: None,
+            shown_facts: None,
+            previous: None,
+            switched: None,
+            plate_asked: None,
             #[cfg(test)]
             retained: std::sync::Weak::new(),
+            #[cfg(test)]
+            retained_project: std::sync::Weak::new(),
             tx,
             rx,
         };
@@ -363,16 +459,29 @@ impl Preview {
     pub fn poll(&mut self, ctx: &egui::Context) {
         while let Ok(reply) = self.rx.try_recv() {
             match reply {
-                Reply::Loaded(Ok((f, detail, _full))) => {
-                    self.state = State::Ready(f);
-                    self.detail = detail;
-                    self.asked = detail.unwrap_or(u32::MAX);
+                Reply::Plates(names, _project) => {
+                    self.plates = names;
                     #[cfg(test)]
                     {
-                        self.retained = _full;
+                        self.retained_project = _project;
                     }
                 }
-                Reply::Loaded(Err(e)) => self.state = State::Failed(e),
+                Reply::Loaded(plate, loaded) => {
+                    self.thread_plate = plate;
+                    self.refine = None;
+                    match loaded {
+                        Ok((f, detail, _full)) => {
+                            self.state = State::Ready(f);
+                            self.detail = detail;
+                            self.asked = detail.unwrap_or(u32::MAX);
+                            #[cfg(test)]
+                            {
+                                self.retained = _full;
+                            }
+                        }
+                        Err(e) => self.state = State::Failed(e),
+                    }
+                }
                 Reply::Detail(detail, finest) => {
                     // The thread draws the shown view again with the new mesh.
                     self.shown = None;
@@ -381,18 +490,27 @@ impl Preview {
                         self.asked = u32::MAX;
                     }
                 }
-                Reply::Frame(view, size, image) => {
+                // A plate switched away from.
+                Reply::Frame(plate, ..) if plate != self.plate => {}
+                Reply::Frame(plate, view, size, image) => {
+                    if self.shown_plate.is_some_and(|s| s != plate) {
+                        // Another plate: it fades in over the last one's picture.
+                        self.previous = self.texture.take();
+                        self.switched = Some(Instant::now());
+                    }
                     match &mut self.texture {
                         Some(t) => t.set(image, egui::TextureOptions::LINEAR),
                         None => {
                             self.texture = Some(ctx.load_texture(
-                                format!("lib-preview-{}", self.id),
+                                format!("lib-preview-{}-{plate}", self.id),
                                 image,
                                 egui::TextureOptions::LINEAR,
                             ))
                         }
                     }
                     self.shown = Some((view, size));
+                    self.shown_plate = Some(plate);
+                    self.shown_facts = self.facts().cloned();
                     self.render_error = None;
                     self.first_frame.get_or_insert_with(Instant::now);
                 }
@@ -402,6 +520,82 @@ impl Preview {
                 }
             }
         }
+        if self.switch_fade() >= 1. {
+            self.previous = None;
+            self.switched = None;
+        }
+    }
+
+    /// A project's plates by name (empty for a model with one plate, or none).
+    pub fn plates(&self) -> &[String] {
+        &self.plates
+    }
+
+    /// The plate wanted (zero-based).
+    pub fn plate(&self) -> usize {
+        self.plate
+    }
+
+    /// Shows plate `plate` (zero-based) of a project with several plates: the thread makes
+    /// its mesh; the last picture stays until its first frame. The view is kept.
+    pub fn set_plate(&mut self, plate: usize) {
+        if plate == self.plate || plate >= self.plates.len() {
+            return;
+        }
+        self.plate = plate;
+        self.plate_asked = Some(Instant::now());
+        self.requested = None;
+        self.resizing = None;
+        self.refine = None;
+        let _ = self.tx.send(Request::Plate(plate));
+    }
+
+    /// Another plate is on its way (the last one's picture shows meanwhile).
+    pub fn switching(&self) -> bool {
+        !self.plates.is_empty()
+            && self.shown_plate.is_some_and(|s| s != self.plate)
+            && self.plate_error().is_none()
+    }
+
+    /// The plate on its way (zero-based) once it takes long enough to say so (most take a
+    /// few frames).
+    pub fn loading_plate(&self) -> Option<usize> {
+        (self.switching() && self.plate_asked.is_some_and(|t| t.elapsed() >= SAY_LOADING))
+            .then_some(self.plate)
+    }
+
+    /// Why the wanted plate of a project with several plates cannot be shown.
+    pub fn plate_error(&self) -> Option<&str> {
+        match &self.state {
+            State::Failed(e) if !self.plates.is_empty() && self.thread_plate == self.plate => {
+                Some(e)
+            }
+            _ => None,
+        }
+    }
+
+    /// The facts of the plate whose picture shows (before the first picture: of the mesh
+    /// read), and that plate (zero-based).
+    pub fn shown(&self) -> Option<(&Facts, usize)> {
+        if self.plate_error().is_some() {
+            return None;
+        }
+        match (&self.shown_facts, self.shown_plate) {
+            (Some(f), Some(p)) => Some((f, p)),
+            _ => self.facts().map(|f| (f, self.thread_plate)),
+        }
+    }
+
+    /// The last plate's picture fading out under the new one, and how far the new one has
+    /// faded in (0 to 1).
+    pub fn previous(&self) -> Option<(&egui::TextureHandle, f32)> {
+        self.previous.as_ref().map(|t| (t, self.switch_fade()))
+    }
+
+    fn switch_fade(&self) -> f32 {
+        self.switched.map_or(1., |t| {
+            (t.elapsed().as_secs_f32() / CROSSFADE.as_secs_f32()).min(1.)
+        })
     }
 
     pub fn facts(&self) -> Option<&Facts> {
@@ -449,9 +643,13 @@ impl Preview {
         }
     }
 
-    /// The picture shown is the newest one asked for.
+    /// The picture shown is the newest one asked for, of the plate wanted, faded in.
     pub fn settled(&self) -> bool {
-        self.shown.is_some() && self.shown == self.requested && self.resizing.is_none()
+        self.shown.is_some()
+            && self.shown == self.requested
+            && self.resizing.is_none()
+            && self.shown_plate == Some(self.plate)
+            && self.previous.is_none()
     }
 
     /// Asks for a picture of `size` physical pixels in the current view (once per change).
@@ -495,7 +693,7 @@ impl Preview {
         self.refine = None;
         let cells = (wanted as f32 * DETAIL_HEADROOM).ceil() as u32;
         self.asked = cells;
-        let _ = self.tx.send(Request::Detail(cells));
+        let _ = self.tx.send(Request::Detail(self.thread_plate, cells));
         None
     }
 
@@ -592,6 +790,93 @@ pub fn group_thousands(n: u64) -> String {
         out.push(c);
     }
     out
+}
+
+/// "Plate 2 of 4 · Name" between a previous and a next button (disabled at the ends);
+/// returns the plate (zero-based) clicked to.
+fn plate_switcher(ui: &mut egui::Ui, plates: &[String], plate: usize) -> Option<usize> {
+    let p = theme::of(ui);
+    let mut to = None;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 4.;
+        let back = plate > 0;
+        if chevron_button(ui, false, back, "Previous plate", "This is the first plate").clicked() {
+            to = Some(plate - 1);
+        }
+        let mut text = format!("Plate {} of {}", plate + 1, plates.len());
+        if let Some(name) = plates.get(plate).filter(|n| !n.is_empty()) {
+            text = format!("{text} · {name}");
+        }
+        let w = (ui.available_width() - CHEVRON - ui.spacing().item_spacing.x).max(0.);
+        let (r, resp) = ui.allocate_exact_size(Vec2::new(w, CHEVRON), Sense::hover());
+        let mut job =
+            egui::text::LayoutJob::simple_singleline(text.clone(), theme::medium(12.), p.label);
+        job.wrap = egui::text::TextWrapping::truncate_at_width(w);
+        let g = ui.painter().layout_job(job);
+        let elided = g.elided;
+        ui.painter().galley(r.center() - g.size() / 2., g, p.label);
+        if elided {
+            resp.on_hover_text(text);
+        }
+        let next = plate + 1 < plates.len();
+        if chevron_button(ui, true, next, "Next plate", "This is the last plate").clicked() {
+            to = Some(plate + 1);
+        }
+    });
+    to
+}
+
+/// The plate switcher's buttons, points square.
+const CHEVRON: f32 = 26.;
+
+/// A frameless ‹ or › button: keyboard-focusable (a ring shows the focus), a tooltip,
+/// disabled at the ends.
+fn chevron_button(
+    ui: &mut egui::Ui,
+    next: bool,
+    enabled: bool,
+    tip: &str,
+    disabled_tip: &str,
+) -> egui::Response {
+    let p = theme::of(ui);
+    let sense = if enabled {
+        Sense::click()
+    } else {
+        Sense::hover()
+    };
+    let (r, resp) = ui.allocate_exact_size(Vec2::splat(CHEVRON), sense);
+    resp.widget_info(|| egui::WidgetInfo::labeled(egui::Role::Button, enabled, tip));
+    let hot = enabled && resp.hovered();
+    if hot {
+        ui.painter().rect_filled(r, 6., p.hover);
+        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+    }
+    if resp.has_focus() {
+        ui.painter().rect_stroke(
+            r.shrink(1.),
+            6.,
+            Stroke::new(1.5, p.accent),
+            egui::StrokeKind::Inside,
+        );
+    }
+    let color = if !enabled {
+        p.muted.gamma_multiply(0.5)
+    } else if hot {
+        p.text
+    } else {
+        p.muted_alt
+    };
+    let (c, s) = (r.center(), 4.);
+    let x = if next { -s / 2. } else { s / 2. };
+    ui.painter().add(egui::Shape::line(
+        vec![
+            Pos2::new(c.x + x, c.y - s),
+            Pos2::new(c.x - x, c.y),
+            Pos2::new(c.x + x, c.y + s),
+        ],
+        Stroke::new(1.6, color),
+    ));
+    resp.on_hover_text(if enabled { tip } else { disabled_tip })
 }
 
 /// A printer chip: green when the model fits, grey when it does not.
@@ -724,7 +1009,22 @@ impl crate::app::App {
                 ctx.request_repaint_after(std::time::Duration::from_millis(16));
             }
         }
-        if fade < 1. {
+        let plate_error = self
+            .library
+            .preview
+            .as_ref()
+            .filter(|pv| pv.id == m.id)
+            .and_then(|pv| Some((pv.plate_error()?.to_string(), pv.plate())));
+        if let Some((e, plate)) = &plate_error {
+            // Neither the thumbnail (the first plate's) nor the last plate's picture.
+            ui.painter().text(
+                rect.center(),
+                Align2::CENTER_CENTER,
+                format!("Can't show plate {}: {e}", plate + 1),
+                theme::sans(11.5),
+                p.muted,
+            );
+        } else if fade < 1. {
             let tint = egui::Color32::WHITE.gamma_multiply(1. - fade);
             match self.library.texture(&ctx, m) {
                 Some(t) => {
@@ -743,17 +1043,27 @@ impl crate::app::App {
             }
         }
         if let Some(pv) = self.library.preview.as_ref().filter(|pv| pv.id == m.id) {
-            if fade > 0.
-                && let Some(t) = pv.texture()
-            {
+            let picture = |t: &egui::TextureHandle, alpha: f32| {
                 let s = t.size_vec2() / ppp;
                 let k = (rect.width() / s.x).min(rect.height() / s.y);
                 ui.painter().image(
                     t.id(),
                     Rect::from_center_size(rect.center(), s * k),
                     Rect::from_min_max(Pos2::ZERO, Pos2::new(1., 1.)),
-                    egui::Color32::WHITE.gamma_multiply(fade),
+                    egui::Color32::WHITE.gamma_multiply(alpha),
                 );
+            };
+            if fade > 0.
+                && plate_error.is_none()
+                && let Some(t) = pv.texture()
+            {
+                // Another plate fades in over the last one.
+                let mut alpha = fade;
+                if let Some((prev, k)) = pv.previous() {
+                    picture(prev, fade * (1. - k));
+                    alpha *= k;
+                }
+                picture(t, alpha);
             }
             if let Some(e) = pv.render_error() {
                 ui.painter().text(
@@ -763,15 +1073,29 @@ impl crate::app::App {
                     theme::sans(10.5),
                     p.warn_text,
                 );
-            } else if pv.loading() {
+            } else if pv.loading() || pv.loading_plate().is_some() {
                 ui.painter().text(
                     rect.right_bottom() - Vec2::new(10., 10.),
                     Align2::RIGHT_BOTTOM,
-                    "Loading 3D view…",
+                    match pv.loading_plate() {
+                        Some(plate) if !pv.loading() => format!("Loading plate {}…", plate + 1),
+                        _ => "Loading 3D view…".to_string(),
+                    },
                     theme::sans(10.5),
                     p.muted,
                 );
             }
+        }
+        // A project with several plates: which one shows, and the previous and next.
+        if let Some(pv) = self
+            .library
+            .preview
+            .as_mut()
+            .filter(|pv| pv.id == m.id && pv.plates().len() > 1)
+            && let Some(plate) = plate_switcher(ui, pv.plates(), pv.plate())
+        {
+            pv.set_plate(plate);
+            ctx.request_repaint();
         }
         if self
             .library
@@ -781,25 +1105,29 @@ impl crate::app::App {
         {
             resp.on_hover_text("Drag to turn, scroll to zoom, double-click to reset the view");
         }
-        // Size, triangles and the printers it fits.
-        let facts = self
+        // Size, triangles and the printers it fits: of the plate shown (the index's facts,
+        // of the first plate, until the preview has read the file).
+        let shown = self
             .library
             .preview
             .as_ref()
             .filter(|pv| pv.id == m.id)
-            .and_then(|pv| pv.facts().cloned());
-        let size_mm = facts.as_ref().map(|f| f.size).or(m.info.size_mm);
-        let triangles = facts
-            .as_ref()
-            .map(|f| f.triangles as u64)
-            .or((m.info.triangles > 0).then_some(m.info.triangles));
-        if let Some(s) = size_mm {
+            .and_then(|pv| pv.shown().map(|(f, plate)| (f.clone(), plate)));
+        let (size_mm, triangles, plate) = match &shown {
+            Some((f, plate)) => (Some(f.size), Some(f.triangles as u64), *plate),
+            None => (
+                m.info.size_mm,
+                (m.info.triangles > 0).then_some(m.info.triangles),
+                0,
+            ),
+        };
+        if let Some(s) = size_mm.filter(|_| plate_error.is_none()) {
             let mut line = crate::library::dims(s);
             if let Some(t) = triangles {
                 line = format!("{line} · {} triangles", group_thousands(t));
             }
             if m.kind == mica_library::Kind::ThreeMf && m.info.plates > 1 {
-                line.push_str(" · first plate");
+                line.push_str(&format!(" · plate {}", plate + 1));
             }
             ui.label(
                 egui::RichText::new(line)
@@ -1260,6 +1588,163 @@ mod tests {
         assert_eq!(p.request_at(PICTURE, t0 + ZOOM_SETTLE * 2), None);
         assert!(wait(&mut p, &ctx, Preview::settled));
         assert_eq!(p.detail, None);
+    }
+
+    #[test]
+    fn plates_switch_with_their_own_mesh_colours_size_and_fits() {
+        let ctx = egui::Context::default();
+        let dir = mica_library::testkit::TempDir::new("preview-plates");
+        let path = dir.path().join("plates.3mf");
+        std::fs::write(&path, mica_library::testkit::four_plates_3mf()).unwrap();
+        let project = PreviewProject::read_file(&path).unwrap();
+        let size = |plate| {
+            let m = project.plate(plate).unwrap();
+            let (lo, hi) = m.mesh.bounds();
+            std::array::from_fn::<f32, 3, _>(|i| hi[i] - lo[i])
+        };
+        let mut p = Preview::new("plates", Kind::ThreeMf, path, &ctx);
+        assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+        assert_eq!(p.plates(), ["", "Lid", "Loose", ""]);
+        p.request([200, 150]);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        let (f, plate) = p.shown().unwrap();
+        assert_eq!((f.size, plate), (size(0), 0));
+        // Turned and zoomed: the view stays when switching.
+        p.orbit(egui::vec2(30., 10.));
+        p.zoom(80.);
+        let view = p.view;
+        p.request([200, 150]);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        p.set_plate(1);
+        assert!(p.switching() && !p.settled());
+        assert_eq!(
+            p.shown().unwrap().1,
+            0,
+            "the last plate shows until the new one"
+        );
+        p.request([200, 150]);
+        assert!(wait(&mut p, &ctx, |p| p.shown().is_some_and(|s| s.1 == 1)));
+        assert!(
+            p.previous().is_some(),
+            "the new plate fades in over the last"
+        );
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert!(p.previous().is_none() && !p.switching());
+        assert_eq!(p.view, view);
+        let (f, _) = p.shown().unwrap();
+        assert_eq!(f.size, size(1));
+        assert_eq!((f.triangles, f.coloured), (12, true));
+        // The lid's mesh in its tool's colour, and only that plate's mesh is held.
+        let lid = p.retained.upgrade().unwrap();
+        let c = lid.face_colours.as_ref().unwrap();
+        assert!(c.iter().all(|&x| x == [0xFF; 3]), "{c:?}");
+        drop(lid);
+        // Fits: the shown plate's size against a volume only one of the plates fits.
+        let (a, b) = (size(0), size(1));
+        assert_ne!(a, b);
+        // The lid fits a volume just its size; the first plate does not.
+        let volume = b;
+        assert!(fits(b, volume) && !fits(a, volume), "{a:?} {b:?}");
+        assert_eq!(fits(f.size, volume), fits(b, volume));
+        // Next: the loose cube in red; then the empty plate says so.
+        p.set_plate(2);
+        p.request([200, 150]);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        let loose = p.retained.upgrade().unwrap();
+        assert!(
+            loose
+                .face_colours
+                .as_ref()
+                .unwrap()
+                .iter()
+                .all(|&x| x == [0xFB, 0x02, 0x07])
+        );
+        drop(loose);
+        p.set_plate(3);
+        assert!(wait(&mut p, &ctx, |p| p.plate_error().is_some()));
+        assert_eq!(p.plate_error(), Some("nothing on this plate"));
+        assert!(p.shown().is_none() && !p.switching());
+        // Out of range: nothing happens. Back to the first plate.
+        p.set_plate(4);
+        assert_eq!(p.plate(), 3);
+        p.set_plate(0);
+        // (The panel asks for a picture every frame; one is drawn once the plate is read.)
+        assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+        p.request([200, 150]);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert_eq!(p.shown().unwrap().0.size, size(0));
+        // Another selection drops the preview: the project as read and the mesh go.
+        let (mesh, project) = (p.retained.clone(), p.retained_project.clone());
+        assert!(project.upgrade().is_some());
+        drop(p);
+        let start = Instant::now();
+        while (mesh.strong_count() > 0 || project.strong_count() > 0)
+            && start.elapsed() < Duration::from_secs(10)
+        {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!((mesh.strong_count(), project.strong_count()), (0, 0));
+    }
+
+    #[test]
+    fn single_plate_projects_and_stls_have_no_plates_to_switch() {
+        let ctx = egui::Context::default();
+        let root = mica_library::testkit::repo_root();
+        for (kind, file) in [
+            (Kind::ThreeMf, "tests/models/painted-cube.3mf"),
+            (Kind::Stl, "tests/models/cube20.stl"),
+        ] {
+            let mut p = Preview::new(file, kind, root.join(file), &ctx);
+            assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+            assert!(p.plates().is_empty(), "{file}");
+            p.set_plate(1);
+            assert_eq!(p.plate(), 0);
+            p.request([64, 64]);
+            assert!(wait(&mut p, &ctx, Preview::settled));
+            assert_eq!(p.shown().unwrap().1, 0);
+            assert!(
+                p.retained_project.upgrade().is_none(),
+                "nothing kept to switch"
+            );
+        }
+    }
+
+    /// The switcher's buttons are reached with Tab and pressed with Enter; the first plate's
+    /// previous button is disabled (so Tab lands on next), the last plate's next one too.
+    #[test]
+    fn the_plate_switcher_works_from_the_keyboard() {
+        let ctx = egui::Context::default();
+        let plates = ["".to_string(), "Lid".to_string(), String::new()];
+        let frame = |plate: usize, events: Vec<egui::Event>| {
+            let mut to = None;
+            let input = egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(320., 200.))),
+                events,
+                ..Default::default()
+            };
+            let mut output = ctx.run_ui(input, |ui| to = plate_switcher(ui, &plates, plate));
+            output.textures_delta.clear();
+            to
+        };
+        let key = |key: egui::Key| egui::Event::Key {
+            key,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: Default::default(),
+        };
+        for (plate, want) in [(0, Some(1)), (2, Some(1))] {
+            ctx.memory_mut(|m| m.surrender_focus(m.focused().unwrap_or(egui::Id::NULL)));
+            assert_eq!(frame(plate, vec![]), None);
+            assert_eq!(frame(plate, vec![key(egui::Key::Tab)]), None);
+            assert!(
+                ctx.memory(|m| m.focused().is_some()),
+                "a button has the focus"
+            );
+            let pressed =
+                frame(plate, vec![key(egui::Key::Enter)]).or_else(|| frame(plate, vec![]));
+            assert_eq!(pressed, want, "plate {plate}");
+        }
     }
 
     #[test]
