@@ -173,8 +173,9 @@ mod tests {
             .unwrap();
         assert!(out.status.success(), "{out:?}");
         assert_eq!(
-            // Python on Windows writes `\r\n` line ends.
-            String::from_utf8_lossy(&out.stdout)
+            // The script writes UTF-8 bytes with `\n` on every OS; `\r\n` is tolerated anyway.
+            String::from_utf8(out.stdout.clone())
+                .expect("the notes are UTF-8")
                 .replace("\r\n", "\n")
                 .trim_end(),
             notes().unwrap()

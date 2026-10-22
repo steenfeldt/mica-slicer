@@ -34,8 +34,13 @@ use str0m::{
 pub struct StreamerOptions {
     pub fps: f32,
     pub render: Renderer,
-    /// Drop every n-th media packet once connected (packet loss).
+    /// Drop every n-th video packet once connected (packet loss). Only first transmissions
+    /// count, so which packets are lost does not depend on timing (how RTCP, data channel
+    /// and retransmitted packets interleave with them).
     pub lose_every: Option<u32>,
+    /// Drop the retransmissions too (with `lose_every`): every gap stays, as when the NACK
+    /// round trip is lost as well. `false`: every retransmission arrives, NACKs repair all.
+    pub lose_resends: bool,
     /// `false`: POST `/webrtc` answers 404 (a camera without WebRTC; snapshots still work).
     pub webrtc: bool,
 }
@@ -281,25 +286,75 @@ struct Sender<'a> {
     channel: Option<ChannelId>,
     last_pong: Instant,
     connected: bool,
-    /// Packets sent since video started (for the loss option).
+    /// Video packets sent for the first time (for the loss option).
     packets: u32,
+    /// The video payload type (retransmissions use another, RTX, or repeat a lost sequence
+    /// number).
+    video_pt: Option<u8>,
+    /// Sequence numbers of the video packets lost, newest last (a few hundred at most).
+    lost: std::collections::VecDeque<u16>,
+}
+
+/// What a datagram the mock sends is, for the loss option. SRTP leaves the RTP header in the
+/// clear (RFC 3711); RFC 7983 tells RTP and RTCP from STUN, DTLS and the rest.
+#[derive(Debug, PartialEq, Eq)]
+enum Packet {
+    Video { seq: u16 },
+    Resend,
+    Other,
+}
+fn classify(d: &[u8], video_pt: Option<u8>) -> Packet {
+    // RTP/RTCP: version 2 (first byte 128..=191), 12-byte header at least.
+    if d.len() < 12 || !(128..=191).contains(&d[0]) {
+        return Packet::Other;
+    }
+    // RTCP packet types 192..=223 sit where RTP has the marker bit and payload type.
+    if (192..=223).contains(&d[1]) {
+        return Packet::Other;
+    }
+    let pt = d[1] & 0x7f;
+    match video_pt {
+        Some(v) if v == pt => Packet::Video {
+            seq: u16::from_be_bytes([d[2], d[3]]),
+        },
+        // Another payload type on the video stream: RTX (retransmissions, padding).
+        Some(_) => Packet::Resend,
+        None => Packet::Other,
+    }
 }
 
 impl Sender<'_> {
+    /// Whether the loss option drops this datagram.
+    fn lose(&mut self, d: &[u8], every: u32) -> bool {
+        match classify(d, self.video_pt) {
+            Packet::Video { seq } if self.lost.contains(&seq) => self.o.lose_resends,
+            Packet::Video { seq } => {
+                self.packets += 1;
+                if !self.packets.is_multiple_of(every) {
+                    return false;
+                }
+                if self.lost.len() >= 512 {
+                    self.lost.pop_front();
+                }
+                self.lost.push_back(seq);
+                true
+            }
+            Packet::Resend => self.o.lose_resends,
+            Packet::Other => false,
+        }
+    }
     /// Drains str0m's output; `Err` when the session is over.
     fn drain(&mut self) -> Result<Instant, ()> {
         loop {
             match self.rtc.poll_output().map_err(|_| ())? {
                 Output::Timeout(t) => return Ok(t),
                 Output::Transmit(t) => {
-                    // Loss: every n-th packet once connected (ICE and DTLS are done).
+                    // Loss: every n-th video packet once connected (ICE and DTLS are done).
                     if self.connected
                         && let Some(n) = self.o.lose_every
+                        && self.lose(&t.contents, n)
                     {
-                        self.packets += 1;
-                        if self.packets.is_multiple_of(n) {
-                            continue;
-                        }
+                        continue;
                     }
                     let _ = self.socket.send_to(&t.contents, t.destination);
                 }
@@ -351,6 +406,8 @@ fn send(
         last_pong: Instant::now(),
         connected: false,
         packets: 0,
+        video_pt: None,
+        lost: Default::default(),
     };
     let mut pending = Some(pending);
     let mut next_au = crate::mock::video(&o.render, o.fps);
@@ -406,6 +463,7 @@ fn send(
             if let Some(pt) = pt
                 && let Some(w) = s.rtc.writer(mid)
             {
+                s.video_pt = Some(*pt);
                 let time = MediaTime::new(
                     (frame as f64 * 90_000. / o.fps.max(0.1) as f64) as u64,
                     Frequency::NINETY_KHZ,

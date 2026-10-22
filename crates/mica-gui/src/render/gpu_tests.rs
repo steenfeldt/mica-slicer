@@ -3,7 +3,10 @@
 
 //! Offscreen GPU tests of the G-code preview renderer: a synthetic preview drawn through the
 //! same egui paint-callback path as the app. Each test skips (passes) on a machine without a
-//! GPU adapter.
+//! GPU adapter, and on Windows with only a software adapter (WARP) unless `MICA_GPU_TESTS=1`:
+//! the GitHub Windows runner's in-box WARP took the test process down with an access
+//! violation (STATUS_ACCESS_VIOLATION, no panic, no backtrace). The tests run one at a time
+//! (one device at a time), whatever the test harness's thread count.
 
 use super::{FORMAT, Frame, Renderer};
 use crate::{
@@ -14,25 +17,56 @@ use crate::{
 use eframe::egui;
 use egui_wgpu::wgpu;
 use glam::Vec3;
-use std::{io::Write, sync::Arc};
+use std::{
+    io::Write,
+    sync::{Arc, Mutex, MutexGuard},
+};
 
 pub struct Gpu {
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
     pub egui: egui_wgpu::Renderer,
     ctx: egui::Context,
+    /// Held until the device above is dropped (fields drop in order): one GPU test at a time.
+    _turn: MutexGuard<'static, ()>,
 }
-/// A headless device with the renderer installed, or `None` without an adapter.
+/// Serializes the GPU tests: several devices made and used at once on one adapter is not
+/// what the app does, and a software adapter is the most likely to trip over it.
+static TURN: Mutex<()> = Mutex::new(());
+
+/// A headless device with the renderer installed, or `None` (the test skips) without a
+/// usable adapter.
 pub fn gpu() -> Option<Gpu> {
+    // A test that failed while holding the turn leaves nothing behind but its device.
+    let turn = TURN.lock().unwrap_or_else(|e| e.into_inner());
     super::screenshot::block_on(async {
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
-        let adapter = instance
+        let Ok(adapter) = instance
             .request_adapter(&wgpu::RequestAdapterOptions::default())
             .await
-            .ok()?;
+        else {
+            eprintln!("skipped: no GPU adapter");
+            return None;
+        };
+        let info = adapter.get_info();
+        eprintln!(
+            "GPU tests on {:?} ({:?}, {:?}, driver {:?} {:?})",
+            info.name, info.backend, info.device_type, info.driver, info.driver_info
+        );
+        if cfg!(windows)
+            && info.device_type == wgpu::DeviceType::Cpu
+            && std::env::var_os("MICA_GPU_TESTS").is_none_or(|v| v != "1")
+        {
+            eprintln!(
+                "skipped: software adapter on Windows (WARP crashed the test process on CI); \
+                 MICA_GPU_TESTS=1 runs it anyway"
+            );
+            return None;
+        }
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor::default())
             .await
+            .inspect_err(|e| eprintln!("skipped: no device: {e}"))
             .ok()?;
         let mut egui = egui_wgpu::Renderer::new(&device, FORMAT, Default::default());
         egui.callback_resources
@@ -42,6 +76,7 @@ pub fn gpu() -> Option<Gpu> {
             queue,
             egui,
             ctx: egui::Context::default(),
+            _turn: turn,
         })
     })
 }

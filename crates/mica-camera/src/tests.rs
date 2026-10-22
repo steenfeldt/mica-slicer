@@ -624,12 +624,20 @@ fn slow_snapshots_are_asked_for_back_to_back() {
 }
 
 fn streamer(lose_every: Option<u32>, webrtc: bool) -> mock::CameraStreamer {
+    lossy_streamer(lose_every, false, webrtc)
+}
+fn lossy_streamer(
+    lose_every: Option<u32>,
+    lose_resends: bool,
+    webrtc: bool,
+) -> mock::CameraStreamer {
     mock::CameraStreamer::start(
         0,
         mock::StreamerOptions {
             fps: 15.,
             render: pattern(320, 240),
             lose_every,
+            lose_resends,
             webrtc,
         },
     )
@@ -737,8 +745,13 @@ fn webrtc_from_camera_streamer_plays_and_answers_its_keepalive() {
 /// Frames published while the camera sends `secs` seconds of its 15 fps video after the
 /// first frame shown, and the camera's statistics. Measured against the frames the camera
 /// sent, not the clock: under load the mock camera itself sends fewer frames per second.
-fn lossy(lose_every: u32, secs: u64) -> (u64, usize, usize, Player, mock::CameraStreamer) {
-    let cam = streamer(Some(lose_every), true);
+/// Every `lose_every`-th video packet is lost, and with `lose_resends` its retransmissions too.
+fn lossy(
+    lose_every: u32,
+    lose_resends: bool,
+    secs: u64,
+) -> (u64, usize, usize, Player, mock::CameraStreamer) {
+    let cam = lossy_streamer(Some(lose_every), lose_resends, true);
     let p = Player::start(
         Source::WebRtc(cam.url(), None),
         None,
@@ -764,7 +777,7 @@ fn lossy(lose_every: u32, secs: u64) -> (u64, usize, usize, Player, mock::Camera
     let sent = cam.stats.frames_sent.load(Ordering::Relaxed);
     let plis = cam.stats.keyframe_requests.load(Ordering::Relaxed);
     eprintln!(
-        "WebRTC mock, every {lose_every}th packet lost: {n} frames shown while {} were sent ({sent} sent in all), {plis} key frame requests",
+        "WebRTC mock, every {lose_every}th video packet lost (resends lost: {lose_resends}): {n} frames shown while {} were sent ({sent} sent in all), {plis} key frame requests",
         sent - sent_before
     );
     (n, sent, plis, p, cam)
@@ -772,7 +785,7 @@ fn lossy(lose_every: u32, secs: u64) -> (u64, usize, usize, Player, mock::Camera
 
 #[test]
 fn webrtc_light_packet_loss_is_repaired_by_nacks() {
-    let (n, _, plis, p, _cam) = lossy(15, 3);
+    let (n, _, plis, p, _cam) = lossy(15, false, 3);
     assert!(
         n >= 25,
         "{n} frames shown of 45 sent (3 s at 15 fps) with 1 in 15 packets lost"
@@ -786,8 +799,11 @@ fn webrtc_light_packet_loss_is_repaired_by_nacks() {
 
 #[test]
 fn webrtc_heavy_packet_loss_waits_for_key_frames_and_keeps_playing() {
-    // camera-streamer ignores key frame requests; the clip's own key frames recover.
-    let (n, _, plis, p, _cam) = lossy(6, 4);
+    // camera-streamer ignores key frame requests; the clip's own key frames recover. The
+    // retransmissions are lost too, so every gap stays. (Losing every 6th datagram of any
+    // kind, resends included, left it to timing whether any gap stayed unrepaired: on the
+    // Windows runner NACKs once repaired them all and no key frame was asked for.)
+    let (n, _, plis, p, _cam) = lossy(6, true, 4);
     assert!(
         plis >= 1,
         "a gap NACKs could not repair asks for a key frame"

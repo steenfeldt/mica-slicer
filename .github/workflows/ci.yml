@@ -74,6 +74,31 @@ jobs:
       - name: Tests (incl. reference hashes)
         # --no-fail-fast: one failing crate does not hide the other crates' results.
         run: cargo test --workspace --locked --profile fast --no-fail-fast
+      # Diagnostic, does not fail the job: the preview GPU tests on the runner's software
+      # adapter (WARP), which the test step skips because it once crashed the process
+      # (STATUS_ACCESS_VIOLATION). Each test in its own process, so a crash names its test and
+      # the others still run; the log shows the adapter and how far each test got.
+      - name: GPU tests on WARP (diagnostic)
+        if: (success() || failure()) && runner.os == 'Windows'
+        continue-on-error: true
+        shell: bash
+        env:
+          MICA_GPU_TESTS: "1"
+          RUST_BACKTRACE: "1"
+        run: |
+          status=0
+          for t in near_views_match_the_tube_rendering far_ribbons_look_like_the_refined_tubes \
+                   pick_finds_the_front_move_anywhere_in_the_range; do
+            echo "::group::render::gpu_tests::$t"
+            cargo test --locked --profile fast -p mica-gui --bin mica-gui -- --exact \
+              "render::gpu_tests::$t" --test-threads=1 --nocapture || { echo "FAILED: $t (exit $?)"; status=1; }
+            echo "::endgroup::"
+          done
+          # All three in one process (in turn, as in the test step): if this passes too, the
+          # skip can go.
+          cargo test --locked --profile fast -p mica-gui --bin mica-gui -- render::gpu_tests \
+            --nocapture || { echo "FAILED: together (exit $?)"; status=1; }
+          exit $status
       # The quick regression corpus (tests/corpus/run.py; os.wait4 is POSIX only).
       - name: Quick corpus
         if: runner.os != 'Windows'

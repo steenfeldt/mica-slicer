@@ -106,7 +106,10 @@ def main():
     if a.notes_only:
         if changelog is None:
             fail("--notes-only needs --changelog")
-        sys.stdout.write(changelog + "\n")
+        # UTF-8 bytes on every OS: a Windows console or pipe would otherwise encode the
+        # notes in the locale code page (cp1252), turning e.g. "…" into a byte the GUI's copy
+        # (whats_new.rs) does not have.
+        sys.stdout.buffer.write((changelog + "\n").encode("utf-8"))
         return
     for name in ("repo", "dir", "out"):
         if not getattr(a, name):
