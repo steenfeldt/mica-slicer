@@ -2,6 +2,7 @@
 // Provenance: adapted
 // Source: prusaslicer@b028299c77 src/libslic3r/PlaceholderParser.cpp :: MyContext::scalar_variable_reference, MyContext::vector_variable_reference
 // Source: prusaslicer@b028299c77 src/libslic3r/GCode.cpp :: GCodeGenerator::_do_export, GCodeGenerator::placeholder_parser_process
+// Source: prusaslicer@b028299c77 src/libslic3r/PrintApply.cpp :: Print::apply
 // Changes: The configuration is converted to template variables up front (percentages resolved through
 // Changes: ratio_over, widths through Flow rules) instead of being looked up lazily during parsing.
 
@@ -72,6 +73,20 @@ pub fn config_context(config: &Config) -> Context {
             ctx.set(key, Var::string(raw));
         }
     }
+    // The preset names both slicers add to the placeholder parser (PrintApply.cpp: `print_preset`
+    // from `print_settings_id`, and so on); profiles such as Snapmaker's A series print them in
+    // their start G-code. An unset id reads as an empty name, as upstream.
+    for (name, id) in [
+        ("print_preset", "print_settings_id"),
+        ("filament_preset", "filament_settings_id"),
+        ("printer_preset", "printer_settings_id"),
+        ("physical_printer_preset", "physical_printer_settings_id"),
+    ] {
+        if ctx.get(name).is_none() {
+            let value = ctx.get(id).cloned().unwrap_or_else(|| Var::string(""));
+            ctx.set(name, value);
+        }
+    }
     ctx
 }
 
@@ -120,6 +135,26 @@ pub fn sets_temperature(gcode: &str, m_set: u32, m_wait: u32) -> (bool, Option<i
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn preset_names_are_placeholders() {
+        // Snapmaker's A-series start G-code prints `; Printer : [printer_preset]`.
+        let mut c = Config::defaults();
+        c.set_raw("printer_settings_id", "Snapmaker A250 (0.4 nozzle)")
+            .unwrap();
+        c.set_raw("print_settings_id", "0.20 Standard @Snapmaker (0.4 nozzle)")
+            .unwrap();
+        let mut ctx = config_context(&c);
+        let out = run(
+            "t",
+            "[printer_preset] / [print_preset] /[physical_printer_preset]",
+            &mut ctx,
+        );
+        assert_eq!(
+            out.unwrap(),
+            "Snapmaker A250 (0.4 nozzle) / 0.20 Standard @Snapmaker (0.4 nozzle) /"
+        );
+    }
 
     #[test]
     fn config_values_become_variables() {
