@@ -5,7 +5,14 @@
 //! is read and every frame is drawn on a background thread (the CPU renderer of the library
 //! thumbnails, `mica_library::render`), so the panel never waits; the UI only uploads the
 //! newest picture into one texture. Dropping the preview (another selection, the Library
-//! closed) ends the thread and frees the mesh and the texture.
+//! closed) ends the thread and frees the meshes and the texture.
+//!
+//! A very detailed model is first drawn simplified (vertex clustering finer than a pixel of
+//! the first view). Zoomed in (or in a larger panel) past that, a cell would span more than
+//! a pixel and a flat face would show creases where a cell also holds a vertex of the next
+//! face, so once the zoom has settled the thread draws a finer mesh: the full one when it is
+//! light enough to turn smoothly, else one clustered fine enough for the zoom. The model as
+//! read stays in memory for that while it is shown.
 
 use crate::theme;
 use eframe::egui::{self, Align2, Pos2, Rect, Sense, Stroke, Vec2};
@@ -13,10 +20,11 @@ use mica_gcode::thumbnails::{Fit, Orbit};
 use mica_library::Kind;
 use mica_library::render::PreviewMesh;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
-/// Meshes with more triangles are simplified for the preview (it redraws while dragging).
+/// Meshes with more triangles are simplified for the preview's first view (it redraws
+/// while dragging).
 const PREVIEW_TRIANGLES: usize = 250_000;
 /// The picture's height to width (220 × 288 at the details panel's default width).
 const PICTURE_ASPECT: f32 = 220. / 288.;
@@ -26,8 +34,33 @@ const MAX_PICTURE: u16 = 999;
 /// How long the wanted picture size must stay put (a window or panel being resized) before
 /// it is rendered at that size; the last picture scales meanwhile.
 pub const RESIZE_SETTLE: Duration = Duration::from_millis(150);
-/// Cells along the largest side when simplifying for the preview.
+/// Cells along the largest side when simplifying for the preview's first view.
 const PREVIEW_CELLS: u32 = 400;
+/// Zoomed in past the simplified mesh's detail, the full mesh is drawn when it has at most
+/// this many triangles; a heavier one is clustered finer, to about this many. Measured at the
+/// largest picture (999 × 763): a 654k-triangle project draws in 23 ms at the first view and
+/// 40 ms zoomed in, 1.3M triangles in 39 ms and 74 ms; a million stays near 15 frames a
+/// second while turning a zoomed-in view.
+const FULL_DETAIL: usize = 1_000_000;
+/// How long the zoom (and the picture size) must stay put before a finer mesh is made.
+pub const ZOOM_SETTLE: Duration = Duration::from_millis(150);
+/// Each finer mesh is this much finer than the zoom needs, so zooming a little further
+/// needs no new one.
+const DETAIL_HEADROOM: f32 = 1.25;
+
+/// When the preview simplifies, how far, and how detailed it may get.
+#[derive(Clone, Copy, Debug)]
+struct Limits {
+    simplify_above: usize,
+    cells: u32,
+    full_detail: usize,
+}
+
+const LIMITS: Limits = Limits {
+    simplify_above: PREVIEW_TRIANGLES,
+    cells: PREVIEW_CELLS,
+    full_detail: FULL_DETAIL,
+};
 
 /// How long the embedded thumbnail fades into the coloured 3D view.
 const CROSSFADE: Duration = Duration::from_millis(250);
@@ -68,8 +101,22 @@ enum State {
     Failed(String),
 }
 
+/// What the UI asks of the drawing thread.
+enum Request {
+    /// A picture of this view and size.
+    Draw(View, [u16; 2]),
+    /// A mesh at least this detailed (cells along the largest side, see [`Meshes`]).
+    Detail(u32),
+}
+
+/// The facts, the detail of the first mesh drawn, and the model as read (held by the
+/// thread; tests check it is freed).
+type Loaded = (Facts, Option<u32>, std::sync::Weak<PreviewMesh>);
+
 enum Reply {
-    Loaded(Result<Facts, String>),
+    Loaded(Result<Loaded, String>),
+    /// The mesh drawn now has this detail; `true`: the finest it will get.
+    Detail(Option<u32>, bool),
     Frame(View, [u16; 2], egui::ColorImage),
     /// The picture for this view and size could not be drawn.
     Failed(View, [u16; 2], String),
@@ -97,15 +144,87 @@ pub struct Preview {
     render_error: Option<String>,
     /// When the first 3D picture arrived (the thumbnail fades out from then).
     first_frame: Option<Instant>,
-    tx: mpsc::Sender<(View, [u16; 2])>,
+    /// The detail of the mesh drawn: `None` the full mesh, else the clustering grid's cells
+    /// along the largest side.
+    detail: Option<u32>,
+    /// The finest detail asked for; `u32::MAX` once the thread has said it goes no finer.
+    asked: u32,
+    /// A finer mesh wanted for this zoom and picture size, since when: asked for once they
+    /// have stayed put for [`ZOOM_SETTLE`].
+    refine: Option<(f32, [u16; 2], Instant)>,
+    #[cfg(test)]
+    retained: std::sync::Weak<PreviewMesh>,
+    tx: mpsc::Sender<Request>,
     rx: mpsc::Receiver<Reply>,
 }
 
-fn simplified(mesh: PreviewMesh) -> PreviewMesh {
-    if mesh.mesh.faces.len() > PREVIEW_TRIANGLES {
-        mesh.simplified(PREVIEW_CELLS)
-    } else {
-        mesh
+/// The meshes the drawing thread holds while the preview shows a model: the model as read
+/// and the one drawn (the same one, or a simplified copy).
+struct Meshes {
+    full: Arc<PreviewMesh>,
+    drawn: Arc<PreviewMesh>,
+    /// `None`: `drawn` is `full`; else the cells along the largest side it was clustered to.
+    detail: Option<u32>,
+    limits: Limits,
+}
+
+impl Meshes {
+    /// A detailed model is drawn simplified at first; the rest as it is.
+    fn new(full: PreviewMesh, limits: Limits) -> Self {
+        let full = Arc::new(full);
+        if full.mesh.faces.len() > limits.simplify_above {
+            Self {
+                drawn: Arc::new(full.simplified(limits.cells)),
+                full,
+                detail: Some(limits.cells),
+                limits,
+            }
+        } else {
+            Self {
+                drawn: full.clone(),
+                full,
+                detail: None,
+                limits,
+            }
+        }
+    }
+
+    /// Draws at least `cells` detail from now on: the full mesh when it is within the
+    /// full-detail budget, else the model clustered to `cells` (coarser when that would be
+    /// well over the budget). Face colours are kept. Returns whether this is the finest the
+    /// preview gets.
+    fn refine(&mut self, cells: u32) -> bool {
+        let Some(now) = self.detail else {
+            return true;
+        };
+        if now >= cells {
+            return false;
+        }
+        let budget = self.limits.full_detail;
+        // The coarser mesh goes first: nothing draws while this thread works.
+        self.drawn = self.full.clone();
+        self.detail = None;
+        if self.full.mesh.faces.len() <= budget {
+            return true;
+        }
+        let mut cells = cells;
+        let mut finer = self.full.simplified(cells);
+        let mut finest = false;
+        // Clustered triangles grow about with the area of a cell (cells squared) until the
+        // cells get finer than the model's own triangles: a few coarser tries at most.
+        for _ in 0..8 {
+            if finer.mesh.faces.len() <= budget || cells <= now {
+                break;
+            }
+            let k = (budget as f32 / finer.mesh.faces.len() as f32).sqrt() * 0.95;
+            cells = ((cells as f32 * k.min(0.7)) as u32).max(now);
+            drop(finer);
+            finer = self.full.simplified(cells);
+            finest = true;
+        }
+        self.drawn = Arc::new(finer);
+        self.detail = Some(cells);
+        finest
     }
 }
 
@@ -127,34 +246,65 @@ pub fn render(
 impl Preview {
     /// Starts reading `path` on a background thread (read-only).
     pub fn new(id: &str, kind: Kind, path: PathBuf, ctx: &egui::Context) -> Self {
-        let (tx, requests) = mpsc::channel::<(View, [u16; 2])>();
+        Self::with_limits(id, kind, path, ctx, LIMITS)
+    }
+
+    fn with_limits(
+        id: &str,
+        kind: Kind,
+        path: PathBuf,
+        ctx: &egui::Context,
+        limits: Limits,
+    ) -> Self {
+        let (tx, requests) = mpsc::channel::<Request>();
         let (replies, rx) = mpsc::channel();
         let ctx = ctx.clone();
         let spawned = std::thread::Builder::new()
             .name("mica-library-preview".into())
             .spawn(move || {
-                let mesh = mica_library::render::load_preview_file(kind, &path);
-                let facts = mesh.as_ref().map_err(Clone::clone).map(|m| {
-                    let (lo, hi) = m.mesh.bounds();
-                    Facts {
-                        size: std::array::from_fn(|i| hi[i] - lo[i]),
-                        triangles: m.triangles,
-                        coloured: m.face_colours.is_some(),
+                let mut meshes = match mica_library::render::load_preview_file(kind, &path) {
+                    Ok(m) => Meshes::new(m, limits),
+                    Err(e) => {
+                        let _ = replies.send(Reply::Loaded(Err(e)));
+                        ctx.request_repaint();
+                        return;
                     }
-                });
-                let failed = facts.is_err();
-                if replies.send(Reply::Loaded(facts)).is_err() || failed {
+                };
+                let m = &meshes.full;
+                let (lo, hi) = m.mesh.bounds();
+                let facts = Facts {
+                    size: std::array::from_fn(|i| hi[i] - lo[i]),
+                    triangles: m.triangles,
+                    coloured: m.face_colours.is_some(),
+                };
+                let loaded = (facts, meshes.detail, Arc::downgrade(m));
+                if replies.send(Reply::Loaded(Ok(loaded))).is_err() {
                     return;
                 }
                 ctx.request_repaint();
-                let Ok(mesh) = mesh.map(simplified) else {
-                    return;
-                };
-                // Draw the newest request; end when the preview is dropped.
-                while let Ok(mut req) = requests.recv() {
-                    while let Ok(newer) = requests.try_recv() {
-                        req = newer;
+                // Draw the newest request (after a finer mesh, if one was asked for); end
+                // when the preview is dropped.
+                let mut last = None;
+                while let Ok(first) = requests.recv() {
+                    let (mut draw, mut detail) = (None, None);
+                    for req in std::iter::once(first).chain(requests.try_iter()) {
+                        match req {
+                            Request::Draw(view, size) => draw = Some((view, size)),
+                            Request::Detail(cells) => detail = detail.max(Some(cells)),
+                        }
                     }
+                    if let Some(cells) = detail {
+                        let finest = meshes.refine(cells);
+                        if replies.send(Reply::Detail(meshes.detail, finest)).is_err() {
+                            return;
+                        }
+                        // Show the finer mesh in the view shown.
+                        draw = draw.or(last);
+                    }
+                    let Some(req) = draw else {
+                        continue;
+                    };
+                    last = Some(req);
                     let (view, [w, h]) = req;
                     let orbit = Orbit {
                         azimuth: view.azimuth,
@@ -162,7 +312,7 @@ impl Preview {
                         zoom: view.zoom,
                         fit: Fit::Sphere,
                     };
-                    let img = match render(&mesh, w, h, orbit) {
+                    let img = match render(&meshes.drawn, w, h, orbit) {
                         Ok(img) => img,
                         Err(e) => {
                             if replies
@@ -195,6 +345,11 @@ impl Preview {
             resizing: None,
             render_error: None,
             first_frame: None,
+            detail: None,
+            asked: 0,
+            refine: None,
+            #[cfg(test)]
+            retained: std::sync::Weak::new(),
             tx,
             rx,
         };
@@ -208,8 +363,24 @@ impl Preview {
     pub fn poll(&mut self, ctx: &egui::Context) {
         while let Ok(reply) = self.rx.try_recv() {
             match reply {
-                Reply::Loaded(Ok(f)) => self.state = State::Ready(f),
+                Reply::Loaded(Ok((f, detail, _full))) => {
+                    self.state = State::Ready(f);
+                    self.detail = detail;
+                    self.asked = detail.unwrap_or(u32::MAX);
+                    #[cfg(test)]
+                    {
+                        self.retained = _full;
+                    }
+                }
                 Reply::Loaded(Err(e)) => self.state = State::Failed(e),
+                Reply::Detail(detail, finest) => {
+                    // The thread draws the shown view again with the new mesh.
+                    self.shown = None;
+                    self.detail = detail;
+                    if finest || detail.is_none() {
+                        self.asked = u32::MAX;
+                    }
+                }
                 Reply::Frame(view, size, image) => {
                     match &mut self.texture {
                         Some(t) => t.set(image, egui::TextureOptions::LINEAR),
@@ -285,15 +456,50 @@ impl Preview {
 
     /// Asks for a picture of `size` physical pixels in the current view (once per change).
     /// A turn or zoom is asked for at once; a new size only once it has stayed put for
-    /// [`RESIZE_SETTLE`] (the last picture scales meanwhile). Returns how long until a
-    /// waiting size is due, for the caller to repaint then.
+    /// [`RESIZE_SETTLE`] (the last picture scales meanwhile). A finer mesh, when the zoom
+    /// and size need one, once they have stayed put for [`ZOOM_SETTLE`] (the current mesh
+    /// draws meanwhile). Returns how long until something waiting is due, for the caller
+    /// to repaint then.
     pub fn request(&mut self, size: [u16; 2]) -> Option<Duration> {
         self.request_at(size, Instant::now())
     }
 
     fn request_at(&mut self, size: [u16; 2], now: Instant) -> Option<Duration> {
-        self.facts()?;
+        let model = self.facts()?.size;
         let size = picture_size(size);
+        let refine = self.refine_at(model, size, now);
+        let draw = self.draw_at(size, now);
+        match (refine, draw) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        }
+    }
+
+    /// Asks for a finer mesh once a clustering cell of the mesh drawn would span more than
+    /// a pixel at the current zoom and picture size, and they have stayed put.
+    fn refine_at(&mut self, model: [f32; 3], size: [u16; 2], now: Instant) -> Option<Duration> {
+        let wanted = mica_library::render::preview_cells(model, size, self.view.zoom);
+        if self.detail.is_none() || wanted <= self.asked {
+            self.refine = None;
+            return None;
+        }
+        let since = match self.refine {
+            Some((zoom, s, t)) if zoom == self.view.zoom && s == size => t,
+            _ => now,
+        };
+        self.refine = Some((self.view.zoom, size, since));
+        let left = ZOOM_SETTLE.saturating_sub(now.duration_since(since));
+        if !left.is_zero() {
+            return Some(left);
+        }
+        self.refine = None;
+        let cells = (wanted as f32 * DETAIL_HEADROOM).ceil() as u32;
+        self.asked = cells;
+        let _ = self.tx.send(Request::Detail(cells));
+        None
+    }
+
+    fn draw_at(&mut self, size: [u16; 2], now: Instant) -> Option<Duration> {
         // A new size of a picture already shown, the view unchanged: wait for it to settle.
         if let Some((view, last)) = self.requested
             && last != size
@@ -314,9 +520,21 @@ impl Preview {
         let want = (self.view, size);
         if self.requested != Some(want) {
             self.requested = Some(want);
-            let _ = self.tx.send(want);
+            let _ = self.tx.send(Request::Draw(want.0, want.1));
         }
         None
+    }
+
+    /// Asks at once for a finer mesh that waits for the zoom to settle (screenshots). Returns
+    /// whether a finer mesh is still on its way.
+    pub fn refine_pending(&mut self) -> bool {
+        if let Some((_, size, since)) = self.refine
+            && let Some(f) = self.facts()
+        {
+            let model = f.size;
+            self.refine_at(model, size, since + ZOOM_SETTLE);
+        }
+        self.asked != u32::MAX && self.detail.is_some_and(|d| d < self.asked)
     }
 
     /// Drag: turn the view (degrees per point).
@@ -797,6 +1015,251 @@ mod tests {
         assert_eq!(p.requested().unwrap().1, [999, 799]);
         assert!(wait(&mut p, &ctx, Preview::settled));
         assert_eq!(p.render_error(), None);
+    }
+
+    /// A block 12 mm square and 10 mm high whose flat top meets a 45° chamfer along +x (the
+    /// side the preview's view looks at), tessellated at about 0.1 mm, the chamfer listed
+    /// first (so a clustering cell straddling the edge keeps a chamfer vertex below the top),
+    /// plus a dense
+    /// patch of tiny triangles on the bottom that clustering removes. Triangles of the top,
+    /// the chamfer and the patch.
+    fn chamfered_block() -> (Vec<[[f32; 3]; 3]>, [usize; 3]) {
+        let (edge, top, rows) = (9.65f32, 10f32, 120);
+        let mut tris = vec![];
+        // From the far side in: the chamfer's lowest vertex in a cell comes first.
+        let quads = |nu: usize, at: &dyn Fn(f32, f32) -> [f32; 3], tris: &mut Vec<_>| {
+            for i in (0..nu).rev() {
+                for j in 0..rows {
+                    let p = |i: usize, j: usize| at(i as f32 / nu as f32, j as f32 / rows as f32);
+                    tris.push([p(i, j), p(i + 1, j), p(i + 1, j + 1)]);
+                    tris.push([p(i, j), p(i + 1, j + 1), p(i, j + 1)]);
+                }
+            }
+        };
+        let side = 12. - edge;
+        quads(
+            24,
+            &|u, v| [edge + u * side, v * 12., top - u * side],
+            &mut tris,
+        );
+        let chamfer = tris.len();
+        quads(97, &|u, v| [u * edge, v * 12., top], &mut tris);
+        let flat = tris.len() - chamfer;
+        quads(
+            4,
+            &|u, v| [12., v * 12., (top - side) * (1. - u)],
+            &mut tris,
+        );
+        // The patch: 0.05 mm across, facing down.
+        let before = tris.len();
+        for i in 0..100 {
+            for j in 0..100 {
+                let p = |i: usize, j: usize| [3. + i as f32 * 5e-4, 3. + j as f32 * 5e-4, 0.];
+                tris.push([p(i, j), p(i + 1, j + 1), p(i + 1, j)]);
+                tris.push([p(i, j), p(i, j + 1), p(i + 1, j + 1)]);
+            }
+        }
+        let patch = tris.len() - before;
+        (tris, [flat, chamfer, patch])
+    }
+
+    fn stl(tris: &[[[f32; 3]; 3]]) -> Vec<u8> {
+        let mut b = vec![0u8; 80];
+        b.extend((tris.len() as u32).to_le_bytes());
+        for t in tris {
+            b.extend([0u8; 12]);
+            for v in t.iter().flatten() {
+                b.extend(v.to_le_bytes());
+            }
+            b.extend([0u8; 2]);
+        }
+        b
+    }
+
+    const RED: [u8; 3] = [200, 40, 40];
+    const BLUE: [u8; 3] = [40, 40, 200];
+    const GREEN: [u8; 3] = [40, 200, 40];
+
+    /// The block in colours: the top red, the chamfer and the wall blue, the patch green.
+    fn coloured_block() -> PreviewMesh {
+        let (tris, [flat, chamfer, patch]) = chamfered_block();
+        let mesh = mica_core::mesh::TriangleMesh::from_stl_bytes(&stl(&tris)).unwrap();
+        let wall = tris.len() - flat - chamfer - patch;
+        let colours: Vec<[u8; 3]> = std::iter::repeat_n(BLUE, chamfer)
+            .chain(std::iter::repeat_n(RED, flat))
+            .chain(std::iter::repeat_n(BLUE, wall))
+            .chain(std::iter::repeat_n(GREEN, patch))
+            .collect();
+        assert_eq!(mesh.faces.len(), colours.len());
+        PreviewMesh {
+            triangles: mesh.faces.len(),
+            mesh,
+            face_colours: Some(colours),
+        }
+    }
+
+    const PICTURE: [u16; 2] = [600, 450];
+
+    /// Pixels of the flat top (exactly its shade in the full mesh's picture) shaded otherwise
+    /// in `m`'s picture, and how many top pixels there are.
+    fn creased(m: &PreviewMesh, full: &PreviewMesh, zoom: f32) -> (usize, usize) {
+        let orbit = Orbit {
+            zoom,
+            fit: Fit::Sphere,
+            ..mica_library::render::VIEW
+        };
+        let [w, h] = PICTURE;
+        let reference = render(full, w, h, orbit).unwrap();
+        let img = render(m, w, h, orbit).unwrap();
+        // The top's shade: the most common opaque red-dominant colour of the reference.
+        let mut counts = std::collections::HashMap::new();
+        for px in reference.rgba.chunks(4) {
+            if px[3] == 255 && px[0] > px[2] + 40 {
+                *counts.entry([px[0], px[1], px[2]]).or_insert(0usize) += 1;
+            }
+        }
+        let shade = counts.into_iter().max_by_key(|&(_, n)| n).unwrap().0;
+        let mut top = 0;
+        let mut off = 0;
+        for (r, px) in reference.rgba.chunks(4).zip(img.rgba.chunks(4)) {
+            if r[3] == 255 && r[..3] == shade {
+                top += 1;
+                if (0..3).any(|i| px[i].abs_diff(shade[i]) > 3) || px[3] != 255 {
+                    off += 1;
+                }
+            }
+        }
+        (off, top)
+    }
+
+    #[test]
+    fn zoomed_in_flat_faces_show_no_creases_after_refining() {
+        let full = coloured_block();
+        let limits = |full_detail| Limits {
+            simplify_above: 1000,
+            cells: 24,
+            full_detail,
+        };
+        let [flat, chamfer, patch] = chamfered_block().1;
+        let size = [12., 12., 10.];
+        let zoom = 2.;
+        let wanted = mica_library::render::preview_cells(size, PICTURE, zoom);
+        // Before: the first view's mesh, its cells several pixels wide at this zoom.
+        let first = Meshes::new(full.clone(), limits(usize::MAX));
+        assert_eq!(first.detail, Some(24));
+        let (before, top) = creased(&first.drawn, &full, zoom);
+        assert!(top > 20_000, "{top} top pixels");
+        assert!(
+            before > 1000,
+            "the first mesh shows creases: {before} of {top}"
+        );
+        // After, within the full-detail budget: the full mesh itself.
+        let mut m = Meshes::new(full.clone(), limits(full.mesh.faces.len()));
+        assert!(m.refine(wanted));
+        assert_eq!(m.detail, None);
+        assert!(Arc::ptr_eq(&m.drawn, &m.full));
+        assert_eq!(creased(&m.drawn, &full, zoom).0, 0);
+        // After, over the budget: clustered to at most a pixel, colours kept.
+        let mut m = Meshes::new(full.clone(), limits(flat + chamfer + 5000));
+        assert!(!m.refine(wanted), "within the budget at this detail");
+        let cells = m.detail.unwrap();
+        let cell_px =
+            12. / cells as f32 * mica_library::render::preview_px_per_mm(size, PICTURE, zoom);
+        assert!(
+            cells >= wanted && cell_px <= 1.,
+            "{cells} cells: {cell_px} px"
+        );
+        let drawn = &m.drawn;
+        assert!(drawn.mesh.faces.len() < full.mesh.faces.len() - patch / 2);
+        let c = drawn.face_colours.as_ref().unwrap();
+        assert_eq!(c.len(), drawn.mesh.faces.len());
+        let n = |k: [u8; 3]| c.iter().filter(|&&x| x == k).count();
+        assert_eq!(n(RED), flat, "every top face keeps its colour");
+        assert!(n(GREEN) < patch / 2);
+        let (after, _) = creased(drawn, &full, zoom);
+        assert!(
+            after * 50 < before,
+            "creases: {before} pixels before, {after} after"
+        );
+        // A budget too small for the zoom: as fine as the budget allows, and said so.
+        let mut m = Meshes::new(full.clone(), limits(4000));
+        assert!(m.refine(wanted));
+        let cells = m.detail.unwrap();
+        assert!(cells >= 24 && cells < wanted, "{cells}");
+        assert!(m.drawn.mesh.faces.len() <= 4000);
+        assert_eq!(
+            m.drawn.face_colours.as_ref().unwrap().len(),
+            m.drawn.mesh.faces.len()
+        );
+    }
+
+    #[test]
+    fn zooming_in_asks_for_a_finer_mesh_once_the_zoom_settles() {
+        let ctx = egui::Context::default();
+        let dir = mica_library::testkit::TempDir::new("preview-zoom");
+        let path = dir.path().join("block.stl");
+        std::fs::write(&path, stl(&chamfered_block().0)).unwrap();
+        let limits = |full_detail| Limits {
+            simplify_above: 1000,
+            cells: 24,
+            full_detail,
+        };
+        let mut p = Preview::with_limits("block", Kind::Stl, path.clone(), &ctx, limits(10));
+        assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+        assert_eq!(p.detail, Some(24));
+        // A small picture at the first view needs no finer mesh.
+        let t0 = Instant::now();
+        assert_eq!(p.request_at([40, 30], t0), None);
+        assert!(p.refine.is_none());
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        // Zooming in: each step draws at once, the finer mesh waits for the zoom to settle.
+        let mut t = t0;
+        for _ in 0..5 {
+            p.zoom(100.);
+            t += ZOOM_SETTLE / 2;
+            assert!(p.request_at(PICTURE, t).is_some_and(|w| w <= ZOOM_SETTLE));
+            assert_eq!(p.asked, 24, "no finer mesh while the zoom changes");
+        }
+        assert!(p.request_at(PICTURE, t + ZOOM_SETTLE / 2).is_some());
+        assert_eq!(p.request_at(PICTURE, t + ZOOM_SETTLE), None);
+        let wanted = mica_library::render::preview_cells([12., 12., 10.], PICTURE, p.view.zoom);
+        assert!(p.asked >= wanted, "{} < {wanted}", p.asked);
+        // The budget (10 triangles) stops it at its finest; it is not asked again.
+        assert!(wait(&mut p, &ctx, |p| p.asked == u32::MAX));
+        assert!(p.detail.unwrap() >= 24);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        p.zoom(200.);
+        assert_eq!(p.request_at(PICTURE, t + ZOOM_SETTLE * 4), None);
+        assert!(p.refine.is_none());
+        // The model as read is held while shown and freed with the preview.
+        let retained = p.retained.clone();
+        assert!(retained.upgrade().is_some());
+        drop(p);
+        let start = Instant::now();
+        while retained.strong_count() > 0 && start.elapsed() < Duration::from_secs(10) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(
+            retained.strong_count(),
+            0,
+            "another selection frees the model"
+        );
+        // Within the full-detail budget the full mesh is drawn, then nothing is asked again.
+        let mut p = Preview::with_limits("block", Kind::Stl, path, &ctx, limits(1_000_000));
+        assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+        p.zoom(300.);
+        let t0 = Instant::now();
+        assert!(p.request_at(PICTURE, t0).is_some());
+        assert_eq!(p.request_at(PICTURE, t0 + ZOOM_SETTLE), None);
+        assert!(wait(&mut p, &ctx, |p| p.detail.is_none()));
+        assert_eq!(p.asked, u32::MAX);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert_eq!(p.render_error(), None);
+        // Zooming back out keeps the full mesh.
+        p.reset();
+        assert_eq!(p.request_at(PICTURE, t0 + ZOOM_SETTLE * 2), None);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert_eq!(p.detail, None);
     }
 
     #[test]

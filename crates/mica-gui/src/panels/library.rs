@@ -2434,9 +2434,10 @@ pub struct DemoGuard {
 }
 
 /// `--library*` screenshot flags taking a value.
-pub const SHOT_VALUE_FLAGS: [&str; 11] = [
+pub const SHOT_VALUE_FLAGS: [&str; 12] = [
     "--library-group",
     "--library-detail-width",
+    "--library-zoom",
     "--library-folder",
     "--library-project",
     "--library-search",
@@ -2463,7 +2464,8 @@ pub const SHOT_VALUE_FLAGS: [&str; 11] = [
 /// drops a model onto the plate's first object (the part-kind choice shows);
 /// `--library-printers` sets up My printers (U1, CORE One, XL) for the "Fits" line;
 /// `--library-folder DIR` indexes DIR (read-only) instead of the synthetic library;
-/// `--library-detail-width W` widens the details panel as dragging its edge does.
+/// `--library-detail-width W` widens the details panel as dragging its edge does;
+/// `--library-zoom F` zooms the details' 3D preview by `F` (and waits for its finer mesh).
 pub fn screenshot_setup(app: &mut App, flags: &[String]) -> Result<DemoGuard, String> {
     use mica_library::testkit::{TempDir, synthetic_library, synthetic_range};
     let value = |name: &str| {

@@ -27,7 +27,7 @@
 //!          [--library] [--library-list] [--library-search T] [--library-select N]
 //!          [--library-filter F] [--library-sort S] [--library-offline] [--library-scanning]
 //!          [--library-group G] [--library-project NAME] [--library-folder DIR]
-//!          [--library-detail-width W]
+//!          [--library-detail-width W] [--library-zoom F]
 //!          [--library-pending] [--library-drag N[,M]] [--library-drop-part N] [--library-printers]
 //!          [--shortcuts SEARCH] [--emboss KIND[+wrap]:FACE:TEXT|svg=PATH]… [--emboss-close]
 //!          [--color-by MODE] [--measure-on] [--measure X,Y[,shift]]... [--section NX,NY,NZ[,POS]]
@@ -1640,6 +1640,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
             std::thread::sleep(std::time::Duration::from_millis(10));
             pv.poll(&ctx);
         }
+        if let Some(i) = a.library.iter().position(|f| f == "--library-zoom") {
+            let z = &a.library[i + 1];
+            pv.view.zoom = z
+                .parse()
+                .map_err(|_| format!("--library-zoom needs a number, not {z}"))?;
+        }
     }
     let flavour = match a.flavour.as_deref() {
         None => None,
@@ -2711,7 +2717,9 @@ async fn render(
             let t = std::time::Instant::now();
             while t.elapsed() < std::time::Duration::from_secs(30) {
                 pv.poll(ctx);
-                if pv.error().is_some() || (pv.settled() && pv.fade() >= 1.) {
+                // A finer mesh for the zoom is asked for at once and waited for.
+                if pv.error().is_some() || (pv.settled() && pv.fade() >= 1. && !pv.refine_pending())
+                {
                     break;
                 }
                 std::thread::sleep(std::time::Duration::from_millis(10));
