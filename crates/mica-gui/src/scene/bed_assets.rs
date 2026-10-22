@@ -338,7 +338,11 @@ mod tests {
     #[test]
     fn roots_prefer_upstream_then_installed_apps() {
         let roots = asset_roots("PrusaResearch");
-        let s: Vec<String> = roots.iter().map(|p| p.display().to_string()).collect();
+        // One separator, so the Windows form (`upstream\prusaslicer\…`) matches too.
+        let s: Vec<String> = roots
+            .iter()
+            .map(|p| p.display().to_string().replace('\\', "/"))
+            .collect();
         let upstream = s
             .iter()
             .position(|p| p.contains("upstream/prusaslicer/resources/profiles/PrusaResearch"))
