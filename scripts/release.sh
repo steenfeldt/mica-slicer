@@ -510,6 +510,21 @@ say "Creating GitHub pre-release v$version on $repo"
 mkdir -p "$(dirname "$site_manifest")"
 cp "$dist/latest.json" "$site_manifest"
 say "Manifest written to $site_manifest"
+# The website's "Download for macOS" button links the DMG of a version directly (GitHub's
+# releases/latest skips pre-releases): point it and its version note at this release.
+if [ -f "$site_dir/index.html" ] && [ -f "$dist/MicaSlicer_${version}_arm64.dmg" ]; then
+  python3 -I - "$site_dir/index.html" "$version" <<'PY'
+import re, sys
+path, version = sys.argv[1], sys.argv[2]
+text = open(path, encoding="utf-8").read()
+new = re.sub(r"releases/download/v[0-9][0-9.]*/MicaSlicer_[0-9][0-9.]*_arm64\.dmg",
+             f"releases/download/v{version}/MicaSlicer_{version}_arm64.dmg", text)
+new = re.sub(r"Version [0-9][0-9.]*, Apple Silicon", f"Version {version}, Apple Silicon", new)
+if new != text:
+    open(path, "w", encoding="utf-8").write(new)
+    print(f"Website download button now points at {version}")
+PY
+fi
 printf 'Next, in this order:\n'
 printf '  1. Check the release page: https://github.com/%s/releases/tag/v%s\n' "$repo" "$version"
 printf '  2. Commit it in the website repo and deploy from there:\n     %s\n' "$deploy_cmd"
