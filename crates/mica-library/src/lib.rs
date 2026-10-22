@@ -59,6 +59,8 @@ pub struct Options {
     pub render: bool,
     /// Meshes with more triangles get no rendered thumbnail (a placeholder shows).
     pub render_budget: u64,
+    /// While another Mica has the index (read-only), how often taking it over is tried.
+    pub takeover_check: Duration,
 }
 
 impl Default for Options {
@@ -70,6 +72,7 @@ impl Default for Options {
             debounce: Duration::from_millis(800),
             render: true,
             render_budget: render::DEFAULT_BUDGET,
+            takeover_check: Duration::from_secs(3),
         }
     }
 }
@@ -98,12 +101,18 @@ pub(crate) struct Shared {
     pub loaded: bool,
     pub error: Option<String>,
     pub warning: Option<String>,
+    /// Another Mica has the index: browsing only (see [`READ_ONLY_NOTE`]).
+    pub read_only: bool,
     /// Thumbnails rendered (or given up on) since the library was opened.
     pub rendered: u64,
     /// The worker has seen the latest pause: no thumbnail render is running, and none
     /// starts until the pause ends ([`Library::wait_paused`]).
     pub pause_seen: bool,
 }
+
+/// What the library says while another Mica process has the index open: browsing and search
+/// work on what that process last saved; it makes every change.
+pub const READ_ONLY_NOTE: &str = "Library is open in another Mica window. Changes are made there.";
 
 /// The library: a handle to the background worker. Dropping it stops the worker.
 pub struct Library {
@@ -225,7 +234,15 @@ impl Library {
         self.lock().generation
     }
 
-    /// The index could not be opened (for example, another Mica already has it open).
+    /// Another Mica process has the index open: this library shows what that process last
+    /// saved and changes nothing (adding folders, rescans, tags, favorites and grouping are
+    /// refused or ignored). It takes the index over by itself once the other process quits.
+    pub fn read_only(&self) -> bool {
+        self.lock().read_only
+    }
+
+    /// The index could not be opened (permissions, I/O). Another Mica having it open is not an
+    /// error: see [`Library::read_only`].
     pub fn error(&self) -> Option<String> {
         self.lock().error.clone()
     }
@@ -247,6 +264,9 @@ impl Library {
     /// Adds a library folder and scans it. Refuses folders inside the app's data folder and
     /// folders already covered by another library folder.
     pub fn add_folder(&self, path: &Path) -> Result<(), String> {
+        if self.read_only() {
+            return Err(READ_ONLY_NOTE.into());
+        }
         let path = expand_home(path);
         if !path.is_absolute() {
             return Err("Choose a full folder path".into());
@@ -271,11 +291,17 @@ impl Library {
     /// Removes a library folder from the index (the folder itself is not touched). Tags and
     /// favourites are kept in case the models come back.
     pub fn remove_folder(&self, path: &Path) {
+        if self.read_only() {
+            return;
+        }
         self.send(Cmd::RemoveFolder(path.to_path_buf()));
     }
 
     /// Rescans one folder, or all of them.
     pub fn rescan(&self, folder: Option<&Path>) {
+        if self.read_only() {
+            return;
+        }
         self.send(Cmd::Rescan(folder.map(Path::to_path_buf)));
     }
 
@@ -302,6 +328,9 @@ impl Library {
     fn update_user(&self, id: &str, f: impl FnOnce(&mut UserData)) {
         {
             let mut s = self.lock();
+            if s.read_only {
+                return;
+            }
             let mut user = s.user.get(id).cloned().unwrap_or_default();
             f(&mut user);
             s.user.insert(id.to_string(), user.clone());
@@ -331,6 +360,9 @@ impl Library {
     pub fn set_grouping(&self, folder: &Path, grouping: Option<Grouping>) {
         {
             let mut s = self.lock();
+            if s.read_only {
+                return;
+            }
             match grouping {
                 Some(g) => s.grouping.insert(folder.to_path_buf(), g),
                 None => s.grouping.remove(folder),

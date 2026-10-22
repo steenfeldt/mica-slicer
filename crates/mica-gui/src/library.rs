@@ -223,6 +223,10 @@ impl LibraryView {
         // the index or its error. Never show an empty library between those two reads.
         self.opening = !lib.loaded();
         self.error = lib.error();
+        // A refusal while another Mica had the library is over once this one has taken it over.
+        if self.notice.as_deref() == Some(mica_library::READ_ONLY_NOTE) && !lib.read_only() {
+            self.notice = None;
+        }
         let generation = lib.generation();
         if generation != self.generation {
             self.generation = generation;

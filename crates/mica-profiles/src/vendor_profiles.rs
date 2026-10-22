@@ -419,24 +419,12 @@ pub mod prusa {
         Ok(data)
     }
 
-    /// Writes `bytes` to `path` through a temporary file next to it, so `path` is either
-    /// complete or absent.
+    /// Writes `bytes` to `path` through a temporary file next to it (unique to this process
+    /// and call, so two Mica processes or two downloads in one never share one), so `path` is
+    /// either complete or absent. The bytes are checked before this: two processes downloading
+    /// at once both put the same verified file in place.
     fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-        let dir = path.parent().ok_or("no folder")?;
-        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let name = path
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default();
-        let tmp = dir.join(format!(".{name}.part-{}", std::process::id()));
-        let written = std::fs::write(&tmp, bytes)
-            .and_then(|()| std::fs::File::open(&tmp)?.sync_all())
-            .and_then(|()| std::fs::rename(&tmp, path));
-        if let Err(e) = written {
-            let _ = std::fs::remove_file(&tmp);
-            return Err(format!("{}: {e}", path.display()));
-        }
-        Ok(())
+        mica_core::shared_file::write(path, bytes).map_err(|e| format!("{}: {e}", path.display()))
     }
 
     fn file_matches(path: &Path, sha: &str) -> bool {

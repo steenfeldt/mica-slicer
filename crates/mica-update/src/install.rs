@@ -100,7 +100,18 @@ pub fn install(target: &Target, format: Format, bytes: &[u8]) -> Result<Staged, 
         ));
     }
     match target {
-        Target::MacApp(app) => install_app(app, bytes),
+        // The bundle is swapped while Mica runs: never under another running Mica, and only
+        // one process at a time.
+        Target::MacApp(app) => {
+            let exe = std::fs::read_dir(app.join("Contents").join("MacOS"))
+                .ok()
+                .and_then(|mut d| d.find_map(|e| e.ok().map(|e| e.path())));
+            let _only = match exe {
+                Some(exe) => Some(crate::instance::exclusive(&exe)?),
+                None => None,
+            };
+            install_app(app, bytes)
+        }
         Target::AppImage(image) => install_appimage(image, bytes),
         Target::Windows(_) => save_installer(bytes),
     }

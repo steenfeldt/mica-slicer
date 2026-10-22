@@ -33,6 +33,7 @@ use std::{
 };
 
 mod install;
+pub mod instance;
 pub use install::{Staged, Target, install, relaunch_after_exit, target_for};
 
 /// Where update manifests live: the one place to change the server. Each channel has its

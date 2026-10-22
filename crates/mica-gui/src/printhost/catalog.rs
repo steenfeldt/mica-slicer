@@ -852,14 +852,9 @@ impl GalleryIndex {
                 stamp: now,
                 index,
             };
-            if let Some(dir) = path.parent() {
-                let _ = std::fs::create_dir_all(dir);
-            }
+            // Another Mica process may write the same cache: each writes its own temporary file.
             if let Ok(text) = serde_json::to_string(&file) {
-                let tmp = path.with_extension("json.tmp");
-                if std::fs::write(&tmp, text).is_ok() {
-                    let _ = std::fs::rename(&tmp, path);
-                }
+                let _ = mica_core::shared_file::write(path, text.as_bytes());
             }
             return file.index;
         }
