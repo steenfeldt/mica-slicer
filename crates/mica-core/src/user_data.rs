@@ -53,8 +53,24 @@ pub fn home() -> Option<PathBuf> {
     if isolated() {
         return None;
     }
-    std::env::var_os("HOME")
-        .filter(|h| !h.is_empty())
+    real_home()
+}
+
+/// The home folder from the environment, isolated or not: `HOME`, and on Windows (where
+/// `HOME` is normally not set) `USERPROFILE` first, as `std::env::home_dir` does there.
+fn real_home() -> Option<PathBuf> {
+    home_from(cfg!(windows), |name| std::env::var_os(name))
+}
+
+fn home_from(windows: bool, var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Option<PathBuf> {
+    let names: &[&str] = if windows {
+        &["USERPROFILE", "HOME"]
+    } else {
+        &["HOME"]
+    };
+    names
+        .iter()
+        .find_map(|n| var(n).filter(|h| !h.is_empty()))
         .map(PathBuf::from)
 }
 
@@ -116,10 +132,10 @@ pub fn config_dir() -> PathBuf {
 
 /// Panics when `dir` is the real settings folder (tests must never open it).
 fn guard(dir: &Path) {
-    let Some(real_home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) else {
+    let Some(real_home) = real_home() else {
         return;
     };
-    let real = default_config_dir(Path::new(&real_home));
+    let real = default_config_dir(&real_home);
     let same = |a: &Path, b: &Path| match (a.canonicalize(), b.canonicalize()) {
         (Ok(a), Ok(b)) => a == b,
         _ => a == b,
@@ -215,11 +231,45 @@ mod tests {
     }
 
     #[test]
+    fn windows_finds_the_home_folder_without_home() {
+        use std::ffi::OsString;
+        fn env<'a>(vars: &'a [(&str, &str)]) -> impl Fn(&str) -> Option<OsString> + 'a {
+            move |n| {
+                vars.iter()
+                    .find(|(k, _)| *k == n)
+                    .map(|(_, v)| OsString::from(v))
+            }
+        }
+        let profile = [("USERPROFILE", r"C:\Users\Zoë Ørsted")];
+        assert_eq!(
+            home_from(true, env(&profile)),
+            Some(PathBuf::from(r"C:\Users\Zoë Ørsted"))
+        );
+        // USERPROFILE wins over an MSYS-style HOME; HOME only when it is all there is.
+        let both = [("HOME", "/c/Users/zoe"), ("USERPROFILE", r"C:\Users\zoe")];
+        assert_eq!(
+            home_from(true, env(&both)),
+            Some(PathBuf::from(r"C:\Users\zoe"))
+        );
+        assert_eq!(
+            home_from(true, env(&[("HOME", r"D:\h")])),
+            Some(PathBuf::from(r"D:\h"))
+        );
+        assert_eq!(home_from(true, env(&[("USERPROFILE", "")])), None);
+        // Elsewhere only HOME counts.
+        assert_eq!(home_from(false, env(&profile)), None);
+        assert_eq!(
+            home_from(false, env(&[("HOME", "/home/zoë ø")])),
+            Some(PathBuf::from("/home/zoë ø"))
+        );
+    }
+
+    #[test]
     fn the_real_settings_folder_panics_in_tests() {
-        let Some(home) = std::env::var_os("HOME").filter(|h| !h.is_empty()) else {
+        let Some(home) = real_home() else {
             return;
         };
-        let real = default_config_dir(Path::new(&home));
+        let real = default_config_dir(&home);
         assert!(std::panic::catch_unwind(|| guard(&real)).is_err());
         guard(&std::env::temp_dir().join("mica-other"));
     }

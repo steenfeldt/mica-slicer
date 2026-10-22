@@ -350,13 +350,23 @@ build_windows() {
   for d in /opt/homebrew/opt/llvm/bin /opt/homebrew/opt/llvm@*/bin /opt/homebrew/opt/lld/bin /opt/homebrew/opt/lld@*/bin; do
     [ -d "$d" ] && PATH="$PATH:$d"
   done
-  if ! command -v clang-cl >/dev/null 2>&1 || ! command -v lld-link >/dev/null 2>&1; then
-    skip "Windows: clang-cl / lld-link not found (brew install llvm lld)"; return
+  if ! command -v clang-cl >/dev/null 2>&1 || ! command -v lld-link >/dev/null 2>&1 \
+    || ! command -v llvm-readobj >/dev/null 2>&1; then
+    skip "Windows: clang-cl / lld-link / llvm-readobj not found (brew install llvm lld)"; return
   fi
   rustup target add x86_64-pc-windows-msvc >/dev/null
-  cargo xwin build --profile "$profile" --target x86_64-pc-windows-msvc -p mica-gui --bin mica-gui
+  # The C runtime linked in statically: the installer ships no Visual C++ Redistributable, and
+  # a fresh Windows does not always have VCRUNTIME140.dll.
+  CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS="-C target-feature=+crt-static" \
+    cargo xwin build --profile "$profile" --target x86_64-pc-windows-msvc -p mica-gui --bin mica-gui
   local bin="$root/target/x86_64-pc-windows-msvc/$pdir"
   check_no_openh264 "$bin/mica-gui.exe"
+  local imports
+  imports="$(llvm-readobj --coff-imports "$bin/mica-gui.exe" | sed -n 's/^ *Name: //p' | sort -u)"
+  if printf '%s\n' "$imports" | grep -q -i -E '^(vcruntime|msvcp)[0-9]*\.dll$'; then
+    die "mica-gui.exe needs the Visual C++ runtime DLLs (not shipped): $(printf '%s ' $imports)"
+  fi
+  echo "ok: mica-gui.exe needs only Windows' own DLLs"
   say "Windows: NSIS installer"
   local out="$dist/windows"
   rm -rf "$out" "$dist"/MicaSlicer_*-setup.exe

@@ -571,7 +571,8 @@ fn thumbnails_wait_while_slicing_and_resume_after_a_restart() {
         && s.files > 0
         && s.models.iter().any(|m| m.info.thumbnail_rendered)));
     l.set_paused(true);
-    std::thread::sleep(Duration::from_millis(300));
+    // A render already running when the pause was set may still finish; wait for that.
+    assert!(l.wait_paused(T));
     let paused_at = l.thumbnails_rendered();
     std::thread::sleep(Duration::from_millis(500));
     assert_eq!(

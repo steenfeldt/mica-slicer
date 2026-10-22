@@ -291,6 +291,8 @@ impl Worker {
             let idle = self.queue.is_empty() && self.events.is_empty() && self.renders.is_empty();
             let mut g = self.lock();
             g.busy = !idle;
+            // Renders run on this thread, so none is running here; set_paused clears it.
+            g.pause_seen = self.paused.load(Ordering::Relaxed);
         }
         self.flush(&mut Changes::default());
     }
