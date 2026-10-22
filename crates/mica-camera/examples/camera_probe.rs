@@ -32,6 +32,7 @@ fn serve(mut args: impl Iterator<Item = String>) {
             fps,
             render: std::sync::Arc::new(move |t| mica_camera::mock::test_pattern(w, h, t)),
             lose_every: None,
+            lose_resends: false,
             webrtc: true,
         },
     )

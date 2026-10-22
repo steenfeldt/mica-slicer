@@ -436,6 +436,7 @@ fn main() {
                 fps: 15.,
                 render,
                 lose_every: None,
+                lose_resends: false,
                 webrtc: true,
             };
             match mica_camera::mock::CameraStreamer::start(cs, options_cs) {
