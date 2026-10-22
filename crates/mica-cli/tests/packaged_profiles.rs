@@ -100,14 +100,17 @@ fn a_packaged_build_uses_the_shipped_orca_profiles_and_asks_to_fetch_prusas() {
     let out = text(&r);
     assert!(r.status.success(), "{out}");
     assert!(out.contains("Snapmaker U1 (0.4 nozzle)"), "{out}");
-    assert!(out.contains(shipped.to_str().unwrap()), "{out}");
+    assert!(
+        slashes(&out).contains(&slashes(shipped.to_str().unwrap())),
+        "{out}"
+    );
     assert_eq!(app.slice("cube20.stl", &U1), "d86e39a8");
 
     // A vendor that is not shipped comes from an installed OrcaSlicer, if any, or says so.
     let r = app.mica(&["profiles", "printer", "--vendor", "Flashforge"]);
     if r.status.success() {
         assert!(
-            !text(&r).contains(shipped.to_str().unwrap()),
+            !slashes(&text(&r)).contains(&slashes(shipped.to_str().unwrap())),
             "{}",
             text(&r)
         );
@@ -151,6 +154,15 @@ fn the_downloaded_prusa_bundle_slices_the_reference() {
     std::fs::copy(mica_testkit::prusa_bundle(), cache.join("2.5.12.ini")).unwrap();
     let r = app.mica(&["profiles", "printer"]);
     assert!(r.status.success(), "{}", text(&r));
-    assert!(text(&r).contains(&*cache.to_string_lossy()), "{}", text(&r));
+    assert!(
+        slashes(&text(&r)).contains(&slashes(&cache.to_string_lossy())),
+        "{}",
+        text(&r)
+    );
     assert_eq!(app.slice("cube20.stl", &[]), "d833d655");
+}
+
+/// Paths as text with one separator, so a Windows path printed with `\` matches one built with `/`.
+fn slashes(s: &str) -> String {
+    s.replace('\\', "/")
 }
