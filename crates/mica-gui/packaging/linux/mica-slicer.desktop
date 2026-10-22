@@ -7,4 +7,4 @@ Icon=mica-slicer
 Terminal=false
 Categories=Graphics;3DGraphics;Engineering;
 MimeType=model/3mf;model/stl;
-StartupWMClass=mica-gui
+StartupWMClass=mica-slicer

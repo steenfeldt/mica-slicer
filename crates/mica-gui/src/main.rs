@@ -175,6 +175,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             ])
             .with_min_inner_size([900., 600.])
             .with_title("Mica Slicer")
+            // Linux (Wayland) shows the icon of the .desktop entry whose name matches the app id;
+            // the window icon below is used on X11 and Windows only.
+            .with_app_id("mica-slicer")
             .with_icon(app_icon()),
         ..Default::default()
     };
