@@ -27,7 +27,7 @@
 //!          [--library] [--library-list] [--library-search T] [--library-select N]
 //!          [--library-filter F] [--library-sort S] [--library-offline] [--library-scanning]
 //!          [--library-group G] [--library-project NAME] [--library-folder DIR]
-//!          [--library-detail-width W] [--library-zoom F]
+//!          [--library-detail-width W] [--library-zoom F] [--library-plate N]
 //!          [--library-pending] [--library-drag N[,M]] [--library-drop-part N] [--library-printers]
 //!          [--shortcuts SEARCH] [--emboss KIND[+wrap]:FACE:TEXT|svg=PATH]… [--emboss-close]
 //!          [--color-by MODE] [--measure-on] [--measure X,Y[,shift]]... [--section NX,NY,NZ[,POS]]
@@ -1645,6 +1645,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
             pv.view.zoom = z
                 .parse()
                 .map_err(|_| format!("--library-zoom needs a number, not {z}"))?;
+        }
+        // `--library-plate N`: a project's plate N (one-based) in the 3D preview.
+        if let Some(i) = a.library.iter().position(|f| f == "--library-plate") {
+            let n = &a.library[i + 1];
+            let plates = pv.plates().len().max(1);
+            match n.parse::<usize>() {
+                Ok(n) if (1..=plates).contains(&n) => pv.set_plate(n - 1),
+                _ => return Err(format!("--library-plate: plate 1 to {plates}, not {n}")),
+            }
         }
     }
     let flavour = match a.flavour.as_deref() {

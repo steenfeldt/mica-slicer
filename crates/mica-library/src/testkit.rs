@@ -411,6 +411,47 @@ pub fn coloured_3mf() -> Vec<u8> {
     out.finish().expect("zip").into_inner()
 }
 
+/// [`coloured_3mf`] with four plates: 1 unnamed (the painted cube on tool 1 and a cube on
+/// tool 2), 2 "Lid" (tool 3, white), 3 "Loose" (the cube left off the plates, tool 4, red)
+/// and 4 unnamed and empty.
+pub fn four_plates_3mf() -> Vec<u8> {
+    use std::io::{Read, Write};
+    let mut zin = zip::ZipArchive::new(std::io::Cursor::new(coloured_3mf())).expect("zip");
+    let mut out = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let opts = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Deflated);
+    for i in 0..zin.len() {
+        let mut f = zin.by_index(i).expect("entry");
+        let name = f.name().to_string();
+        let mut data = vec![];
+        f.read_to_end(&mut data).expect("read entry");
+        if name == "Metadata/model_settings.config" {
+            let text = String::from_utf8(data).expect("text");
+            let plate = |id: u32, name: &str, object: Option<u32>| {
+                let inst = object.map_or(String::new(), |o| {
+                    format!(
+                        "<model_instance><metadata key=\"object_id\" value=\"{o}\"/>\
+                         <metadata key=\"instance_id\" value=\"0\"/></model_instance>"
+                    )
+                });
+                format!(
+                    "<plate><metadata key=\"plater_id\" value=\"{id}\"/>\
+                     <metadata key=\"plater_name\" value=\"{name}\"/>{inst}</plate>"
+                )
+            };
+            let more = format!(
+                "{}{}</config>",
+                plate(3, "Loose", Some(4)),
+                plate(4, "", None)
+            );
+            data = text.replace("</config>", &more).into_bytes();
+        }
+        out.start_file(name, opts).expect("entry");
+        out.write_all(&data).expect("write entry");
+    }
+    out.finish().expect("zip").into_inner()
+}
+
 /// A project 3MF: the repository's `plates-orca.3mf` with `picture` as its plate thumbnail
 /// (so each generated project has its own content and cover).
 pub fn sample_3mf(picture: &[u8]) -> Vec<u8> {

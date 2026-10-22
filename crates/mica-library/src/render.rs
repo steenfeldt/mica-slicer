@@ -11,7 +11,7 @@
 //! meshes are simplified first (vertex clustering finer than a pixel); meshes above the
 //! triangle budget are not rendered at all and keep a placeholder.
 
-use crate::extract::{first_plate_mesh, first_plate_tool_mesh, parse_obj, project_colours};
+use crate::extract::{first_plate_mesh, parse_obj, plate_mesh, plate_tool_mesh, project_colours};
 use crate::model::{Info, Kind};
 use mica_core::mesh::TriangleMesh;
 use mica_gcode::thumbnails::{Fit, Orbit};
@@ -126,45 +126,93 @@ pub fn load_preview(kind: Kind, data: &[u8]) -> Result<PreviewMesh, String> {
             triangles,
         });
     }
-    let project =
-        mica_core::threemf::read_3mf(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
-    let colours: Vec<Option<[u8; 3]>> = project_colours(&project)
-        .iter()
-        .map(|c| c.as_deref().and_then(hex_rgb))
-        .collect();
-    if colours.iter().all(Option::is_none) {
-        let mesh = first_plate_mesh(&project);
-        if mesh.faces.is_empty() {
-            return Err("the file holds no triangles".into());
-        }
-        let triangles = mesh.faces.len();
-        return Ok(PreviewMesh {
-            mesh,
-            face_colours: None,
-            triangles,
-        });
-    }
-    let triangles = crate::extract::first_plate_triangles(&project);
-    let (mesh, tools) = first_plate_tool_mesh(&project);
-    drop(project);
-    if mesh.faces.is_empty() {
-        return Err("the file holds no triangles".into());
-    }
-    // A tool without a colour of its own keeps the accent.
-    let face_colours = tools
-        .iter()
-        .map(|&t| {
-            t.checked_sub(1)
-                .and_then(|i| colours.get(i).copied().flatten())
-                .map(display_colour)
-                .unwrap_or(VIOLET)
+    PreviewProject::read(data)?.plate(0)
+}
+
+/// A project read for the 3D preview: its plates, and what any plate's [`PreviewMesh`] is
+/// made from, so another plate is shown without reading the file again.
+pub struct PreviewProject {
+    project: mica_core::threemf::Project,
+    /// The tools' display colours (one slot per tool); empty or all `None`: no colours.
+    colours: Vec<Option<[u8; 3]>>,
+    names: Vec<String>,
+}
+
+impl PreviewProject {
+    /// Reads a 3MF's content.
+    pub fn read(data: &[u8]) -> Result<Self, String> {
+        let project =
+            mica_core::threemf::read_3mf(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
+        let colours = project_colours(&project)
+            .iter()
+            .map(|c| c.as_deref().and_then(hex_rgb))
+            .collect();
+        let names = crate::extract::plate_names(&project);
+        Ok(Self {
+            project,
+            colours,
+            names,
         })
-        .collect();
-    Ok(PreviewMesh {
-        mesh,
-        face_colours: Some(face_colours),
-        triangles,
-    })
+    }
+
+    /// Reads a 3MF file (read-only).
+    pub fn read_file(path: &Path) -> Result<Self, String> {
+        let size = std::fs::metadata(path).map_err(|e| e.to_string())?.len();
+        if size > MAX_FILE {
+            return Err("too large to preview".into());
+        }
+        Self::read(&std::fs::read(path).map_err(|e| e.to_string())?)
+    }
+
+    /// The plates' names in order (empty for a plate without one); at least one.
+    pub fn plate_names(&self) -> &[String] {
+        &self.names
+    }
+
+    /// Plate `plate` (zero-based) in its filament colours: each part's tool, colour-painted
+    /// facets split into their painted leaves, near-black lifted ([`display_colour`]).
+    pub fn plate(&self, plate: usize) -> Result<PreviewMesh, String> {
+        let empty = || {
+            if self.names.len() > 1 {
+                "nothing on this plate".to_string()
+            } else {
+                "the file holds no triangles".to_string()
+            }
+        };
+        let project = &self.project;
+        if self.colours.iter().all(Option::is_none) {
+            let mesh = plate_mesh(project, plate);
+            if mesh.faces.is_empty() {
+                return Err(empty());
+            }
+            let triangles = mesh.faces.len();
+            return Ok(PreviewMesh {
+                mesh,
+                face_colours: None,
+                triangles,
+            });
+        }
+        let triangles = crate::extract::plate_triangles(project, plate);
+        let (mesh, tools) = plate_tool_mesh(project, plate);
+        if mesh.faces.is_empty() {
+            return Err(empty());
+        }
+        // A tool without a colour of its own keeps the accent.
+        let face_colours = tools
+            .iter()
+            .map(|&t| {
+                t.checked_sub(1)
+                    .and_then(|i| self.colours.get(i).copied().flatten())
+                    .map(display_colour)
+                    .unwrap_or(VIOLET)
+            })
+            .collect();
+        Ok(PreviewMesh {
+            mesh,
+            face_colours: Some(face_colours),
+            triangles,
+        })
+    }
 }
 
 /// Reads a model file (read-only) and returns its preview mesh.
@@ -428,6 +476,42 @@ mod tests {
             ..Default::default()
         };
         assert!(needs_colours(Kind::ThreeMf, &old) && !needs_colours(Kind::Stl, &old));
+    }
+
+    #[test]
+    fn each_plate_of_a_project_in_its_colours() {
+        let p = PreviewProject::read(&crate::testkit::four_plates_3mf()).unwrap();
+        assert_eq!(p.plate_names(), ["", "Lid", "Loose", ""]);
+        // Plate 1 as the first-plate preview shows it.
+        let first = load_preview(Kind::ThreeMf, &crate::testkit::four_plates_3mf()).unwrap();
+        let one = p.plate(0).unwrap();
+        assert_eq!(one.triangles, first.triangles);
+        assert_eq!(one.face_colours, first.face_colours);
+        // The lid: tool 3, white; the loose cube: tool 4, red.
+        let only = |m: &PreviewMesh, rgb: [u8; 3]| {
+            let c = m.face_colours.as_ref().unwrap();
+            !c.is_empty() && c.iter().all(|&x| x == rgb)
+        };
+        let lid = p.plate(1).unwrap();
+        assert!(only(&lid, [0xFF, 0xFF, 0xFF]), "{:?}", lid.face_colours);
+        let loose = p.plate(2).unwrap();
+        assert!(only(&loose, [0xFB, 0x02, 0x07]), "{:?}", loose.face_colours);
+        assert_eq!((lid.triangles, loose.triangles), (12, 12));
+        // An empty plate, and one the project does not have, say so.
+        assert_eq!(p.plate(3).unwrap_err(), "nothing on this plate");
+        assert!(p.plate(9).is_err());
+        // One plate: one unnamed plate; the original two-plate file names its second.
+        let two = std::fs::read(crate::testkit::repo_root().join("tests/models/plates-orca.3mf"))
+            .unwrap();
+        assert_eq!(
+            PreviewProject::read(&two).unwrap().plate_names(),
+            ["", "Lid"]
+        );
+        let one = std::fs::read(crate::testkit::repo_root().join("tests/models/painted-cube.3mf"))
+            .unwrap();
+        let one = PreviewProject::read(&one).unwrap();
+        assert_eq!(one.plate_names(), [""]);
+        assert!(one.plate(0).is_ok());
     }
 
     #[test]

@@ -275,11 +275,13 @@ fn slice_info(text: &str, info: &mut Info) {
     }
 }
 
-/// The printable model parts of a project's first plate (every part without plate data):
-/// `(instance, part, tool)` with the part's one-based tool (the part's `extruder`, else the
-/// object's, else 1).
-fn first_plate_parts(
+/// The printable model parts of a project's plate `plate` (zero-based; every part when the
+/// project has no plate data): `(instance, part, tool)` with the part's one-based tool (the
+/// part's `extruder`, else the object's, else 1). A plate the project does not have holds
+/// nothing.
+fn plate_parts(
     project: &mica_core::threemf::Project,
+    plate: usize,
 ) -> impl Iterator<
     Item = (
         &mica_core::threemf::Instance,
@@ -287,22 +289,29 @@ fn first_plate_parts(
         usize,
     ),
 > {
-    let first: Option<BTreeSet<(usize, usize)>> = project
-        .plates
-        .first()
-        .map(|p| p.instances.iter().map(|i| (i.object, i.instance)).collect());
+    let on: Option<BTreeSet<(usize, usize)>> = if project.plates.is_empty() {
+        (plate != 0).then(BTreeSet::new)
+    } else {
+        Some(
+            project
+                .plates
+                .get(plate)
+                .map(|p| p.instances.iter().map(|i| (i.object, i.instance)).collect())
+                .unwrap_or_default(),
+        )
+    };
     let tool = |s: &mica_core::threemf::Settings| {
         s.get("extruder")
             .and_then(|v| v.trim().parse::<usize>().ok())
             .filter(|&t| t > 0)
     };
     project.objects.iter().enumerate().flat_map(move |(oi, o)| {
-        let first = first.clone();
+        let on = on.clone();
         o.instances
             .iter()
             .enumerate()
             .filter(move |(ii, inst)| {
-                inst.printable && first.as_ref().is_none_or(|f| f.contains(&(oi, *ii)))
+                inst.printable && on.as_ref().is_none_or(|f| f.contains(&(oi, *ii)))
             })
             .flat_map(move |(_, inst)| {
                 o.parts
@@ -316,11 +325,29 @@ fn first_plate_parts(
     })
 }
 
+/// The plates of a project, in order, by name (empty for a plate without one); one unnamed
+/// plate for a project without plate data.
+pub fn plate_names(project: &mica_core::threemf::Project) -> Vec<String> {
+    if project.plates.is_empty() {
+        return vec![String::new()];
+    }
+    project
+        .plates
+        .iter()
+        .map(|p| p.name.trim().to_string())
+        .collect()
+}
+
 /// The assembled first plate of a project (every printable model part of the objects on it,
 /// in bed coordinates), or everything without plate data.
 pub fn first_plate_mesh(project: &mica_core::threemf::Project) -> TriangleMesh {
+    plate_mesh(project, 0)
+}
+
+/// The assembled plate `plate` (zero-based) of a project, as [`first_plate_mesh`] the first.
+pub fn plate_mesh(project: &mica_core::threemf::Project, plate: usize) -> TriangleMesh {
     let mut mesh = TriangleMesh::default();
-    for (inst, part, _) in first_plate_parts(project) {
+    for (inst, part, _) in plate_parts(project, plate) {
         let base = mesh.vertices.len() as u32;
         mesh.vertices
             .extend(part.mesh.vertices.iter().map(|&v| inst.transform.apply(v)));
@@ -335,7 +362,12 @@ pub fn first_plate_mesh(project: &mica_core::threemf::Project) -> TriangleMesh {
 
 /// Triangles of the first plate's model parts (as [`first_plate_mesh`] holds them).
 pub fn first_plate_triangles(project: &mica_core::threemf::Project) -> usize {
-    first_plate_parts(project)
+    plate_triangles(project, 0)
+}
+
+/// Triangles of plate `plate`'s model parts (zero-based, see [`plate_tool_mesh`]).
+pub fn plate_triangles(project: &mica_core::threemf::Project, plate: usize) -> usize {
+    plate_parts(project, plate)
         .map(|(_, part, _)| part.mesh.faces.len())
         .sum()
 }
@@ -344,7 +376,7 @@ pub fn first_plate_triangles(project: &mica_core::threemf::Project) -> usize {
 /// painted on it (colour painting / MMU segmentation).
 pub fn first_plate_tools(project: &mica_core::threemf::Project) -> BTreeSet<usize> {
     let mut out = BTreeSet::new();
-    for (_, part, tool) in first_plate_parts(project) {
+    for (_, part, tool) in plate_parts(project, 0) {
         out.insert(tool);
         out.extend(part.painting.material.states().into_iter().map(usize::from));
     }
@@ -355,9 +387,17 @@ pub fn first_plate_tools(project: &mica_core::threemf::Project) -> BTreeSet<usiz
 /// faces carry its tool, and colour-painted facets are split into their painted leaves,
 /// each with its own tool (as Prepare draws them).
 pub fn first_plate_tool_mesh(project: &mica_core::threemf::Project) -> (TriangleMesh, Vec<usize>) {
+    plate_tool_mesh(project, 0)
+}
+
+/// Plate `plate` (zero-based) as [`first_plate_tool_mesh`] draws the first one.
+pub fn plate_tool_mesh(
+    project: &mica_core::threemf::Project,
+    plate: usize,
+) -> (TriangleMesh, Vec<usize>) {
     let mut mesh = TriangleMesh::default();
     let mut tools = Vec::new();
-    for (inst, part, tool) in first_plate_parts(project) {
+    for (inst, part, tool) in plate_parts(project, plate) {
         let mirrored = inst.transform.determinant() < 0.;
         let paint = &part.painting.material;
         if paint.is_empty() {
