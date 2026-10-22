@@ -47,12 +47,21 @@ impl Mock {
         let calls = Arc::new(Mutex::new(vec![]));
         let stop = Arc::new(Mutex::new(false));
         let (c, s) = (calls.clone(), stop.clone());
+        // One thread per connection: a slow or idle connection (a busy CI runner) never holds
+        // up the next request.
         let handle = thread::spawn(move || {
+            let mut served = vec![];
             while !*s.lock().unwrap() {
                 match listener.accept() {
-                    Ok((stream, _)) => serve(stream, &b, &c),
+                    Ok((stream, _)) => {
+                        let (b, c) = (b.clone(), c.clone());
+                        served.push(thread::spawn(move || serve(stream, &b, &c)));
+                    }
                     Err(_) => thread::sleep(Duration::from_millis(2)),
                 }
+            }
+            for t in served {
+                let _ = t.join();
             }
         });
         Some(Self {
