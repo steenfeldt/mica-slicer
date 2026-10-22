@@ -170,6 +170,52 @@ passes `--features` and fails if a built binary contains OpenH264 symbols.
 - Cleaner long-term alternative: load GStreamer at run time (dlopen) in `mica-videodec`;
   then the AppImage would need no fallback libraries.
 
+## The macOS disk image
+
+`MicaSlicer_<v>_arm64.dmg` opens as a fixed installer window: the Mica Slicer app on the left,
+the Applications folder on the right, an arrow between them and "Drag Mica Slicer to
+Applications" below, on Mica's dark background, without toolbar, sidebar, path bar or status
+bar, with 128 pt icons and Mica's icon as the volume icon (`.VolumeIcon.icns`). The volume is
+named "Mica Slicer".
+
+- **Built with [dmgbuild](https://github.com/dmgbuild/dmgbuild)** (MIT), which writes the
+  window layout into the image's `.DS_Store` directly: no AppleScript or Finder automation, so
+  it works without a GUI session or permission prompts and gives the same layout every run.
+  Its settings are `crates/mica-gui/packaging/macos/dmg/settings.py` (window 640 × 420 pt of
+  content, icon centers at (160, 175) and (480, 175), 13 pt labels).
+- **Pinned:** dmgbuild 1.6.7 with ds-store 1.3.3 and mac-alias 2.2.3, by version and sha256 in
+  `crates/mica-gui/packaging/macos/dmg/requirements.txt` (wheels only). The script installs
+  them into a private virtual environment under `~/Library/Caches/mica-release/dmgbuild-<hash
+  of the requirements file>/` (`MICA_RELEASE_CACHE` overrides the folder) and rebuilds it when
+  the pins change; never into the system or user Python. To update: new versions and wheel
+  hashes from PyPI into `requirements.txt`.
+- **Order unchanged:** the image is made from the already signed (and, in a real release,
+  notarized and stapled) app, copied with `ditto`; then the `.dmg` itself is signed,
+  notarized and stapled (a dry run skips those). dmgbuild sizes the image itself (contents
+  plus 128 MB of room before compression), so hdiutil's sometimes too small `-srcfolder`
+  estimate (the old explicit `-size` workaround) no longer applies. hdiutil prints
+  deprecation warnings for `create`, `attach` and `convert` on macOS 26; they are harmless.
+- **Background:** `variant-N.svg` in the same folder is the source, `variant-N.png` (1x,
+  640 × 440: the 420 pt window plus a 20 pt bleed for older macOS title bars) and
+  `variant-N@2x.png` (Retina) the committed renders; dmgbuild combines the pair into one
+  multi-resolution TIFF (`tiffutil -cathidpicheck`), stored hidden as `.background.tiff`.
+  Four designs exist (1: minimal arrow, 2: dotted curve on a violet glow, 3: the icon's
+  layer bars, 4: faint printed layer lines with a solid arc arrow); `background_variant` in
+  `settings.py` picks one (default `variant-4`).
+- **Label plates:** Finder draws the icon labels black in light mode and white in dark mode,
+  whatever the background. Each label sits on a mid-violet plate dark enough for white and
+  light enough for black text (about 4.4:1 and 4.8:1 contrast); keep that if the design
+  changes.
+- **Regenerate** after editing an SVG: `crates/mica-gui/packaging/macos/dmg/render.sh`
+  (headless Google Chrome, IBM Plex Sans from `crates/mica-gui/assets/fonts`). With `--mock
+  DIR` it also writes a mock of the mounted window per variant (title bar, the real app icon,
+  the system Applications folder icon, Finder-style labels) for comparing designs.
+- Finder's path bar and status bar are global Finder settings (View menu): someone who has
+  them turned on sees them in the disk window too, covering the bottom of the background.
+- **Check** a built image: `hdiutil attach -nobrowse -readonly <dmg>` and look for
+  `.DS_Store`, `.background.tiff` and `.VolumeIcon.icns` on the volume; `open <dmg>` shows
+  the window as testers see it.
+
 ## Windows and Linux packages: building and checking them
 
 Both are built on the Mac. The first tested dry runs (October 2026, `--profile fast`, version
@@ -330,6 +376,8 @@ toolchain, crates and appimagetool are cached in Docker volumes `mica-release-*`
 it the script skips Linux with a message. `cargo-xwin` needs Homebrew's `clang-cl`,
 `llvm-lib` and `lld-link` (keg-only `llvm`/`lld`; the script finds them) and downloads the
 Microsoft CRT and Windows SDK headers on first use (accepting Microsoft's license for them).
+The macOS disk image tool (dmgbuild) needs no setup: the script installs its pinned version
+into a private cache on first use (see "The macOS disk image").
 
 ### 6. Windows code signing (optional hook)
 

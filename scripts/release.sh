@@ -273,6 +273,24 @@ add_package() {  # platform file format: an update package and its signature, if
   return 0
 }
 
+# dmgbuild (pinned with hashes in the requirements file) in a private virtual environment,
+# cached outside the repository and rebuilt when the pins change. Prints the tool's path.
+dmgbuild_tool() {
+  local req="$1"
+  local cache="${MICA_RELEASE_CACHE:-${XDG_CACHE_HOME:-$HOME/Library/Caches}/mica-release}"
+  local stamp
+  stamp="$(shasum -a 256 "$req" | cut -c1-16)"
+  local venv="$cache/dmgbuild-$stamp"
+  if [ ! -x "$venv/bin/dmgbuild" ]; then
+    rm -rf "$cache"/dmgbuild-*
+    mkdir -p "$cache"
+    python3 -m venv "$venv" >&2
+    "$venv/bin/python" -m pip install --quiet --disable-pip-version-check --require-hashes \
+      --only-binary :all: -r "$req" >&2 || { rm -rf "$venv"; die "could not install dmgbuild"; }
+  fi
+  printf '%s\n' "$venv/bin/dmgbuild"
+}
+
 # ---------------------------------------------------------------- macOS
 build_macos() {
   say "macOS: Apple Silicon binary (arm64)"
@@ -317,19 +335,18 @@ build_macos() {
   COPYFILE_DISABLE=1 tar -czf "$tgz" -C "$out" "Mica Slicer.app"
 
   say "macOS: disk image"
-  local stage="$out/dmg"
-  rm -rf "$stage"
-  mkdir -p "$stage"
-  cp -R "$app" "$stage/"
-  ln -s /Applications "$stage/Applications"
+  # dmgbuild writes the Finder window layout (background, icon positions, hidden bars) into
+  # the image's .DS_Store directly, without Finder scripting; its settings and the background
+  # artwork are in crates/mica-gui/packaging/macos/dmg/ (docs/release.md, "The disk image").
+  # It sizes the image itself (the files plus 128 MB of room, then compressed), so hdiutil's
+  # too-small -srcfolder estimate no longer applies, and copies the app with ditto.
+  local dmgdir="$root/crates/mica-gui/packaging/macos/dmg"
+  local dmgbuild
+  dmgbuild="$(dmgbuild_tool "$dmgdir/requirements.txt")"
   local dmg="$dist/MicaSlicer_${version}_arm64.dmg"
-  # An explicit size: hdiutil's own estimate for -srcfolder is sometimes too small ("No
-  # space left on device").
-  local mb
-  mb="$(du -sm "$stage" | cut -f1)"
-  hdiutil create -quiet -volname "Mica Slicer" -srcfolder "$stage" -size "$((mb * 13 / 10 + 20))m" \
-    -ov -format UDZO "$dmg"
-  rm -rf "$stage"
+  rm -f "$dmg"
+  "$dmgbuild" -s "$dmgdir/settings.py" -D app="$app" -D dir="$dmgdir" "Mica Slicer" "$dmg"
+  [ -f "$dmg" ] || die "dmgbuild made no disk image"
   if [ $dry_run = 0 ]; then
     codesign --force --timestamp --sign "$MICA_SIGN_IDENTITY" "$dmg"
     xcrun notarytool submit "$dmg" --keychain-profile "${MICA_NOTARY_PROFILE:-mica-notary}" --wait

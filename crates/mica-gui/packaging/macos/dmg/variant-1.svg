@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="440" viewBox="0 0 640 440">
+  <!-- Mica Slicer disk image background, variant 1: minimal dark with a thin violet arrow.
+       Layout (Finder icon centers): app 160,175 / Applications 480,175, labels at y 258. -->
+  <defs>
+    <radialGradient id="glow" cx="320" cy="175" r="380" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1a1d22"/>
+      <stop offset="1" stop-color="#0e1013"/>
+    </radialGradient>
+    <linearGradient id="shaft" x1="250" y1="0" x2="386" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8b7cf6" stop-opacity="0"/>
+      <stop offset="1" stop-color="#a597f8"/>
+    </linearGradient>
+  </defs>
+  <rect width="640" height="440" fill="url(#glow)"/>
+  <!-- Label plates: a mid violet that keeps Finder's black (light mode) and white (dark mode)
+       icon labels readable. -->
+  <rect x="102" y="248" width="116" height="20" rx="10" fill="#6f5fe2"/>
+  <rect x="422" y="248" width="116" height="20" rx="10" fill="#6f5fe2"/>
+  <path d="M252 175 H384" stroke="url(#shaft)" stroke-width="2" stroke-linecap="round" fill="none"/>
+  <path d="M375 166 L385 175 L375 184" stroke="#a597f8" stroke-width="2" stroke-linecap="round"
+        stroke-linejoin="round" fill="none"/>
+  <text x="320" y="340" text-anchor="middle" font-family="IBM Plex Sans" font-size="15"
+        fill="#c9cdd2">Drag Mica Slicer to Applications</text>
+  <text x="320" y="44" text-anchor="middle" font-family="IBM Plex Sans" font-weight="500"
+        font-size="11" letter-spacing="0.6" fill="#6b727b">Alpha (pre-release)</text>
+</svg>

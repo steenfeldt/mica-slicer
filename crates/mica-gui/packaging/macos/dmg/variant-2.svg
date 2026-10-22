@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="440" viewBox="0 0 640 440">
+  <!-- Mica Slicer disk image background, variant 2: soft violet gradient with a curved dotted
+       path. Layout (Finder icon centers): app 160,175 / Applications 480,175, labels at y 258. -->
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="640" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#17142a"/>
+      <stop offset="0.55" stop-color="#111217"/>
+      <stop offset="1" stop-color="#0d0f12"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="320" cy="40" r="300" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6a55e8" stop-opacity="0.22"/>
+      <stop offset="1" stop-color="#6a55e8" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="640" height="440" fill="url(#ground)"/>
+  <rect width="640" height="440" fill="url(#halo)"/>
+  <rect x="102" y="248" width="116" height="20" rx="10" fill="#6f5fe2"/>
+  <rect x="422" y="248" width="116" height="20" rx="10" fill="#6f5fe2"/>
+  <path d="M244 150 Q320 92 396 150" stroke="#8b7cf6" stroke-width="3.2" stroke-linecap="round"
+        stroke-dasharray="0 9" fill="none"/>
+  <!-- Arrow head along the curve's end tangent. -->
+  <g transform="translate(400 153) rotate(37.4)">
+    <path d="M-9 -7 L0 0 L-9 7" stroke="#a597f8" stroke-width="2.4" stroke-linecap="round"
+          stroke-linejoin="round" fill="none"/>
+  </g>
+  <text x="320" y="340" text-anchor="middle" font-family="IBM Plex Sans" font-size="15"
+        fill="#c9cdd2">Drag Mica Slicer to Applications</text>
+  <text x="320" y="44" text-anchor="middle" font-family="IBM Plex Sans" font-weight="500"
+        font-size="11" letter-spacing="0.6" fill="#6b727b">Alpha (pre-release)</text>
+</svg>

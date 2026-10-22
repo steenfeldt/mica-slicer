@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="440" viewBox="0 0 640 440">
+  <!-- Mica Slicer disk image background, variant 3: printed layer lines, and an arrow built
+       from the app icon's three stepped layer bars. Layout (Finder icon centers): app 160,175 /
+       Applications 480,175, labels at y 258. -->
+  <defs>
+    <pattern id="layers" width="8" height="5" patternUnits="userSpaceOnUse">
+      <rect width="8" height="3.2" rx="1.6" fill="#ffffff" fill-opacity="0.022"/>
+    </pattern>
+    <linearGradient id="fade" x1="0" y1="0" x2="0" y2="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="1"/>
+    </linearGradient>
+    <mask id="fadeMask"><rect width="640" height="440" fill="url(#fade)"/></mask>
+    <radialGradient id="glow" cx="320" cy="175" r="360" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#191b21"/>
+      <stop offset="1" stop-color="#0e1013"/>
+    </radialGradient>
+  </defs>
+  <rect width="640" height="440" fill="url(#glow)"/>
+  <rect width="640" height="440" fill="url(#layers)" mask="url(#fadeMask)"/>
+  <rect x="102" y="248" width="116" height="20" rx="10" fill="#6f5fe2"/>
+  <rect x="422" y="248" width="116" height="20" rx="10" fill="#6f5fe2"/>
+  <!-- Three layer bars stepping right as they rise, like the icon, then a chevron. -->
+  <rect x="262" y="183" width="80" height="8" rx="4" fill="#5b4bd0"/>
+  <rect x="274" y="171" width="80" height="8" rx="4" fill="#7363e6"/>
+  <rect x="286" y="159" width="80" height="8" rx="4" fill="#8b7cf6"/>
+  <path d="M374 163 L386 175 L374 187" stroke="#a597f8" stroke-width="2.4" stroke-linecap="round"
+        stroke-linejoin="round" fill="none"/>
+  <text x="320" y="340" text-anchor="middle" font-family="IBM Plex Sans" font-size="15"
+        fill="#c9cdd2">Drag Mica Slicer to Applications</text>
+  <text x="320" y="44" text-anchor="middle" font-family="IBM Plex Sans" font-weight="500"
+        font-size="11" letter-spacing="0.6" fill="#6b727b">Alpha (pre-release)</text>
+</svg>
