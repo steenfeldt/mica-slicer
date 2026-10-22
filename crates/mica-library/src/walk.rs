@@ -167,11 +167,13 @@ mod tests {
             .files
             .iter()
             .map(|f| {
-                f.path
-                    .strip_prefix(r)
-                    .unwrap()
-                    .to_string_lossy()
-                    .into_owned()
+                // Joined with '/' on every platform.
+                let rel = f.path.strip_prefix(r).unwrap();
+                let parts: Vec<_> = rel
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy())
+                    .collect();
+                parts.join("/")
             })
             .collect();
         assert_eq!(

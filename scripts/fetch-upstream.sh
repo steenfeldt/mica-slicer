@@ -30,6 +30,13 @@ sparse_paths() {
   esac
 }
 
+# Whether every kept path of a sparse checkout exists in $1.
+has_paths() {
+  local dest="$1" p
+  shift
+  for p in "$@"; do [ -e "$dest$p" ] || return 1; done
+}
+
 want=" $* "
 grep -v '^\s*#' "$lock" | grep -v '^\s*$' | while read -r id repo ref commit _license; do
   if [ $# -gt 0 ] && [[ "$want" != *" $id "* ]]; then continue; fi
@@ -39,7 +46,8 @@ grep -v '^\s*#' "$lock" | grep -v '^\s*$' | while read -r id repo ref commit _li
   if [ -d "$dest/.git" ] && [ "$(git -C "$dest" rev-parse HEAD)" = "$commit" ]; then
     is_sparse="$(git -C "$dest" config --bool core.sparseCheckout || echo false)"
     # A full checkout serves every request; a sparse one only another --profiles fetch.
-    if [ "$is_sparse" != true ] || [ -n "$paths" ]; then
+    # shellcheck disable=SC2086
+    if [ "$is_sparse" != true ] || { [ -n "$paths" ] && has_paths "$dest" $paths; }; then
       echo "ok       $id @ ${commit:0:10} ($ref)"
       continue
     fi
@@ -52,8 +60,11 @@ grep -v '^\s*#' "$lock" | grep -v '^\s*$' | while read -r id repo ref commit _li
   git -C "$dest" config core.autocrlf false
   git -C "$dest" remote add origin "$repo"
   if [ -n "$paths" ]; then
+    # The patterns go in on stdin: as arguments, Git Bash (MSYS) would rewrite each leading-slash
+    # pattern into a Windows path (/resources/profiles/ -> C:/Program Files/Git/resources/...),
+    # leaving a sparse checkout that matches nothing.
     # shellcheck disable=SC2086 # the paths are space-separated patterns
-    git -C "$dest" sparse-checkout set --no-cone $paths
+    printf '%s\n' $paths | git -C "$dest" sparse-checkout set --no-cone --stdin
     git -C "$dest" fetch -q --depth 1 --filter=blob:none origin "$commit"
   else
     git -C "$dest" fetch -q --depth 1 origin "$commit"
@@ -62,6 +73,12 @@ grep -v '^\s*#' "$lock" | grep -v '^\s*$' | while read -r id repo ref commit _li
   actual="$(git -C "$dest" rev-parse HEAD)"
   if [ "$actual" != "$commit" ]; then
     echo "error: $id checked out $actual, expected $commit" >&2
+    exit 1
+  fi
+  # A sparse checkout whose patterns match nothing still checks out "successfully".
+  # shellcheck disable=SC2086
+  if ! has_paths "$dest" $paths; then
+    echo "error: $id: the sparse checkout is missing some of: $paths" >&2
     exit 1
   fi
 done

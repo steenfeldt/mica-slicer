@@ -23,6 +23,7 @@
 pub mod extract;
 pub mod group;
 pub mod image;
+mod index_lock;
 pub mod model;
 pub mod query;
 pub mod render;

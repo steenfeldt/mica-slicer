@@ -61,7 +61,11 @@ jobs:
           key: upstream-profiles-${{ runner.os }}-${{ hashFiles('upstream/UPSTREAM.lock', 'scripts/fetch-upstream.sh') }}
       - name: Fetch pinned upstream data
         shell: bash
-        run: scripts/fetch-upstream.sh --profiles prusa-profiles orca snapmaker-orca
+        run: |
+          scripts/fetch-upstream.sh --profiles prusa-profiles orca snapmaker-orca
+          for d in orca snapmaker-orca; do
+            echo "$d sparse: $(git -C "upstream/$d" sparse-checkout list | tr '\n' ' ')- $(ls "upstream/$d/resources/profiles" | wc -l) entries in resources/profiles"
+          done
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets
       # The `fast` profile: release code generation (the same G-code) without LTO. It runs the

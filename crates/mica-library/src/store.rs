@@ -141,7 +141,7 @@ impl Store {
     /// (renamed, never deleted). Lock, permission and other operational errors preserve it.
     pub fn open(path: &Path) -> Result<(Store, Index, Option<String>), OpenError> {
         let mut warning = None;
-        let db = match Database::create(path) {
+        let db = match crate::index_lock::create(path) {
             Ok(db) => db,
             Err(DatabaseError::DatabaseAlreadyOpen) => return Err(OpenError::InUse),
             // All other (including future) errors must leave the file alone.
@@ -157,7 +157,7 @@ impl Store {
                     "The library index could not be read ({e}); started a new one and kept the old file as {}",
                     aside.display()
                 ));
-                Database::create(path).map_err(err)?
+                crate::index_lock::create(path).map_err(err)?
             }
             Err(e) => return Err(OpenError::Failed(err(e))),
         };
@@ -171,6 +171,8 @@ impl Store {
     /// changed. A missing file is an empty index. On macOS the copy is a clone of the file
     /// (instant, one consistent moment); a commit the other process was writing during the
     /// copy is dropped when the copy opens, as after a crash, leaving the commit before it.
+    /// On Windows the copy is possible because the owner leaves the data unlocked
+    /// ([`crate::index_lock`]).
     pub fn read_snapshot(path: &Path) -> Result<Index, String> {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         if !path.exists() {

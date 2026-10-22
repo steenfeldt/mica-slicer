@@ -120,13 +120,19 @@ fn serve(stream: TcpStream, routes: &Mutex<HashMap<String, Route>>, log: &Mutex<
 
 fn manifest(version: &str, url: &str, signature: &str, format: &str) -> String {
     let platform = platform().unwrap();
+    // Another platform's entry, which must not be picked (never this platform's own key).
+    let other = if platform == "windows-x86_64" {
+        "macos-aarch64"
+    } else {
+        "windows-x86_64"
+    };
     serde_json::json!({
         "version": version,
         "notes": "Faster previews.\nFixed the seam on cylinders.",
         "pub_date": "2026-10-19T12:00:00Z",
         "platforms": {
             platform: { "url": url, "signature": signature, "format": format },
-            "windows-x86_64": { "url": "https://example.invalid/x.exe", "signature": "x", "format": "nsis" }
+            other: { "url": "https://example.invalid/x.exe", "signature": "x", "format": "nsis" }
         }
     })
     .to_string()

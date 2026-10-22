@@ -100,7 +100,11 @@ fn duplicates_are_one_model_with_several_locations() {
     assert_eq!(s.models.len(), 2);
     let cube = s.models.iter().find(|m| m.locations.len() == 2).unwrap();
     assert_eq!(cube.name, "cube.stl");
-    assert_eq!(cube.locations[1].folder(), "b/c");
+    // The folder is shown with the platform's separator.
+    assert_eq!(
+        cube.locations[1].folder(),
+        Path::new("b").join("c").to_string_lossy()
+    );
     // Tags follow the content: both copies share them.
     l.set_tags(
         &cube.id,
