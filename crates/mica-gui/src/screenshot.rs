@@ -1632,6 +1632,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
             &mut app, &a.library,
         )?)
     };
+    // The details' 3D preview: read the model now, so the frames below draw it.
+    app.library.sync_preview(&ctx);
+    if let Some(pv) = &mut app.library.preview {
+        let t = std::time::Instant::now();
+        while pv.loading() && t.elapsed() < std::time::Duration::from_secs(60) {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+            pv.poll(&ctx);
+        }
+    }
     let flavour = match a.flavour.as_deref() {
         None => None,
         Some("orca") => Some(mica_core::threemf::Flavour::Orca),
@@ -2694,6 +2703,19 @@ async fn render(
             && let Some(settle) = script.settle
         {
             std::thread::sleep(settle / (passes as u32 - 1));
+        }
+        // The last frame shows the details' 3D preview at the size asked for (and faded in).
+        if pass + 1 == passes
+            && let Some(pv) = &mut app.library.preview
+        {
+            let t = std::time::Instant::now();
+            while t.elapsed() < std::time::Duration::from_secs(30) {
+                pv.poll(ctx);
+                if pv.error().is_some() || (pv.settled() && pv.fade() >= 1.) {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
         }
         if pass == 1
             && let Some((deg, ratio)) = script.drag_ring

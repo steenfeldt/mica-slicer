@@ -20,8 +20,12 @@ use std::time::{Duration, Instant};
 const PREVIEW_TRIANGLES: usize = 250_000;
 /// The picture's height to width (220 × 288 at the details panel's default width).
 const PICTURE_ASPECT: f32 = 220. / 288.;
-/// The largest picture side rendered, physical pixels (a wider panel scales it up).
-const MAX_PICTURE: u16 = 1600;
+/// The largest picture side rendered, physical pixels: the thumbnail renderer's limit
+/// (`mica_gcode::thumbnails`, 1..=999 per side). A wider panel scales the picture up.
+const MAX_PICTURE: u16 = 999;
+/// How long the wanted picture size must stay put (a window or panel being resized) before
+/// it is rendered at that size; the last picture scales meanwhile.
+pub const RESIZE_SETTLE: Duration = Duration::from_millis(150);
 /// Cells along the largest side when simplifying for the preview.
 const PREVIEW_CELLS: u32 = 400;
 
@@ -67,6 +71,15 @@ enum State {
 enum Reply {
     Loaded(Result<Facts, String>),
     Frame(View, [u16; 2], egui::ColorImage),
+    /// The picture for this view and size could not be drawn.
+    Failed(View, [u16; 2], String),
+}
+
+/// The picture size rendered for a wanted `size`: within [`MAX_PICTURE`] on its longer side,
+/// in the same aspect.
+fn picture_size([w, h]: [u16; 2]) -> [u16; 2] {
+    let k = (f32::from(MAX_PICTURE) / f32::from(w.max(h).max(1))).min(1.);
+    [w, h].map(|v| ((f32::from(v) * k).round() as u16).clamp(16, MAX_PICTURE))
 }
 
 pub struct Preview {
@@ -78,6 +91,10 @@ pub struct Preview {
     /// The view and size of the last request and of the picture shown.
     requested: Option<(View, [u16; 2])>,
     shown: Option<(View, [u16; 2])>,
+    /// A new picture size waiting to stay put for [`RESIZE_SETTLE`], and since when.
+    resizing: Option<([u16; 2], Instant)>,
+    /// Why the last picture could not be drawn (cleared by the next one that is).
+    render_error: Option<String>,
     /// When the first 3D picture arrived (the thumbnail fades out from then).
     first_frame: Option<Instant>,
     tx: mpsc::Sender<(View, [u16; 2])>,
@@ -145,8 +162,18 @@ impl Preview {
                         zoom: view.zoom,
                         fit: Fit::Sphere,
                     };
-                    let Ok(img) = render(&mesh, w, h, orbit) else {
-                        continue;
+                    let img = match render(&mesh, w, h, orbit) {
+                        Ok(img) => img,
+                        Err(e) => {
+                            if replies
+                                .send(Reply::Failed(view, [w, h], e.to_string()))
+                                .is_err()
+                            {
+                                return;
+                            }
+                            ctx.request_repaint();
+                            continue;
+                        }
                     };
                     let image = egui::ColorImage::from_rgba_unmultiplied(
                         [usize::from(img.width), usize::from(img.height)],
@@ -165,6 +192,8 @@ impl Preview {
             texture: None,
             requested: None,
             shown: None,
+            resizing: None,
+            render_error: None,
             first_frame: None,
             tx,
             rx,
@@ -193,7 +222,12 @@ impl Preview {
                         }
                     }
                     self.shown = Some((view, size));
+                    self.render_error = None;
                     self.first_frame.get_or_insert_with(Instant::now);
+                }
+                Reply::Failed(view, size, e) => {
+                    self.shown = Some((view, size));
+                    self.render_error = Some(e);
                 }
             }
         }
@@ -211,6 +245,17 @@ impl Preview {
             State::Failed(e) => Some(e),
             _ => None,
         }
+    }
+
+    /// Why the newest picture could not be drawn.
+    pub fn render_error(&self) -> Option<&str> {
+        self.render_error.as_deref()
+    }
+
+    /// The view and picture size last asked for.
+    #[cfg(test)]
+    pub fn requested(&self) -> Option<(View, [u16; 2])> {
+        self.requested
     }
 
     pub fn loading(&self) -> bool {
@@ -235,20 +280,43 @@ impl Preview {
 
     /// The picture shown is the newest one asked for.
     pub fn settled(&self) -> bool {
-        self.shown.is_some() && self.shown == self.requested
+        self.shown.is_some() && self.shown == self.requested && self.resizing.is_none()
     }
 
     /// Asks for a picture of `size` physical pixels in the current view (once per change).
-    pub fn request(&mut self, size: [u16; 2]) {
-        if self.facts().is_none() {
-            return;
+    /// A turn or zoom is asked for at once; a new size only once it has stayed put for
+    /// [`RESIZE_SETTLE`] (the last picture scales meanwhile). Returns how long until a
+    /// waiting size is due, for the caller to repaint then.
+    pub fn request(&mut self, size: [u16; 2]) -> Option<Duration> {
+        self.request_at(size, Instant::now())
+    }
+
+    fn request_at(&mut self, size: [u16; 2], now: Instant) -> Option<Duration> {
+        self.facts()?;
+        let size = picture_size(size);
+        // A new size of a picture already shown, the view unchanged: wait for it to settle.
+        if let Some((view, last)) = self.requested
+            && last != size
+            && view == self.view
+            && self.texture.is_some()
+        {
+            let since = match self.resizing {
+                Some((s, t)) if s == size => t,
+                _ => now,
+            };
+            self.resizing = Some((size, since));
+            let left = RESIZE_SETTLE.saturating_sub(now.duration_since(since));
+            if !left.is_zero() {
+                return Some(left);
+            }
         }
-        let size = size.map(|v| v.clamp(16, MAX_PICTURE));
+        self.resizing = None;
         let want = (self.view, size);
         if self.requested != Some(want) {
             self.requested = Some(want);
             let _ = self.tx.send(want);
         }
+        None
     }
 
     /// Drag: turn the view (degrees per point).
@@ -394,19 +462,35 @@ impl crate::app::App {
             if resp.dragged() {
                 pv.orbit(resp.drag_delta());
             }
-            if resp.hovered() {
-                let scroll = ui.input(|i| i.smooth_scroll_delta.y);
+            if resp.hovered() || resp.dragged() {
+                // Scroll or pinch zooms; the details' scroll area must not also move under it.
+                let (scroll, pinch) = ui.input_mut(|i| {
+                    let s = i.smooth_scroll_delta.y;
+                    if pv.facts().is_some() {
+                        i.smooth_scroll_delta = Vec2::ZERO;
+                    }
+                    (s, i.zoom_delta())
+                });
                 if scroll != 0. {
                     pv.zoom(scroll);
+                }
+                if pinch != 1. && pinch > 0. {
+                    pv.zoom(pinch.ln() / 0.004);
                 }
             }
             if resp.double_clicked() {
                 pv.reset();
             }
             // While the panel's edge is dragged the last picture scales; the new size renders
-            // once the drag ends.
-            if !self.library.detail_resizing || pv.texture().is_none() {
-                pv.request(size);
+            // once it has stayed put a moment after the drag (also a resized window). A turn
+            // or zoom is drawn at once, at the current size.
+            let wait = if self.library.detail_resizing && pv.texture().is_some() {
+                Some(crate::library_preview::RESIZE_SETTLE)
+            } else {
+                pv.request(size)
+            };
+            if let Some(wait) = wait {
+                ctx.request_repaint_after(wait);
             }
             if pv.texture().is_some() {
                 fade = pv.fade();
@@ -453,7 +537,15 @@ impl crate::app::App {
                     egui::Color32::WHITE.gamma_multiply(fade),
                 );
             }
-            if pv.loading() {
+            if let Some(e) = pv.render_error() {
+                ui.painter().text(
+                    rect.right_bottom() - Vec2::new(10., 10.),
+                    Align2::RIGHT_BOTTOM,
+                    format!("3D view failed: {e}"),
+                    theme::sans(10.5),
+                    p.warn_text,
+                );
+            } else if pv.loading() {
                 ui.painter().text(
                     rect.right_bottom() - Vec2::new(10., 10.),
                     Align2::RIGHT_BOTTOM,
@@ -671,6 +763,40 @@ mod tests {
         p.request([64, 64]);
         assert!(wait(&mut p, &ctx, Preview::settled));
         assert_eq!(p.fade(), 1.);
+    }
+
+    #[test]
+    fn wide_panels_render_within_the_renderer_limit_after_settling() {
+        let ctx = egui::Context::default();
+        let path = mica_library::testkit::repo_root().join("tests/models/cube20.stl");
+        let mut p = Preview::new("cube", Kind::Stl, path, &ctx);
+        assert!(wait(&mut p, &ctx, |p| p.facts().is_some()));
+        // The first picture is asked for at once.
+        let t0 = Instant::now();
+        assert_eq!(p.request_at([576, 440], t0), None);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        // A wider panel on a 2x screen: more than the renderer's 999 pixels. The size waits
+        // until it stays put, then renders scaled into the limit, in the same aspect.
+        let wide = [1800, 1375];
+        assert!(p.request_at(wide, t0).is_some());
+        assert!(p.request_at(wide, t0 + RESIZE_SETTLE / 2).is_some());
+        assert!(!p.settled());
+        assert_eq!(p.request_at(wide, t0 + RESIZE_SETTLE), None);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert_eq!(p.render_error(), None);
+        let [w, h] = p.texture().unwrap().size();
+        assert_eq!(w, 999);
+        assert!(
+            (h as f32 / w as f32 - 1375. / 1800.).abs() < 0.01,
+            "{w}x{h}"
+        );
+        // Turning while a size settles draws at once, at the new size.
+        p.request_at([1000, 800], t0 + RESIZE_SETTLE);
+        p.orbit(egui::vec2(30., 0.));
+        assert_eq!(p.request_at([1000, 800], t0 + RESIZE_SETTLE), None);
+        assert_eq!(p.requested().unwrap().1, [999, 799]);
+        assert!(wait(&mut p, &ctx, Preview::settled));
+        assert_eq!(p.render_error(), None);
     }
 
     #[test]

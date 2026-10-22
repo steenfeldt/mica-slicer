@@ -3004,4 +3004,128 @@ mod tests {
         }
         assert_eq!(app.prefs.window.library_detail_width, DETAIL_W);
     }
+
+    /// Drags the details' edge on a 2x screen (let go outside the handle and outside the
+    /// window), then turns and zooms the preview: the picture renders at the new size and the
+    /// view still follows the pointer.
+    #[test]
+    fn the_preview_renders_the_new_width_and_still_turns_and_zooms() {
+        let dir = TempDir::new("gui-detail-preview");
+        let models = dir.path().join("models");
+        synthetic_library(&models, 1).unwrap();
+        let ctx = egui::Context::default();
+        ctx.set_zoom_factor(2.);
+        let mut app = App::create(
+            &ctx,
+            crate::app::Options {
+                prefs_path: None,
+                store: Some(mica_profiles::user::Store::open(
+                    dir.path().join("profiles"),
+                )),
+                files: vec![],
+                headless: true,
+            },
+        );
+        app.library.open(
+            &dir.path().join("library"),
+            mica_library::Options {
+                watch: false,
+                ..Default::default()
+            },
+        );
+        let lib = app.library.lib.as_ref().unwrap();
+        lib.add_folder(&models).unwrap();
+        assert!(lib.wait_idle(Duration::from_secs(60)));
+        app.library.shown = true;
+        app.library.refresh();
+        app.library.selected = Some(app.library.snapshot().models[0].id.clone());
+        let start = std::time::Instant::now();
+        let mut run = |app: &mut App, events: Vec<egui::Event>| {
+            let mut out = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, Vec2::new(1440., 900.))),
+                    time: Some(start.elapsed().as_secs_f64()),
+                    events,
+                    ..Default::default()
+                },
+                |ui| app.library_view(ui),
+            );
+            out.textures_delta.clear();
+        };
+        let settle = |app: &mut App, run: &mut dyn FnMut(&mut App, Vec<egui::Event>)| {
+            let t = std::time::Instant::now();
+            while t.elapsed() < Duration::from_secs(30) {
+                run(app, vec![]);
+                let pv = app.library.preview.as_ref().unwrap();
+                if pv.texture().is_some() && pv.settled() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            panic!("the preview never settled");
+        };
+        let button = |pos: Pos2, pressed: bool| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        settle(&mut app, &mut run);
+        let pv = app.library.preview.as_ref().unwrap();
+        // 288 points wide (the default panel less its padding) at 2x.
+        assert_eq!(pv.texture().unwrap().size()[0], 576);
+        // Drag the edge 400 points left; let go outside the handle, then the pointer leaves.
+        let edge = Pos2::new(1440. - DETAIL_W, 450.);
+        run(&mut app, vec![egui::Event::PointerMoved(edge)]);
+        run(&mut app, vec![button(edge, true)]);
+        for x in [1050., 900., 720.] {
+            run(
+                &mut app,
+                vec![egui::Event::PointerMoved(Pos2::new(x, 450.))],
+            );
+            assert!(app.library.detail_resizing);
+        }
+        run(&mut app, vec![button(Pos2::new(720., 450.), false)]);
+        run(&mut app, vec![egui::Event::PointerGone]);
+        assert!(!app.library.detail_resizing);
+        assert_eq!(app.prefs.window.library_detail_width, 720.);
+        settle(&mut app, &mut run);
+        let pv = app.library.preview.as_ref().unwrap();
+        assert_eq!(pv.render_error(), None);
+        // 688 points at 2x is 1376 pixels: drawn within the renderer's 999, then scaled.
+        assert_eq!(pv.texture().unwrap().size()[0], 999);
+        assert_eq!(pv.requested().unwrap().1[0], 999);
+        // Orbit: drag across the picture.
+        let view = pv.view;
+        let at = Pos2::new(1440. - 720. + 200., 200.);
+        run(&mut app, vec![egui::Event::PointerMoved(at)]);
+        run(&mut app, vec![button(at, true)]);
+        for dx in [10., 30., 60.] {
+            run(
+                &mut app,
+                vec![egui::Event::PointerMoved(at + Vec2::new(dx, 5.))],
+            );
+        }
+        run(&mut app, vec![button(at + Vec2::new(60., 5.), false)]);
+        let turned = app.library.preview.as_ref().unwrap().view;
+        assert_ne!(turned.azimuth, view.azimuth, "dragging turns the view");
+        settle(&mut app, &mut run);
+        // Zoom: scroll over the picture; the details panel does not scroll with it.
+        for _ in 0..10 {
+            run(
+                &mut app,
+                vec![egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: Vec2::new(0., 40.),
+                    phase: egui::TouchPhase::Move,
+                    modifiers: egui::Modifiers::NONE,
+                    source: egui::MouseWheelSource::Wheel,
+                }],
+            );
+        }
+        let pv = app.library.preview.as_ref().unwrap();
+        assert!(pv.view.zoom > turned.zoom, "scrolling zooms: {:?}", pv.view);
+        settle(&mut app, &mut run);
+        assert_eq!(app.library.preview.as_ref().unwrap().render_error(), None);
+    }
 }
