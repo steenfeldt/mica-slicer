@@ -71,17 +71,40 @@ pub struct PreviewMesh {
 }
 
 impl PreviewMesh {
-    /// Simplified by vertex clustering (see [`simplify`]), keeping each face's colour.
-    pub fn simplified(self, cells: u32) -> Self {
+    /// Simplified by vertex clustering (see [`simplify`]), keeping each face's colour. The
+    /// mesh itself is left as it is (the preview keeps it to simplify again when zoomed).
+    pub fn simplified(&self, cells: u32) -> Self {
         let (mesh, kept) = simplify_faces(&self.mesh, cells);
         let face_colours = self
             .face_colours
+            .as_ref()
             .map(|c| kept.iter().map(|&f| c[f]).collect());
         Self {
             mesh,
             face_colours,
             triangles: self.triangles,
         }
+    }
+}
+
+/// Rendered pixels per millimetre of the 3D preview's picture (`picture` pixels, framed to
+/// the bounding sphere of a model of `size` mm as `Fit::Sphere` in
+/// `mica_gcode::thumbnails::render_orbit` does, with its 2.5 % margin) at `zoom`.
+pub fn preview_px_per_mm(size: [f32; 3], picture: [u16; 2], zoom: f32) -> f32 {
+    let d = size.iter().map(|v| v * v).sum::<f32>().sqrt();
+    f32::from(picture[0].min(picture[1])) / (1.025 * d) * zoom
+}
+
+/// The clustering grid (cells along the largest side, as [`simplify`] takes it) whose cells
+/// span at most one rendered pixel of the 3D preview at `zoom`: finer than that, clustering
+/// does not show (coarser, a cell mixing a flat face with its neighbour tilts the face).
+pub fn preview_cells(size: [f32; 3], picture: [u16; 2], zoom: f32) -> u32 {
+    let extent = size.iter().copied().fold(0f32, f32::max);
+    let cells = (extent * preview_px_per_mm(size, picture, zoom)).ceil();
+    if cells.is_finite() {
+        (cells as u32).max(1)
+    } else {
+        1
     }
 }
 
@@ -311,6 +334,41 @@ mod tests {
     }
 
     #[test]
+    fn preview_cells_match_the_rendered_pixels() {
+        // Seen straight from the front, the 20 mm cube is 20 mm wide on the picture.
+        let size = [20.; 3];
+        for (picture, zoom) in [([400u16, 300u16], 1f32), ([300, 500], 1.5)] {
+            let orbit = Orbit {
+                azimuth: 0.,
+                elevation: 0.,
+                zoom,
+                fit: Fit::Sphere,
+            };
+            let img = mica_gcode::thumbnails::render_orbit(
+                &cube(),
+                picture[0],
+                picture[1],
+                VIOLET,
+                orbit,
+            )
+            .unwrap();
+            let row = usize::from(img.height / 2) * usize::from(img.width) * 4;
+            let opaque = (0..usize::from(img.width))
+                .filter(|x| img.rgba[row + x * 4 + 3] > 127)
+                .count() as f32;
+            let px = 20. * preview_px_per_mm(size, picture, zoom);
+            assert!((opaque - px).abs() <= 1.5, "{opaque} vs {px}");
+            // One cell of that grid spans at most one pixel, and not much less.
+            let cells = preview_cells(size, picture, zoom);
+            let cell_px = 20. / cells as f32 * preview_px_per_mm(size, picture, zoom);
+            assert!(
+                cell_px <= 1. && cell_px > 0.95,
+                "{cells} cells: {cell_px} px"
+            );
+        }
+    }
+
+    #[test]
     fn same_mesh_same_bytes() {
         let benchy =
             std::fs::read(crate::testkit::repo_root().join("tests/models/3DBenchy.stl")).unwrap();
@@ -356,7 +414,7 @@ mod tests {
         assert_eq!(count([0xFF, 0xFF, 0xFF]), 2);
         assert!(!c.contains(&VIOLET) && !c.contains(&[0xFC, 0xE9, 0x4F]));
         // Simplifying keeps each face's colour.
-        let s = p.clone().simplified(1024);
+        let s = p.simplified(1024);
         assert_eq!(s.face_colours.unwrap().len(), s.mesh.faces.len());
         // A bare STL has no colours (drawn in the accent, as before).
         let stl =
