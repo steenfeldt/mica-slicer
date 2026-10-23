@@ -29,6 +29,16 @@ fn model(name: &str) -> String {
         .into_owned()
 }
 
+/// Named, not the default printer: the default depends on the profiles found (CI differs).
+const CORE_ONE: &[&str] = &[
+    "--printer",
+    "Prusa CORE One HF0.4 nozzle",
+    "--print",
+    "0.20mm SPEED @COREONE HF0.4",
+    "--filament",
+    "Prusament PLA @COREONE HF0.4",
+];
+
 fn out(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("mica-spiral-vase-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -123,7 +133,7 @@ fn the_core_one_prints_one_rising_wall_after_the_solid_bottom() {
     }
     let gcode = slice(
         &["hole_block.stl"],
-        &[],
+        CORE_ONE,
         &["--set", "spiral_vase=1", "--set", "support_material=0"],
         "core.gcode",
     )
@@ -133,18 +143,7 @@ fn the_core_one_prints_one_rising_wall_after_the_solid_bottom() {
     assert!(gcode.contains("; fill_density = 0%\n"));
     assert!(gcode.contains("; retract_layer_change = 0\n"));
     // Three bottom layers of 0.2 mm reach bottom_solid_min_thickness: the fourth spirals.
-    check_spiral(
-        &gcode,
-        &[
-            "--printer",
-            "Prusa CORE One HF0.4 nozzle",
-            "--print",
-            "0.20mm SPEED @COREONE HF0.4",
-            "--filament",
-            "Prusament PLA @COREONE HF0.4",
-        ],
-        3,
-    );
+    check_spiral(&gcode, CORE_ONE, 3);
 }
 
 #[test]

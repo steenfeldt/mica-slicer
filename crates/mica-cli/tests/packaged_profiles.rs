@@ -55,7 +55,7 @@ impl Packaged {
         args.extend(["-o", out.to_str().unwrap()]);
         let r = self.mica(&args);
         assert!(r.status.success(), "{}", String::from_utf8_lossy(&r.stderr));
-        let hash = Sha256::digest(std::fs::read(&out).unwrap());
+        let hash = Sha256::digest(mica_testkit::reference_gcode(&std::fs::read(&out).unwrap()));
         hash.iter().take(4).map(|b| format!("{b:02x}")).collect()
     }
 }

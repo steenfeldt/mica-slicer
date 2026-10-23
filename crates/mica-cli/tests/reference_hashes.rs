@@ -98,7 +98,7 @@ fn slice_hash(model: &str, profile: &[&str]) -> Option<String> {
         "mica slice {model} {profile:?}: {}",
         String::from_utf8_lossy(&result.stderr)
     );
-    let digest = Sha256::digest(std::fs::read(&out).unwrap());
+    let digest = Sha256::digest(mica_testkit::reference_gcode(&std::fs::read(&out).unwrap()));
     Some(digest.iter().map(|b| format!("{b:02x}")).collect())
 }
 

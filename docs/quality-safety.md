@@ -77,7 +77,9 @@ socket for the `mica-printhost` mocks) still return early when it is missing.
 `d86e39a8 1a3357ae`, `5093345f 1c06b7ab`, `c923aa75 01f46892`). The cube cases run in every build;
 the Benchy cases need `--profile fast` or `--release` (about 40 s each in debug). The hashes are
 recorded on macOS arm64; elsewhere the tests are ignored (other math libraries may round
-differently). An intended G-code change updates the prefixes in the same commit, with the reason.
+differently). The hash is taken with the header's Mica version written as 0.0.1
+(`mica_testkit::reference_gcode`), so a version bump leaves the prefixes alone. An intended
+G-code change updates the prefixes in the same commit, with the reason.
 
 **CI** (`.github/workflows/ci.yml`), on macOS, Ubuntu and Windows: fetch (cached by the hash of
 `UPSTREAM.lock` and the fetch script) the pinned profiles as above, `cargo fmt --check`, `cargo
