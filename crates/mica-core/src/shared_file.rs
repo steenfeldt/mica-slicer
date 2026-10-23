@@ -50,6 +50,29 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     result
 }
 
+/// Reads a file that [`write`] may be replacing. On Windows, opening a file while another
+/// process renames a new one over it fails with "Access is denied" for a moment (the old file
+/// is pending deletion), so that error is retried briefly; elsewhere this is `fs::read`.
+pub fn read(path: &Path) -> io::Result<Vec<u8>> {
+    let mut tries = 0;
+    loop {
+        match std::fs::read(path) {
+            Err(e)
+                if cfg!(windows) && e.kind() == io::ErrorKind::PermissionDenied && tries < 50 =>
+            {
+                tries += 1;
+                std::thread::sleep(std::time::Duration::from_millis(10));
+            }
+            other => return other,
+        }
+    }
+}
+
+/// [`read`] as UTF-8 text.
+pub fn read_to_string(path: &Path) -> io::Result<String> {
+    String::from_utf8(read(path)?).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+}
+
 /// [`write`] with the error as text naming the file (for messages).
 pub fn write_text(path: &Path, text: &str) -> Result<(), String> {
     write(path, text.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
@@ -109,7 +132,7 @@ mod tests {
                 s.spawn(move || {
                     for _ in 0..10 {
                         write(path, p).unwrap();
-                        let got = std::fs::read(path).unwrap();
+                        let got = read(path).unwrap();
                         assert!(got.len() == p.len() && got.iter().all(|b| *b == got[0]));
                     }
                 });

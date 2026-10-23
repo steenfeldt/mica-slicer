@@ -345,7 +345,7 @@ impl Prefs {
     /// [`Self::load`], plus what was read, for [`Self::save_merged`]: the values this process
     /// starts from, so a later save writes only what it changed.
     pub fn load_tracked(path: &Path) -> (Self, Option<String>, Saved) {
-        let (p, raw, warning) = match std::fs::read_to_string(path) {
+        let (p, raw, warning) = match mica_core::shared_file::read_to_string(path) {
             Ok(text) => match Self::from_toml(&text) {
                 Ok(p) => (p, toml::from_str::<toml::Table>(&text).ok(), None),
                 Err(e) => (
@@ -416,7 +416,7 @@ impl Prefs {
     pub fn save_merged(&self, path: &Path, saved: &mut Saved) -> Result<(), String> {
         let mine = self.to_table();
         mica_core::shared_file::locked(path, || {
-            let mut disk = std::fs::read_to_string(path)
+            let mut disk = mica_core::shared_file::read_to_string(path)
                 .ok()
                 .and_then(|t| toml::from_str::<toml::Table>(&t).ok())
                 .unwrap_or_default();

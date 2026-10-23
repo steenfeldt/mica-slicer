@@ -279,7 +279,7 @@ pub mod prusa {
     /// does not match is never used.
     pub fn cached_bundle_in(dir: &Path, pins: &Pins) -> Option<PathBuf> {
         let path = bundle_file(dir);
-        let bytes = std::fs::read(&path).ok()?;
+        let bytes = mica_core::shared_file::read(&path).ok()?;
         let hash = sha256_hex(&bytes);
         pins.bundle_sha256.contains(&hash).then_some(path)
     }
@@ -428,7 +428,7 @@ pub mod prusa {
     }
 
     fn file_matches(path: &Path, sha: &str) -> bool {
-        std::fs::read(path).is_ok_and(|b| sha256_hex(&b) == sha)
+        mica_core::shared_file::read(path).is_ok_and(|b| sha256_hex(&b) == sha)
     }
 
     /// [`fetch`] from repository `base` (ending in `/`) into `dir`, checked against `pins`.

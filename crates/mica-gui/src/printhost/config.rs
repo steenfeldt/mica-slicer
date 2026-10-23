@@ -368,7 +368,7 @@ pub fn default_path() -> PathBuf {
 /// Reads the file; a missing file is an empty list, a broken one an empty list plus the
 /// reason, so the app still starts.
 pub fn load(path: &Path) -> (Vec<Printer>, Option<String>) {
-    match std::fs::read_to_string(path) {
+    match mica_core::shared_file::read_to_string(path) {
         Ok(text) => match parse(&text) {
             Ok(p) => (p, None),
             Err(e) => (vec![], Some(e)),

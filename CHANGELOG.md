@@ -9,12 +9,14 @@ A section starts with `## <version>`. Inside it: `###` headings, `-` bullets, `*
 
 ## 0.0.3
 
-A fix for Linux.
+Fixes for Linux and Windows.
 
 ### Fixes
 
 - **Linux:** Mica's window is no longer partly see-through. On some Linux systems the desktop
   showed through the window, the welcome window and the plate bar.
+- **Windows:** with two Mica windows open, settings, printers and profiles that one window
+  was saving could briefly fail to load in the other.
 
 Found a problem? [Report it on GitHub](https://github.com/steenfeldt/mica-slicer/issues).
 

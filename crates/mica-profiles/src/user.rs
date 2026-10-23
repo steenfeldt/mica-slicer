@@ -458,8 +458,8 @@ pub fn import_prusa_user_preset(
     kind: Kind,
     bundle: &Bundle,
 ) -> Result<UserProfile, ProfileError> {
-    let text =
-        std::fs::read_to_string(path).map_err(|e| ProfileError::Io(path.to_path_buf(), e))?;
+    let text = mica_core::shared_file::read_to_string(path)
+        .map_err(|e| ProfileError::Io(path.to_path_buf(), e))?;
     let mut full: Flat = crate::ini::parse(&text)
         .into_iter()
         .flat_map(|s| s.entries)
@@ -584,7 +584,7 @@ impl Store {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().is_some_and(|e| e == "toml") {
-                let text = std::fs::read_to_string(&path)
+                let text = mica_core::shared_file::read_to_string(&path)
                     .map_err(|e| ProfileError::Io(path.clone(), e))?;
                 out.push(
                     UserProfile::from_toml(&text)

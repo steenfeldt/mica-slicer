@@ -143,7 +143,7 @@ impl Recipes {
         let Some(path) = path else {
             return (out, None);
         };
-        match std::fs::read_to_string(&path) {
+        match mica_core::shared_file::read_to_string(&path) {
             Ok(text) => match toml::from_str::<File>(&text) {
                 Ok(f) => out.list = f.recipes,
                 Err(e) => {

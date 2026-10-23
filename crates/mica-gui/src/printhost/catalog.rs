@@ -836,7 +836,7 @@ impl GalleryIndex {
     pub fn load_or_build(root: &Path, cache: Option<&Path>) -> Self {
         let now = stamp(root);
         if let Some(path) = cache
-            && let Ok(text) = std::fs::read_to_string(path)
+            && let Ok(text) = mica_core::shared_file::read_to_string(path)
             && let Ok(file) = serde_json::from_str::<CacheFile>(&text)
             && file.version == CACHE_VERSION
             && file.root == root
