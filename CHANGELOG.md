@@ -7,6 +7,17 @@ and used everywhere: the app shows it after an update (Help › What's new…), 
 A section starts with `## <version>`. Inside it: `###` headings, `-` bullets, `**bold**` and
 `[links](https://…)`.
 
+## 0.0.3
+
+A fix for Linux.
+
+### Fixes
+
+- **Linux:** Mica's window is no longer partly see-through. On some Linux systems the desktop
+  showed through the window, the welcome window and the plate bar.
+
+Found a problem? [Report it on GitHub](https://github.com/steenfeldt/mica-slicer/issues).
+
 ## 0.0.2
 
 Mica now comes for Windows and Linux too. Both are experimental: they have been tried on one

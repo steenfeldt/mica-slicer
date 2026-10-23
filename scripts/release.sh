@@ -422,14 +422,14 @@ build_linux() {
   mkdir -p "$out"
   local rust
   rust="$(rustc --version | cut -d' ' -f2)"
-  # Toolchain, registry and appimagetool are cached in Docker volumes between runs.
+  # Toolchain, registry and appimagetool are cached in Docker volumes between runs. The output
+  # folder is mounted on its own: MICA_RELEASE_DIST may be outside the repository.
   docker run --rm --platform linux/amd64 \
-    -v "$root:/src" -v mica-release-cargo:/opt/cargo -v mica-release-rustup:/opt/rustup \
-    -v mica-release-tools:/opt/cache \
+    -v "$root:/src" -v "$out:/out" -v mica-release-cargo:/opt/cargo \
+    -v mica-release-rustup:/opt/rustup -v mica-release-tools:/opt/cache \
     -e CARGO_HOME=/opt/cargo -e RUSTUP_HOME=/opt/rustup -e MICA_PACKAGED=1 \
     -e MICA_UPDATE_PUBKEY \
-    ubuntu:22.04 sh /src/scripts/linux-appimage.sh "$profile" "$version" \
-    "/src/dist/$version/linux" "$rust"
+    ubuntu:22.04 sh /src/scripts/linux-appimage.sh "$profile" "$version" /out "$rust"
   local image="MicaSlicer_${version}_x86_64.AppImage"
   [ -f "$out/$image" ] || die "no AppImage was made"
   mv "$out/$image" "$dist/$image"
