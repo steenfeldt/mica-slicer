@@ -12,7 +12,7 @@ rust-version.workspace = true
 flate2 = "1.1.10"
 jiff = "0.2.38"
 mica-core.workspace = true
-mica-template = { version = "0.0.1", path = "../mica-template" }
+mica-template = { path = "../mica-template" }
 
 [dev-dependencies]
 mica-testkit.workspace = true

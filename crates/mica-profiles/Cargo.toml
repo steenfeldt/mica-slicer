@@ -10,8 +10,8 @@ rust-version.workspace = true
 
 [dependencies]
 mica-core.workspace = true
-mica-gcode = { version = "0.0.1", path = "../mica-gcode" }
-mica-template = { version = "0.0.1", path = "../mica-template" }
+mica-gcode = { path = "../mica-gcode" }
+mica-template = { path = "../mica-template" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 toml = "0.9"

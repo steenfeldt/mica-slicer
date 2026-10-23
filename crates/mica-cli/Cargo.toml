@@ -18,7 +18,7 @@ serde = { version = "1.0.229", features = ["derive"] }
 toml = "0.9"
 mica-core.workspace = true
 mica-gcode.workspace = true
-mica-profiles = { version = "0.0.1", path = "../mica-profiles" }
+mica-profiles = { path = "../mica-profiles" }
 # `mica mcp`: the Model Context Protocol server over stdio (the official Rust SDK; see
 # THIRD_PARTY.md and docs/mcp.md). No network transport features.
 rmcp = { version = "=3.5.1", default-features = false, features = ["server", "macros", "transport-io", "base64"] }

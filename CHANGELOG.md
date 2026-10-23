@@ -7,6 +7,39 @@ and used everywhere: the app shows it after an update (Help › What's new…), 
 A section starts with `## <version>`. Inside it: `###` headings, `-` bullets, `**bold**` and
 `[links](https://…)`.
 
+## 0.0.2
+
+Mica now comes for Windows and Linux too. Both are experimental: they have been tried on one
+Windows 11 PC and one Linux laptop so far.
+
+### Windows and Linux
+
+- **Windows:** a 64-bit installer. It installs for your user account only, without an
+  administrator prompt. The installer is not code-signed yet, so Windows SmartScreen warns
+  about it: choose More info, then Run anyway.
+- **Linux:** an AppImage for 64-bit PCs. Make it executable and run it; add it to the app menu
+  (for example with Gear Lever) to get Mica's icon in the dock. On GNOME, Mica's window has a
+  GNOME-style title bar.
+
+### Slicing
+
+- Spiral vase mode prints with the rules of PrusaSlicer and OrcaSlicer: one continuous wall
+  that rises as it goes around. Supports, several objects and several filaments are not
+  possible in vase mode; Mica tells you when a project has them.
+- Start and end G-code can use the names of the print, filament and printer profiles
+  (print_preset, filament_preset and printer_preset), like in PrusaSlicer and OrcaSlicer.
+
+### Fixes
+
+- A fresh install no longer picks a printer on its own. Add your printer first; until then
+  Slice and Export say why they are off.
+
+### Not yet
+
+- Absolute extrusion (M82) is not supported yet.
+
+Found a problem? [Report it on GitHub](https://github.com/steenfeldt/mica-slicer/issues).
+
 ## 0.0.1
 
 The first tester build, for macOS on Apple Silicon. Mica is alpha (pre-release) software:
