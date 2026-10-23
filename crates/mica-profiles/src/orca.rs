@@ -22,6 +22,7 @@ use std::path::{Component, Path};
 use serde_json::Value;
 
 pub mod discovery;
+mod flow_variant;
 mod gcode_config;
 mod legacy;
 pub mod mapping;

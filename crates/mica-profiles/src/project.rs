@@ -113,6 +113,7 @@ impl SettingsMapper for Mapper {
             return mica_core::input::prusa_patch(raw, ignored);
         }
         let mapped = map_metadata(raw, Dialect::Orca242);
+        ignored.extend(mapped.report.notes.iter().cloned());
         for entry in &mapped.report.entries {
             match entry.disposition {
                 // The editor opens the project anyway and says what it left out (a project
@@ -421,7 +422,8 @@ impl ProjectSettings {
 
     /// The embedded configuration in Mica's form, holding only what the project sets (Orca
     /// options mapped through the option table in `dialect`), with a note for every value the
-    /// mapping rejects; those keep the presets' value.
+    /// mapping rejects (those keep the presets' value) and for every Snapmaker Orca
+    /// flow-variant list Mica reads as one value for all filaments.
     pub fn source(&self, dialect: Option<Dialect>) -> (Config, Vec<String>) {
         if let Some(full) = &self.full {
             return (full.clone(), Vec::new());
@@ -438,17 +440,19 @@ impl ProjectSettings {
             .filter(|e| e.disposition == Disposition::Rejected)
             .collect();
         if rejected.is_empty() {
-            return (mapped.config, Vec::new());
+            return (mapped.config, mapped.report.notes);
         }
-        let notes = rejected
+        let notes = mapped
+            .report
+            .notes
             .iter()
-            .filter(|e| !excluded(&e.key))
-            .map(|e| {
+            .cloned()
+            .chain(rejected.iter().filter(|e| !excluded(&e.key)).map(|e| {
                 format!(
                     "project value {} rejected ({}); the preset's value is used",
                     e.key, e.reason
                 )
-            })
+            }))
             .collect();
         let mut kept = raw.clone();
         for e in &rejected {

@@ -282,4 +282,41 @@ mod tests {
         assert!(mine.filaments[0].is_empty());
         assert_eq!(mine.print.len(), 1);
     }
+
+    /// A project saved by Snapmaker Orca keeps its flow-variant process options as lists
+    /// (`"enable_overhang_speed": ["1", "1"]`): it opens with those values, which the settings
+    /// show and the slicer reads as single values, without a rejection notice.
+    #[test]
+    fn snapmaker_orca_flow_variant_lists_open_as_their_values() {
+        let settings = ProjectSettings::parse(&RawConfig {
+            path: "Metadata/project_settings.config".into(),
+            text: r##"{"printer_settings_id":"Snapmaker U1 (0.4 nozzle)","print_settings_id":"0.20 Standard @Snapmaker U1 (0.4 nozzle)","filament_settings_id":["Generic PLA @System","Generic PLA @System"],"process_flow_support":["standard","high_flow"],"filament_volume_type":["standard","standard"],"enable_overhang_speed":["0","0"],"slow_down_layers":["3","3"],"outer_wall_speed":["123","500"],"overhang_2_4_speed":["40%","40%"]}"##.into(),
+        })
+        .unwrap();
+        let mut base = mica_core::config::Config::defaults();
+        base.set_raw("nozzle_diameter", "0.4,0.4").unwrap();
+        base.set_raw("enable_overhang_speed", "1").unwrap();
+        let (layer, notes) = settings.layer(
+            &base,
+            Some(mica_profiles::orca::Dialect::Orca242),
+            mica_profiles::project::Mode::Embedded,
+        );
+        assert!(notes.is_empty(), "{notes:?}");
+        let mut o = Overlays::new(2);
+        o.project = std::sync::Arc::new(layer);
+        let mut c = base.clone();
+        assert!(o.apply(&mut c).is_empty());
+        for tool in 0..2 {
+            assert_eq!(
+                crate::overlays::tool_raw(&c, "enable_overhang_speed", tool).as_deref(),
+                Some("0")
+            );
+        }
+        // The text the G-code reads is the value, not the list.
+        assert_eq!(c.extra("enable_overhang_speed"), Some("0"));
+        assert_eq!(c.extra("overhang_2_4_speed"), Some("40%"));
+        assert_eq!(c.raw("slow_down_layers").as_deref(), Some("3"));
+        // Standard-flow filaments read the standard (first) value.
+        assert_eq!(c.float("external_perimeter_speed"), Some(123.));
+    }
 }
