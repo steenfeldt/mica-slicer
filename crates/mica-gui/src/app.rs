@@ -4526,6 +4526,12 @@ pub fn load_files(
 }
 
 impl eframe::App for App {
+    /// eframe's default (the same gray at alpha 180) shows the desktop through the window on
+    /// Linux compositors that honor the window's alpha; macOS always draws it opaque.
+    fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
+        egui::Color32::from_rgb(12, 12, 12).to_normalized_gamma_f32()
+    }
+
     fn ui(&mut self, ui: &mut egui::Ui, frame: &mut eframe::Frame) {
         if let Some(state) = frame.wgpu_render_state()
             && let Some(renderer) = state

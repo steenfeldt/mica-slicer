@@ -1033,6 +1033,9 @@ impl Renderer {
                 layout: &blit_pl,
                 format,
                 samples: 1,
+                // The window keeps its own (opaque) alpha: the view's alpha is below 1 where
+                // the bed grid blends, and Linux compositors show such pixels see-through.
+                writes: wgpu::ColorWrites::COLOR,
                 ..base(include_str!("blit.wgsl"), &[], None, None, tri, "fs")
             },
         );
