@@ -33,6 +33,10 @@ Windows 11 PC and one Linux laptop so far.
 
 - A fresh install no longer picks a printer on its own. Add your printer first; until then
   Slice and Export say why they are off.
+- Projects and profiles from Snapmaker Orca open without errors such as "invalid boolean":
+  speeds, accelerations and overhang settings that Snapmaker Orca stores per filament flow
+  type now read as one value. When the values differ by flow type, Mica uses the standard one
+  and says so.
 
 ### Not yet
 
