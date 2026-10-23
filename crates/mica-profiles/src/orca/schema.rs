@@ -9,6 +9,8 @@
 // Source: orca@8500fcdcca src/libslic3r/Config.hpp :: ConfigOptionFloat::deserialize, ConfigOptionFloatOrPercent::deserialize, ConfigOptionPoint::deserialize
 // Changes: A float reads its leading number ("50%" for a plain float is 50, "2mm" 2), as istream does;
 // Changes: a single point may be written "x,y" or "xXy".
+// Source: orca@8500fcdcca src/libslic3r/Config.hpp :: ConfigOptionBool::deserialize
+// Changes: A boolean or integer given as a list ("1,1", "2,2") reads its first value, as Orca does.
 
 use std::collections::BTreeMap;
 use std::sync::OnceLock;
@@ -131,6 +133,13 @@ pub(super) fn normalized(value: &Value, def: &Value) -> Result<Value, String> {
                     return Err(format!("unknown {ty} value {s:?}"));
                 }
             } else if ty.starts_with("Bool") {
+                // ConfigOptionBool::deserialize reads the first value of a list ("1,1" from a
+                // Snapmaker Orca flow-variant vector, see flow_variant.rs).
+                let s = if vector {
+                    s
+                } else {
+                    s.split(',').next().unwrap_or(s).trim()
+                };
                 return match s {
                     "1" | "true" => Ok(Value::String("1".into())),
                     "0" | "false" => Ok(Value::String("0".into())),
@@ -178,6 +187,12 @@ pub(super) fn normalized(value: &Value, def: &Value) -> Result<Value, String> {
                 if percent && !ty.contains("Percent") {
                     return Err(format!("percent is not allowed for {ty}"));
                 }
+                // `istream >> int` stops at a list's comma ("2,2" is 2).
+                let s = if ty == "Int" {
+                    s.split(',').next().unwrap_or(s).trim()
+                } else {
+                    s
+                };
                 let mut n = finite_number(s.trim_end_matches('%'))?;
                 if ty.starts_with("Int") {
                     // Orca reads integers with `istream >> int` (ConfigOptionInt(s)::deserialize),
@@ -284,14 +299,24 @@ pub fn set_option_text(
     text: &str,
     dialect: Dialect,
 ) -> Result<(), String> {
-    config.set_raw(key, text).map_err(|e| e.to_string())?;
     if mica_core::config::option_defs().contains_key(key) {
-        return Ok(());
+        return config.set_raw(key, text).map_err(|e| e.to_string());
     }
-    if let Some(ty) = schema(dialect).get(key).and_then(|d| d["type"].as_str()) {
-        let typed = parse_value(opt_type(ty)?, text).map_err(|e| format!("{key}: {e}"))?;
-        config.set(key, typed);
-    }
+    let Some(def) = schema(dialect).get(key) else {
+        return config.set_raw(key, text).map_err(|e| e.to_string());
+    };
+    let ty = def["type"].as_str().unwrap();
+    // Read as Orca reads the text: "1,1" for a boolean is 1 (a Snapmaker Orca flow-variant
+    // list), and the text the exporter reads is that value too.
+    let text = match normalized(&Value::String(text.into()), def) {
+        Ok(v) if matches!(ty, "Bool" | "Int" | "Float" | "Percent" | "FloatOrPercent") => {
+            serialize_normalized(&v, ty).unwrap_or_else(|_| text.into())
+        }
+        _ => text.into(),
+    };
+    config.set_raw(key, &text).map_err(|e| e.to_string())?;
+    let typed = parse_value(opt_type(ty)?, &text).map_err(|e| format!("{key}: {e}"))?;
+    config.set(key, typed);
     Ok(())
 }
 

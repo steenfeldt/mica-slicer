@@ -155,6 +155,16 @@ the printer value. Source filament vectors remain available in the raw map.
   `discovery::load_installed` selects `Snapmaker240` for profile sets that use flow variants.
   Multiple Bambu `filament_extruder_variant` entries are rejected. Snapmaker process vectors can map using a uniform declared nozzle flow;
   mixed nozzle-flow selections cannot reduce to Mica scalar process values.
+- Read with OrcaSlicer's schema (`Orca242`), a Snapmaker Orca project or preset stores its
+  46 flow-variant process options (`process_flow_variant_options`: speeds, accelerations,
+  jerks, `enable_overhang_speed`, `slow_down_layers`, …) as lists where OrcaSlicer has single
+  values. `flow_variant::resolved` reads each list as the element Snapmaker Orca's
+  `get_config_idx` gives the filaments (their `filament_volume_type` in
+  `process_flow_support`, else the first): a uniform list is its value; filaments of
+  different flow types would print with different values per tool, which Mica cannot hold,
+  so the standard (first) value is used with a note. OrcaSlicer itself reads the first value
+  of such a list (`ConfigOptionBool::deserialize`, `istream` for numbers), and so does the
+  value parser for any other list given to a single-value option.
   Bambu extruder/AMS variant remapping and Snapmaker mixed-filament grouping
   are not implemented. Original data remains in the loaded presets.
 - Project UI state (colors, plate positions, purge-volume calculation, AMS

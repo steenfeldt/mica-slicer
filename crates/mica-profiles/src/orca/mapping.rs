@@ -45,6 +45,9 @@ pub struct MappingEntry {
 #[derive(Clone, Debug, Default)]
 pub struct MappingReport {
     pub entries: Vec<MappingEntry>,
+    /// What the user should know about values that were read in a way of Mica's own (a
+    /// Snapmaker Orca flow-variant list whose filaments would read different values).
+    pub notes: Vec<String>,
 }
 impl MappingReport {
     pub fn count(&self, disposition: Disposition) -> usize {
@@ -307,7 +310,10 @@ fn bed_prefix(raw: &RawConfig) -> Option<&'static str> {
 /// A full Orca profile slices with OrcaSlicer's rules unless it records Mica's
 /// `mica_slicing_rules` itself.
 pub fn map_config(raw: &RawConfig, dialect: Dialect) -> MappingResult {
+    let (raw, notes) = super::flow_variant::resolved(raw, dialect);
+    let raw = &raw;
     let mut result = map_into(raw, dialect, Config::defaults());
+    result.report.notes = notes;
     // A whole Orca profile: the PrusaSlicer counterparts of the merged settings take the
     // profile's (or Orca's default) values, so PrusaSlicer rules and files see Orca's choice.
     mica_core::merged::complete_from_orca(&mut result.config, true);
@@ -328,9 +334,11 @@ pub fn explicit_rules(raw: &RawConfig) -> Option<mica_core::rules::Rules> {
 /// Map a configuration without filling in Mica's defaults: the result holds only what `raw`
 /// sets (a project's embedded settings, compared against the presets they are based on).
 pub fn map_sparse(raw: &RawConfig, dialect: Dialect) -> MappingResult {
+    let (raw, notes) = super::flow_variant::resolved(raw, dialect);
     // OrcaSlicer reads every project value through handle_legacy.
-    let raw = super::legacy::parsed(raw, dialect);
+    let raw = super::legacy::parsed(&raw, dialect);
     let mut result = map_into(&raw, dialect, Config::new());
+    result.report.notes = notes;
     mica_core::merged::complete_from_orca(&mut result.config, false);
     super::gcode_config::remember(&mut result.config, &raw, dialect);
     result
@@ -342,8 +350,10 @@ pub fn map_metadata(raw: &BTreeMap<String, String>, dialect: Dialect) -> Mapping
         .iter()
         .map(|(k, v)| (k.clone(), Value::String(v.clone())))
         .collect();
+    let (raw, notes) = super::flow_variant::resolved(&raw, dialect);
     let raw = super::legacy::parsed(&raw, dialect);
     let mut result = map_into(&raw, dialect, Config::new());
+    result.report.notes = notes;
     mica_core::merged::complete_from_orca(&mut result.config, false);
     super::gcode_config::remember(&mut result.config, &raw, dialect);
     result
