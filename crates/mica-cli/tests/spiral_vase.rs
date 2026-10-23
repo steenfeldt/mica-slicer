@@ -88,7 +88,7 @@ fn layers(gcode: &str) -> Vec<(f64, Vec<f64>, bool)> {
     out
 }
 
-fn check_spiral(gcode: &str, profile: &[&str], first_spiral: usize) {
+fn check_spiral(gcode: &str, profile: &[&str], first_spiral: usize, name: &str) {
     let layers = layers(gcode);
     // Solid bottom layers print flat.
     for (z, zs, _) in &layers[..first_spiral] {
@@ -119,7 +119,8 @@ fn check_spiral(gcode: &str, profile: &[&str], first_spiral: usize) {
     assert!(zs.iter().all(|v| (v - z).abs() < 1e-6));
     // The validator accepts it (it reads spiral vase from the file's configuration).
     let mut args = vec!["validate".to_string()];
-    let path = out("validate.gcode");
+    // Its own file: the tests run in parallel in one temp folder.
+    let path = out(name);
     std::fs::write(&path, gcode).unwrap();
     args.push(path.to_string_lossy().into_owned());
     args.extend(profile.iter().map(|s| s.to_string()));
@@ -143,7 +144,7 @@ fn the_core_one_prints_one_rising_wall_after_the_solid_bottom() {
     assert!(gcode.contains("; fill_density = 0%\n"));
     assert!(gcode.contains("; retract_layer_change = 0\n"));
     // Three bottom layers of 0.2 mm reach bottom_solid_min_thickness: the fourth spirals.
-    check_spiral(&gcode, CORE_ONE, 3);
+    check_spiral(&gcode, CORE_ONE, 3, "core-validate.gcode");
 }
 
 #[test]
@@ -158,7 +159,7 @@ fn the_u1_prints_one_rising_wall_with_orca_rules() {
         "u1.gcode",
     )
     .unwrap();
-    check_spiral(&gcode, U1, 3);
+    check_spiral(&gcode, U1, 3, "u1-validate.gcode");
     // Orca drops the retractions of a spiral layer.
     let spirals = gcode
         .split(";LAYER_CHANGE")
