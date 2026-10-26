@@ -3504,6 +3504,9 @@ impl App {
                     };
                     if !doc {
                         p.status = self.plate_status(p.index);
+                        p.notes = self
+                            .notifications
+                            .plate_notes(self.plates.plate(p.index).id);
                     }
                 }
                 let tool_colors = self.scene_colours_f32();
@@ -3581,6 +3584,7 @@ impl App {
                     )
                 });
                 let tools = self.tool_count();
+                let previewing = self.previewing();
                 let preview = if let Some(d) = &self.gcode {
                     Some((&d.finished.preview, &mut self.view))
                 } else if self.preview {
@@ -3703,6 +3707,7 @@ impl App {
                         paint: paint_view,
                         object_tool,
                         preview,
+                        previewing,
                         editable: editable && !doc,
                         can_slice_all: !doc && self.config.is_ok() && self.loading.is_none(),
                         status,
@@ -3978,7 +3983,16 @@ impl App {
                 self.changed();
                 self.fit_current_plate(true);
             }
-            Action::SelectPlate(i) => self.select_plate(i),
+            Action::SelectPlate(i) => {
+                // Switching plates in Preview stays in Preview: a plate without a slice shows
+                // its models, and the Preview page offers to slice it.
+                let previewing = self.previewing() && self.gcode.is_none();
+                self.select_plate(i);
+                if previewing && !self.preview {
+                    self.preview = true;
+                    self.preview_side.hold = true;
+                }
+            }
             Action::SliceAll => self.slice_all(ctx),
             Action::RemovePlate(i) if !busy => {
                 if i < self.plates.len() {

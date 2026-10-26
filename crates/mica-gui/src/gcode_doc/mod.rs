@@ -263,6 +263,7 @@ pub fn single_plate() -> Vec<crate::scene::plates::Plate> {
         locked: false,
         objects: 0,
         alert: 0,
+        notes: Vec::new(),
         status: crate::plate_batch::PlateStatus::Empty,
     }]
 }

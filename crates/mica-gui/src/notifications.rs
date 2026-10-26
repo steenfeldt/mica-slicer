@@ -3,7 +3,7 @@
 // Source: prusaslicer@b028299c77 src/slic3r/GUI/NotificationManager.hpp :: NotificationManager::NotificationLevel, NotificationManager::get_standard_duration
 // Source: prusaslicer@b028299c77 src/slic3r/GUI/NotificationManager.cpp :: NotificationManager::push_slicing_error_notification, NotificationManager::push_plater_warning_notification, NotificationManager::close_plater_warning_notification, NotificationManager::render_notifications
 // Source: orca@8500fcdcca src/slic3r/GUI/NotificationManager.cpp :: NotificationManager::render_notifications
-// Changes: Three levels instead of upstream's eight (errors and warnings never fade, information fades after a few seconds, as get_standard_duration); a plate's errors and warnings belong to that plate and show while it is current; state-derived notifications (a slice error, plate warnings, guard rails) are re-synced every frame the way upstream re-pushes or closes plater warnings while their condition holds; actions are typed enums instead of hyperlink callbacks; egui cards stacked in the 3D view's bottom-right corner.
+// Changes: Three levels instead of upstream's eight (errors and warnings never fade, information fades after a few seconds, as get_standard_duration); a plate's errors and warnings belong to that plate and show while it is current, labeled with the plate ("Plate 3 warning") beside the project's ("Project warning") when there are several plates; state-derived notifications (a slice error, plate warnings, guard rails) are re-synced every frame the way upstream re-pushes or closes plater warnings while their condition holds; actions are typed enums instead of hyperlink callbacks; egui cards stacked in the 3D view's bottom-right corner.
 
 //! Notifications: the one place errors, warnings and short confirmations are shown, stacked in
 //! the bottom-right corner of the 3D view as PrusaSlicer's and Orca's notification managers do.
@@ -264,14 +264,21 @@ impl Notifications {
     }
 
     /// The notifications shown while `plate` is current (`None`: no plate view, only global
-    /// ones), errors first, then warnings, then information, older first within a level.
+    /// ones), errors first, then warnings, then information; within a level the project's
+    /// before the plate's, older first.
     pub fn visible(&self, plate: Option<u64>) -> Vec<&Notification> {
         let mut out: Vec<&Notification> = self
             .list
             .iter()
             .filter(|n| !n.expired() && (n.plate.is_none() || n.plate == plate && plate.is_some()))
             .collect();
-        out.sort_by(|a, b| b.level.cmp(&a.level).then(a.born.cmp(&b.born)));
+        // Within a level, the project's own together above the plate's.
+        out.sort_by(|a, b| {
+            b.level
+                .cmp(&a.level)
+                .then(a.plate.is_some().cmp(&b.plate.is_some()))
+                .then(a.born.cmp(&b.born))
+        });
         out
     }
 
@@ -284,17 +291,31 @@ impl Notifications {
             || self.dismissed.contains(&(plate, key.to_string()))
     }
 
+    /// The titles of plate `plate`'s (`Plate::id`) warnings and errors, for the plate list's
+    /// hover; its failed slice is left out (the plate's status says it).
+    pub fn plate_notes(&self, plate: u64) -> Vec<String> {
+        self.list
+            .iter()
+            .filter(|n| n.plate == Some(plate) && n.level != Level::Info)
+            .filter(|n| n.key.as_deref() != Some(SLICE_ERROR))
+            .map(|n| n.title.clone())
+            .collect()
+    }
+
     pub fn any_fading(&self) -> bool {
         self.list.iter().any(|n| n.life.is_some())
     }
 
     /// Draws the stack with its bottom-right corner at `corner` and returns the clicked
-    /// actions (with the notification's id).
+    /// actions (with the notification's id). `plate_label` names the current plate
+    /// (`Plate 3`) when the project has several: each warning and error card then says whose
+    /// it is, the plate's or the project's (`scope_label`).
     pub fn show(
         &mut self,
         ctx: &egui::Context,
         corner: Pos2,
         plate: Option<u64>,
+        plate_label: Option<&str>,
     ) -> Vec<(u64, Action)> {
         self.resolve_pending_focus();
         let shown: Vec<Notification> = self.visible(plate).into_iter().cloned().collect();
@@ -355,11 +376,7 @@ impl Notifications {
                             ui.spacing_mut().item_spacing.y = 4.;
                             ui.horizontal(|ui| {
                                 ui.spacing_mut().item_spacing.x = 6.;
-                                let label = match n.level {
-                                    Level::Error => "Error",
-                                    Level::Warning => "Warning",
-                                    Level::Info => "",
-                                };
+                                let label = scope_label(n, plate_label);
                                 if !label.is_empty() {
                                     ui.label(
                                         egui::RichText::new(label)
@@ -480,6 +497,26 @@ impl Notifications {
         {
             self.expanded.insert(n.id);
             self.focus = Some((n.id, Instant::now()));
+        }
+    }
+}
+
+/// A card's level word, with its scope while the project has several plates
+/// (`plate_label`): "Plate 3 warning" for the current plate's own, "Project warning" for one
+/// about the whole project (an import note, a missing feature). Information has none.
+pub fn scope_label(n: &Notification, plate_label: Option<&str>) -> String {
+    let level = match n.level {
+        Level::Error => "error",
+        Level::Warning => "warning",
+        Level::Info => return String::new(),
+    };
+    match (plate_label, n.plate) {
+        (Some(plate), Some(_)) => format!("{plate} {level}"),
+        (Some(_), None) => format!("Project {level}"),
+        (None, _) => {
+            let mut s = level.to_string();
+            s[..1].make_ascii_uppercase();
+            s
         }
     }
 }
@@ -651,7 +688,11 @@ impl App {
     /// the clicked actions.
     pub(crate) fn notifications_ui(&mut self, ctx: &egui::Context, corner: Pos2, plates: bool) {
         let plate = plates.then(|| self.plates.current().id);
-        let actions = self.notifications.show(ctx, corner, plate);
+        let label = (plates && self.plates.len() > 1)
+            .then(|| crate::plates::default_name(self.plates.current));
+        let actions = self
+            .notifications
+            .show(ctx, corner, plate, label.as_deref());
         for (id, a) in actions {
             self.run_notification_action(id, a, ctx);
         }
@@ -1009,6 +1050,45 @@ mod tests {
             n.visible(Some(1)).len(),
             1,
             "it comes back once it happens again"
+        );
+    }
+
+    #[test]
+    fn cards_say_whether_they_are_the_plates_or_the_projects() {
+        let plate = Notification::new(Level::Warning, "Cube overlaps", "").on_plate(7);
+        let project = Notification::new(Level::Warning, "The project uses 10 tools", "");
+        let failed = Notification::new(Level::Error, "Slice failed: off the bed", "")
+            .keyed(SLICE_ERROR)
+            .on_plate(7);
+        let info = Notification::new(Level::Info, "Exported", "");
+        assert_eq!(scope_label(&plate, Some("Plate 3")), "Plate 3 warning");
+        assert_eq!(scope_label(&project, Some("Plate 3")), "Project warning");
+        assert_eq!(scope_label(&failed, Some("Plate 3")), "Plate 3 error");
+        assert_eq!(scope_label(&info, Some("Plate 3")), "");
+        // One plate: just the level.
+        assert_eq!(scope_label(&plate, None), "Warning");
+        assert_eq!(scope_label(&failed, None), "Error");
+        let mut n = Notifications::default();
+        for x in [plate, project, failed, info] {
+            n.push(x);
+        }
+        // The plate list's hover: the plate's own warnings, not its failed slice.
+        assert_eq!(n.plate_notes(7), ["Cube overlaps"]);
+        assert!(n.plate_notes(8).is_empty());
+        // The project's warning above the plate's.
+        let titles: Vec<&str> = n
+            .visible(Some(7))
+            .iter()
+            .map(|x| x.title.as_str())
+            .collect();
+        assert_eq!(
+            titles,
+            [
+                "Slice failed: off the bed",
+                "The project uses 10 tools",
+                "Cube overlaps",
+                "Exported"
+            ]
         );
     }
 

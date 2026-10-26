@@ -12,6 +12,7 @@ pub mod gizmo;
 pub mod icons;
 pub mod measure;
 mod plate_bar;
+mod preview_plates;
 pub mod section;
 mod toolbar;
 use crate::{
@@ -89,6 +90,9 @@ pub struct Scene<'a> {
     pub object_tool: Option<ObjectToolView>,
     /// `Some` switches to preview mode.
     pub preview: Option<(&'a Arc<Preview>, &'a mut View)>,
+    /// The window shows Preview, also while the current plate has no slice to show (`preview`
+    /// is then `None`): with several plates, the plate list stays at the view's left edge.
+    pub previewing: bool,
     /// False while slicing: camera only.
     pub editable: bool,
     /// Slice all plates can start (the plate list's button).
@@ -376,6 +380,10 @@ pub struct Viewport {
     pub open_plate_menu: bool,
     /// Where the plate bar's parts were drawn (UI tests).
     pub plate_probe: PlateProbe,
+    /// Where Preview's plate list was drawn (UI tests), and the plate it last showed as
+    /// current (a newly shown plate scrolls into view).
+    pub preview_plates_probe: preview_plates::PreviewPlatesProbe,
+    preview_plates_shown: Option<usize>,
     /// The plate the right-clicked bed belongs to (the bed menu's plate section).
     menu_plate: Option<usize>,
     /// A volume of the selected object under the pointer.
@@ -457,6 +465,8 @@ impl Viewport {
             open_plate_list: false,
             open_plate_menu: false,
             plate_probe: PlateProbe::default(),
+            preview_plates_probe: Default::default(),
+            preview_plates_shown: None,
             menu_plate: None,
             hovered_volume: None,
             hovered_tower: false,
@@ -2159,12 +2169,25 @@ impl Viewport {
         if let Some(preset) = axes::triad(ui, triad_rect, &self.camera) {
             self.camera.preset(preset);
         }
+        // Preview with several plates: the plate list at the left edge replaces the plate bar.
+        let plate_list = (scene.preview.is_some() || scene.previewing) && scene.plates.len() > 1;
         if scene.preview.is_none() {
-            self.toolbar(ui, rect, &scene, &mut actions);
-            self.plate_bar(ui, rect, &scene, &mut actions);
+            // Preview without a slice to show (`previewing`): the models, but no editing tools.
+            if !scene.previewing {
+                self.toolbar(ui, rect, &scene, &mut actions);
+            }
+            if !plate_list {
+                self.plate_bar(ui, rect, &scene, &mut actions);
+            }
             self.totals_card(ui, rect, &scene);
         } else {
             self.preview_toolbar(ui, rect);
+        }
+        if plate_list {
+            self.preview_plates(ui, rect, &scene, &mut actions);
+        } else {
+            self.preview_plates_probe = Default::default();
+            self.preview_plates_shown = None;
         }
         if measuring {
             self.measure.card(ui, rect);
@@ -2551,6 +2574,12 @@ impl Viewport {
         } else {
             let t = if scene.preview.is_some() {
                 "Drag the right slider to scrub layers · ↑ ↓ step one layer · hover a line for details"
+            } else if scene.previewing && scene.progress.is_none() {
+                if scene.plates.len() > 1 {
+                    "No slice to show for this plate: slice it from the Preview page, or pick another plate"
+                } else {
+                    "No slice to show: slice the plate from the Preview page"
+                }
             } else if !scene.editable {
                 "Slicing… the camera still works: drag to orbit, right-drag to pan, scroll to zoom"
             } else if scene.cut.is_some_and(|c| c.editing) {

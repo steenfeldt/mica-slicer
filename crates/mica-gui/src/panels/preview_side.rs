@@ -344,35 +344,62 @@ impl App {
         self.layer_section(ui, &preview, &summary, &tool_colors);
     }
 
-    /// A setting changed in Preview: the slice is out of date until the plate slices again.
+    /// The Preview page when the plate shown has no slice: a setting changed in Preview, or
+    /// the plate list showed a plate that is not sliced (yet), failed or is empty. Says which,
+    /// and offers to slice it.
     fn outdated_page(&mut self, ui: &mut egui::Ui) {
+        use crate::plate_batch::PlateStatus;
         self.preview_side.probe.outdated = true;
-        let slicing = self
-            .worker
-            .as_ref()
-            .is_some_and(|(id, _)| *id == self.plates.current().id);
+        let status = self.plate_status(self.plates.current);
+        let changed = self.plates.current().previous.is_some();
         let can_slice =
             !self.busy() && self.config.is_ok() && !self.plates.current().objects.is_empty();
         let mut slice = false;
         let progress = self.progress;
-        section(ui, "Out of date", |ui| {
-            note(
-                ui,
-                if slicing {
-                    "Settings changed: slicing again…"
-                } else {
-                    "Settings changed: this slice is out of date."
-                },
-            );
+        let (title, text, button): (&str, String, Option<&str>) = match &status {
+            PlateStatus::Slicing { .. } if changed => (
+                "Out of date",
+                "The plate changed: slicing again…".into(),
+                None,
+            ),
+            PlateStatus::Slicing { .. } => ("Slicing", "Slicing this plate…".into(), None),
+            PlateStatus::Queued => (
+                "Waiting to slice",
+                "Slice all plates slices this plate soon.".into(),
+                None,
+            ),
+            PlateStatus::Failed { message, .. } => (
+                "Slice failed",
+                format!("This plate's slice failed: {message}"),
+                Some("Slice again"),
+            ),
+            PlateStatus::Empty => (
+                "Empty plate",
+                "This plate has no objects to slice.".into(),
+                None,
+            ),
+            PlateStatus::NotSliced => (
+                "Not sliced",
+                "This plate is not sliced yet.".into(),
+                Some("Slice this plate"),
+            ),
+            PlateStatus::Outdated | PlateStatus::Sliced { .. } => (
+                "Out of date",
+                "The plate or its settings changed: this slice is out of date.".into(),
+                Some("Slice now"),
+            ),
+        };
+        section(ui, title, |ui| {
+            note(ui, &text);
             ui.add_space(10.);
-            if slicing {
+            if matches!(status, PlateStatus::Slicing { .. }) {
                 ui.add(
                     egui::ProgressBar::new(progress.clamp(0., 1.))
                         .desired_height(6.)
                         .desired_width(ui.available_width()),
                 );
-            } else {
-                slice = widgets::primary_button(ui, "Slice now", can_slice).clicked();
+            } else if let Some(label) = button {
+                slice = widgets::primary_button(ui, label, can_slice).clicked();
             }
         });
         if slice {

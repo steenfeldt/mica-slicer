@@ -298,3 +298,54 @@ fn a_collapsed_sidebar_leaves_a_chip_that_brings_it_back() {
     assert!(w.app.preview_side.probe.chip.is_none());
     assert!(w.app.preview_side.probe.sidebar.is_some());
 }
+
+#[test]
+fn preview_lists_the_plates_and_switches_between_them() {
+    let mut w = Window::sliced();
+    // One plate: no list.
+    assert!(w.app.viewport.preview_plates_probe.list.is_none());
+    // A second plate, not sliced; back on the sliced first one in Preview.
+    w.app
+        .plate_command(0, crate::plate_menu::PlateCommand::Duplicate);
+    w.app.select_plate(0);
+    w.app.preview = true;
+    w.frames(3);
+    let probe = w.app.viewport.preview_plates_probe.clone();
+    let list = probe.list.expect("the plate list in Preview");
+    let view = w.app.viewport_rect;
+    assert!(
+        view.contains(list.min) && view.contains(list.max),
+        "{list:?} {view:?}"
+    );
+    assert!(list.right() < view.center().x, "at the left edge: {list:?}");
+    assert_eq!(probe.rows.iter().map(|r| r.0).collect::<Vec<_>>(), [0, 1]);
+    assert!(w.text_at("1 of 2 sliced").is_some());
+    assert!(w.text_at("not sliced").is_some());
+    // The list replaces the plate bar.
+    assert!(w.app.viewport.plate_probe.list.is_none());
+    // A click on the unsliced plate shows it and stays in Preview, offering its slice.
+    w.click(probe.rows[1].1.center());
+    assert_eq!(w.app.plates.current, 1);
+    assert!(w.app.previewing(), "still in Preview");
+    assert!(w.app.preview_side.probe.outdated);
+    assert!(w.text_at("Slice this plate").is_some());
+    assert!(w.app.viewport.preview_plates_probe.list.is_some());
+    // Back to the sliced plate: its preview.
+    let row = w.app.viewport.preview_plates_probe.rows[0].1;
+    w.click(row.center());
+    assert_eq!(w.app.plates.current, 0);
+    assert!(w.app.previewing() && w.app.finished().is_some());
+    assert!(!w.app.preview_side.probe.outdated);
+    // Sidebar collapsed on the left: the list sits below the legend chip.
+    w.app.prefs.sidebar_right = false;
+    w.app.keys.sidebar_hidden = true;
+    w.frames(3);
+    let chip = w.app.preview_side.probe.chip.expect("the legend chip");
+    let list = w.app.viewport.preview_plates_probe.list.unwrap();
+    assert!(list.top() >= chip.bottom(), "{list:?} under {chip:?}");
+    // Prepare: no list, the plate bar is back.
+    w.app.preview = false;
+    w.frames(2);
+    assert!(w.app.viewport.preview_plates_probe.list.is_none());
+    assert!(w.app.viewport.plate_probe.list.is_some());
+}

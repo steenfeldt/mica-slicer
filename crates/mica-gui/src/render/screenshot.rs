@@ -514,6 +514,7 @@ async fn render(
                                 paint: None,
                                 object_tool: None,
                                 preview,
+                                previewing: false,
                                 editable: true,
                                 can_slice_all: false,
                                 status: None,

@@ -49,6 +49,10 @@ pub struct Plate {
     /// The marker on its label: 0 none, 1 warnings about its objects, 2 a failed slice (set by
     /// the editor, which knows them).
     pub alert: u8,
+    /// The titles of its own warning and error notifications (set by the editor), for the
+    /// plate list's hover. Only the current plate's warnings are worked out, so another
+    /// plate lists its failed slice at most.
+    pub notes: Vec<String>,
     /// Its slice status (set by the editor): the plate bar and the plate list show it.
     pub status: crate::plate_batch::PlateStatus,
 }
@@ -62,6 +66,7 @@ pub fn snapshot(layout: &dyn PlateLayout) -> Vec<Plate> {
             locked: layout.locked(i),
             objects: layout.objects(i),
             alert: 0,
+            notes: Vec::new(),
             status: crate::plate_batch::PlateStatus::Empty,
         })
         .collect()
