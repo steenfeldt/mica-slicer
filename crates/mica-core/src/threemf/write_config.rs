@@ -601,6 +601,8 @@ mod orca_vector_tests {
             ("fill_pattern", "crosszag"),
             ("infill_shift_step", "0.6"),
             ("symmetric_infill_y_axis", "1"),
+            ("skin_infill_density", "40%"),
+            ("skeleton_infill_line_width", "110%"),
         ]
         .into_iter()
         .map(|(k, v)| (k.to_string(), v.to_string()))
@@ -609,6 +611,8 @@ mod orca_vector_tests {
         assert_eq!(orca["sparse_infill_pattern"], "crosszag");
         assert_eq!(orca["infill_shift_step"], "0.6");
         assert_eq!(orca["symmetric_infill_y_axis"], "1");
+        assert_eq!(orca["skin_infill_density"], "40%");
+        assert_eq!(orca["skeleton_infill_line_width"], "110%");
         assert_eq!(patch(&orca, Flavour::Orca, Flavour::Prusa), s);
     }
 

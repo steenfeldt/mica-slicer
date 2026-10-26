@@ -521,3 +521,34 @@ fn zigzag_family_imports_as_real_settings() {
         assert!(s.zag.symmetric_infill_y_axis);
     }
 }
+
+#[test]
+fn locked_zag_imports_as_real_settings() {
+    use mica_core::{
+        fill::Pattern,
+        settings::{FloatOrPercent, PrintSettings},
+    };
+    let input = raw(json!({
+        "sparse_infill_pattern": "lockedzag",
+        "skin_infill_density": "40%",
+        "skeleton_infill_density": "15%",
+        "skin_infill_depth": "3",
+        "infill_lock_depth": "1.5",
+        "skin_infill_line_width": "0.5",
+        "skeleton_infill_line_width": "110%",
+    }));
+    let mapped = map_config(&input, Dialect::Orca242);
+    assert_eq!(mapped.report.count(Disposition::Rejected), 0);
+    assert_eq!(mapped.report.count(Disposition::ExtrasOnly), 0);
+    let s = PrintSettings::from_config(&mapped.config).unwrap();
+    assert_eq!(s.fill_pattern, Pattern::LockedZag);
+    assert_eq!(s.zag.skin_infill_density, 0.4);
+    assert_eq!(s.zag.skeleton_infill_density, 0.15);
+    assert_eq!(s.zag.skin_infill_depth, 3.);
+    assert_eq!(s.zag.infill_lock_depth, 1.5);
+    assert_eq!(s.zag.skin_infill_line_width, FloatOrPercent::Mm(0.5));
+    assert_eq!(
+        s.zag.skeleton_infill_line_width,
+        FloatOrPercent::Percent(110.)
+    );
+}

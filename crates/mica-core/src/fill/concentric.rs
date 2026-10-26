@@ -62,6 +62,7 @@ pub(super) fn fill(ex: &ExPolygon, p: &FillParams) -> Filled {
         last = offset2_ex(&last, -(d + min / 2) as f64, (min / 2) as f64, Join::Miter);
     }
     Filled {
+        skin_from: None,
         polylines: lines,
         spacing,
     }

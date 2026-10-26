@@ -231,6 +231,12 @@ impl FillKind {
                 "infill_every_layers",
                 "infill_shift_step",
                 "symmetric_infill_y_axis",
+                "skin_infill_density",
+                "skeleton_infill_density",
+                "skin_infill_depth",
+                "infill_lock_depth",
+                "skin_infill_line_width",
+                "skeleton_infill_line_width",
             ],
             Self::Top => &[
                 "filter_out_gap_fill",

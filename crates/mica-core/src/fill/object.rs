@@ -7,6 +7,8 @@
 // Changes: Chain surface collections before their paths, preserving monotonic/concentric order inside each collection.
 // Changes: `collections` returns the unordered per-ExPolygon collections (no_sort, multi-path) for the
 // Changes: Prusa island ordering in extrusion_order.rs; `toolpaths` keeps the Orca-path order.
+// Source: orca@8500fcdcca src/libslic3r/Fill/FillRectilinear.cpp :: FillLockedZag::fill_surface_extrusion
+// Changes: Locked Zag paths take the skeleton and skin line widths (one collection per area).
 
 use super::{FillParams, Pattern, adaptive::Octree, lightning::Generator};
 use crate::{
@@ -150,18 +152,39 @@ pub fn toolpaths(
             })
             .map(|(i, _)| i)
             .unwrap();
-        let filled = generated.remove(next);
-        let lines = if pattern.no_sort() {
-            filled.polylines
-        } else {
-            super::order_nearest(filled.polylines, pos)
-        };
-        for path in filled_paths(pattern, lines, filled.spacing, flow, role, s) {
-            pos = *path.points.last().unwrap();
-            out.push(path);
+        let mut filled = generated.remove(next);
+        // Locked Zag: the skeleton, then the skin, each with its own line width.
+        let skin = filled
+            .skin_from
+            .map(|k| filled.polylines.split_off(k))
+            .unwrap_or_default();
+        let flows = locked_zag_flows(pattern, flow, s);
+        for (polylines, flow) in [(filled.polylines, flows.0), (skin, flows.1)] {
+            let lines = if pattern.no_sort() {
+                polylines
+            } else {
+                super::order_nearest(polylines, pos)
+            };
+            for path in filled_paths(pattern, lines, filled.spacing, flow, role, s) {
+                pos = *path.points.last().unwrap();
+                out.push(path);
+            }
         }
     }
     out
+}
+
+/// The skeleton and skin flows of Locked Zag (`skeleton_infill_line_width`,
+/// `skin_infill_line_width` at the fill's layer height); the fill's own flow otherwise.
+fn locked_zag_flows(pattern: Pattern, flow: Flow, s: &PrintSettings) -> (Flow, Flow) {
+    if pattern != Pattern::LockedZag {
+        return (flow, flow);
+    }
+    let width = |w| super::locked_zag_line_width(w, s.nozzle_diameter);
+    (
+        Flow::new(width(s.zag.skeleton_infill_line_width), flow.height),
+        Flow::new(width(s.zag.skin_infill_line_width), flow.height),
+    )
 }
 
 /// Solid concentric fill with Arachne: variable-width loops (`Fill::fill_surface_arachne`).
@@ -256,10 +279,27 @@ pub fn collections(
     }
     generate(pattern, area, p, flow, s, context)
         .into_iter()
-        .map(|filled| FillCollection {
-            entities: filled_paths(pattern, filled.polylines, filled.spacing, flow, role, s)
-                .map(|path| vec![path])
-                .collect(),
+        .map(|mut filled| FillCollection {
+            entities: {
+                // Locked Zag (`FillLockedZag::fill_surface_extrusion`): one collection of the
+                // skeleton's lines and then the skin's, each with its own line width.
+                let skin = filled
+                    .skin_from
+                    .map(|k| filled.polylines.split_off(k))
+                    .unwrap_or_default();
+                let flows = locked_zag_flows(pattern, flow, s);
+                filled_paths(pattern, filled.polylines, filled.spacing, flows.0, role, s)
+                    .chain(filled_paths(
+                        pattern,
+                        skin,
+                        filled.spacing,
+                        flows.1,
+                        role,
+                        s,
+                    ))
+                    .map(|path| vec![path])
+                    .collect()
+            },
             no_sort: pattern.no_sort(),
             multi: false,
         })
@@ -304,6 +344,7 @@ fn generate(
             area.iter()
                 .flat_map(|ex| super::concentric::shrunk(ex, p))
                 .map(|ex| super::Filled {
+                    skin_from: None,
                     polylines: super::clipped_connected(lines.clone(), &ex, p),
                     spacing: p.spacing,
                 })

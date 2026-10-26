@@ -130,7 +130,7 @@ filament_vendor	The filament's brand. It's for your reference and filament lists
 filament_wipe	Overrides the printer's setting for this filament: moves the nozzle back along the last line while retracting, which wipes off ooze.
 fill_angle	The direction of the sparse infill lines. Change it to line up infill with the forces a part has to carry.
 fill_density	How much of the inside is filled. 10–20% suits display pieces; 25–40% makes stronger parts. 0% leaves the inside hollow; 100% makes it solid.
-fill_pattern	The pattern inside the model. Gyroid and Cubic are strong in every direction, Grid and Rectilinear are quick, and Lightning uses the least material because it only holds up top surfaces.		alignedrectilinear=Aligned rectilinear|3dhoneycomb=3D honeycomb|hilbertcurve=Hilbert curve|archimedeanchords=Archimedean chords|octagramspiral=Octagram spiral|adaptivecubic=Adaptive cubic|supportcubic=Support cubic|crosshatch=Cross hatch|zigzag=Zig zag|crosszag=Cross zag
+fill_pattern	The pattern inside the model. Gyroid and Cubic are strong in every direction, Grid and Rectilinear are quick, and Lightning uses the least material because it only holds up top surfaces.		alignedrectilinear=Aligned rectilinear|3dhoneycomb=3D honeycomb|hilbertcurve=Hilbert curve|archimedeanchords=Archimedean chords|octagramspiral=Octagram spiral|adaptivecubic=Adaptive cubic|supportcubic=Support cubic|crosshatch=Cross hatch|zigzag=Zig zag|crosszag=Cross zag|lockedzag=Locked zag
 filter_out_gap_fill	Skips gap fill lines shorter than this, which saves many tiny moves. 0 keeps every gap fill line.
 first_layer_acceleration	Acceleration on the first layer. Lower values help the first layer stick. 0 uses the normal acceleration.
 first_layer_acceleration_over_raft	Acceleration for the first layer of the object printed on top of a raft. 0 uses the normal acceleration. Mica keeps this value in profiles but does not apply it yet.
@@ -423,5 +423,11 @@ mica_brick_layers_flow_ratio	Extra flow on the raised walls and the inner walls 
 mica_brick_layers_start_layer	The first layer, counted from 0, whose walls may be raised. Walls are never raised in the bottom shell or right above a bottom surface.
 mica_brick_layers_end_margin_layers	Layers kept on the normal grid between the raised walls and every top or bottom shell, in addition to the shell itself.
 mica_brick_layers_travel_lift	How far travels stay above raised walls. 0 uses the retraction lift, at least 0.2 mm.
-infill_shift_step	How far Cross zag moves its lines sideways every two layers, in mm. The lines of neighboring layer pairs then cross each other instead of stacking. 0 keeps them in place.
+infill_shift_step	How far Cross zag (and the skin of Locked zag) moves its lines sideways every two layers, in mm. The lines of neighboring layer pairs then cross each other instead of stacking. 0 keeps them in place.
 symmetric_infill_y_axis	Mirrors the zig-zag infill about the object's front-to-back center line. Turn it on for one of two mirrored parts so both get mirror-image infill.
+skin_infill_density	Locked zag: how dense the skin is, the band of infill right inside the walls. A denser skin backs the walls up more firmly.
+skeleton_infill_density	Locked zag: how dense the skeleton is, the infill in the middle of the part beyond the skin. A sparse skeleton saves material and time.
+skin_infill_depth	Locked zag: how far the skin reaches in from the walls, in mm. Everything farther inside belongs to the skeleton.
+infill_lock_depth	Locked zag: how far the skeleton lines run on into the skin, in mm, so the two interlock. Keep it smaller than the skin depth.
+skin_infill_line_width	Locked zag: the line width of the skin, in mm or as a percentage of the nozzle. 0 uses an automatic width.
+skeleton_infill_line_width	Locked zag: the line width of the skeleton, in mm or as a percentage of the nozzle. 0 uses an automatic width.

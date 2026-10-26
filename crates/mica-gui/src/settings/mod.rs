@@ -433,8 +433,14 @@ pub fn merged_away(key: &str) -> bool {
 pub fn relevant(key: &str, c: &mica_core::config::Config) -> bool {
     let pattern = c.string("fill_pattern").unwrap_or_default();
     match key {
-        "infill_shift_step" => matches!(pattern, "crosszag"),
-        "symmetric_infill_y_axis" => matches!(pattern, "zigzag" | "crosszag"),
+        "infill_shift_step" => matches!(pattern, "crosszag" | "lockedzag"),
+        "symmetric_infill_y_axis" => matches!(pattern, "zigzag" | "crosszag" | "lockedzag"),
+        "skin_infill_density"
+        | "skeleton_infill_density"
+        | "skin_infill_depth"
+        | "infill_lock_depth"
+        | "skin_infill_line_width"
+        | "skeleton_infill_line_width" => pattern == "lockedzag",
         _ => true,
     }
 }
@@ -900,13 +906,21 @@ mod tests {
         c.set_raw("fill_pattern", "crosszag").unwrap();
         assert_eq!(shown(&c), [true, true]);
         assert!(relevant("fill_density", &c));
+        assert!(!relevant("skin_infill_density", &c));
+        c.set_raw("fill_pattern", "lockedzag").unwrap();
+        assert_eq!(shown(&c), [true, true]);
+        assert!(relevant("skin_infill_density", &c) && relevant("skeleton_infill_line_width", &c));
         let t = text();
         let labels: Vec<_> = t["fill_pattern"]
             .enums
             .iter()
             .map(|(v, _)| v.as_str())
             .collect();
-        assert!(labels.contains(&"zigzag") && labels.contains(&"crosszag"));
+        assert!(
+            ["zigzag", "crosszag", "lockedzag"]
+                .iter()
+                .all(|v| labels.contains(v))
+        );
     }
 
     #[test]

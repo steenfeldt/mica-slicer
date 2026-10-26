@@ -28,3 +28,9 @@ bridge_line_width	FloatOrPercent	0	print	100%	nozzle_diameter
 z_hop_types	Enums	0	printer	Slope Lift	
 infill_shift_step	Float	0	print	0.4	
 symmetric_infill_y_axis	Bool	0	print	0	
+skin_infill_density	Percent	0	print	25%	
+skeleton_infill_density	Percent	0	print	25%	
+skin_infill_depth	Float	0	print	2	
+infill_lock_depth	Float	0	print	1	
+skin_infill_line_width	FloatOrPercent	0	print	100%	nozzle_diameter
+skeleton_infill_line_width	FloatOrPercent	0	print	100%	nozzle_diameter

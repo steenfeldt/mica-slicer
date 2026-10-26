@@ -215,6 +215,7 @@ fn enum_value(key: &str, s: &str) -> Option<&'static str> {
             "crosshatch" => Some("crosshatch"),
             "zigzag" => Some("zigzag"),
             "crosszag" => Some("crosszag"),
+            "lockedzag" => Some("lockedzag"),
             "line" => Some("line"),
             "concentric" => Some("concentric"),
             "honeycomb" => Some("honeycomb"),

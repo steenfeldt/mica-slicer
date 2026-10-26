@@ -461,7 +461,6 @@ The report distinguishes these valid values from malformed values.
 | `infill_combination` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `infill_combination_max_layer_height` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `infill_jerk` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `infill_lock_depth` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `infill_overhang_angle` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `inherits` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `inherits_group` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
@@ -595,11 +594,6 @@ The report distinguishes these valid values from malformed values.
 | `set_other_flow_ratios` | extras-only | Orca flow or pressure control behavior is not implemented in the canonical engine. |
 | `silent_mode` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `single_loop_draft_shield` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `skeleton_infill_density` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `skeleton_infill_line_width` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `skin_infill_density` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `skin_infill_depth` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `skin_infill_line_width` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `slow_down_layers` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `slowdown_for_curled_perimeters` | extras-only | Kept as Orca text; with Orca slicing rules the overhang speed estimator also slows walls over the lower layer's curled external walls (`crates/mica-gcode/src/orca_overhang.rs`). |
 | `solid_infill_direction` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
@@ -707,5 +701,11 @@ Batch B source-named options are typed and resolved without injecting Orca defau
 | `seam_slope_type` | `seam_slope_type` | Active; merged with PrusaSlicer's `scarf_seam_*` (`mica_core::merged`, docs/setting-names.md). |
 | `z_hop_types` | `z_hop_types` | Active under OrcaSlicer rules (Orca's travel lift); editable in Printer settings, see [slicing rules](../../../../docs/slicing-rules.md). |
 | `wall_sequence` | `wall_sequence` | Active; merged with PrusaSlicer's `external_perimeters_first` (`mica_core::merged`, docs/setting-names.md). |
-| `infill_shift_step` | `infill_shift_step` | Active for the Cross Zag sparse pattern (`mica_core::fill::ZagSettings`, `fill/zag.rs`). |
-| `symmetric_infill_y_axis` | `symmetric_infill_y_axis` | Active for the Zig Zag and Cross Zag sparse patterns (`mica_core::fill::ZagSettings`). |
+| `infill_shift_step` | `infill_shift_step` | Active for the Cross Zag and Locked Zag sparse patterns (`mica_core::fill::ZagSettings`, `fill/zag.rs`). |
+| `symmetric_infill_y_axis` | `symmetric_infill_y_axis` | Active for the Zig Zag, Cross Zag and Locked Zag sparse patterns (`mica_core::fill::ZagSettings`). |
+| `skin_infill_density` | `skin_infill_density` | Active for the Locked Zag sparse pattern; the densities and widths of the area's own region apply (`fill/zag.rs`). |
+| `skeleton_infill_density` | `skeleton_infill_density` | Active for the Locked Zag sparse pattern; the densities and widths of the area's own region apply (`fill/zag.rs`). |
+| `skin_infill_depth` | `skin_infill_depth` | Active for the Locked Zag sparse pattern; the densities and widths of the area's own region apply (`fill/zag.rs`). |
+| `infill_lock_depth` | `infill_lock_depth` | Active for the Locked Zag sparse pattern; the densities and widths of the area's own region apply (`fill/zag.rs`). |
+| `skin_infill_line_width` | `skin_infill_line_width` | Active for the Locked Zag sparse pattern; the densities and widths of the area's own region apply (`fill/zag.rs`). |
+| `skeleton_infill_line_width` | `skeleton_infill_line_width` | Active for the Locked Zag sparse pattern; the densities and widths of the area's own region apply (`fill/zag.rs`). |

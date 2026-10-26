@@ -129,6 +129,26 @@ pub fn settings(s: &PrintSettings) -> Result<(), String> {
             ));
         }
     }
+    if s.fill_pattern == crate::fill::Pattern::LockedZag && s.fill_density > 0. {
+        for (name, width) in [
+            ("skin", s.zag.skin_infill_line_width),
+            ("skeleton", s.zag.skeleton_infill_line_width),
+        ] {
+            let width = crate::fill::locked_zag_line_width(width, s.nozzle_diameter);
+            // Below a fifth of the nozzle a line has no cross-section at a layer height as tall
+            // as the nozzle (combined infill).
+            if !width.is_finite()
+                || width > s.nozzle_diameter * MAX_LINE_WIDTH_MULTIPLIER
+                || width < 0.25 * s.nozzle_diameter
+            {
+                return Err(format!(
+                    "{name} line width {width} mm must be between a quarter of the {} mm nozzle \
+                     and {MAX_LINE_WIDTH_MULTIPLIER}× it",
+                    s.nozzle_diameter
+                ));
+            }
+        }
+    }
     for (name, width) in [
         ("perimeter", s.perimeter_extrusion_width),
         ("external perimeter", s.external_perimeter_extrusion_width),

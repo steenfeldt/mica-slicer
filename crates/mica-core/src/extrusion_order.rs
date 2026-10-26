@@ -54,6 +54,7 @@ fn pattern_index(p: Pattern) -> i64 {
         Pattern::ZigZag => 21,
         Pattern::CrossHatch => 22,
         Pattern::CrossZag => 23,
+        Pattern::LockedZag => 24,
     }
 }
 

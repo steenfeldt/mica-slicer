@@ -26,7 +26,7 @@
 //! - **gyroid**, **concentric**, **honeycomb**, **3dhoneycomb**;
 //! - **hilbertcurve**, **archimedeanchords**, **octagramspiral**;
 //! - Orca **crosshatch** (single-line);
-//! - **zigzag** (PrusaSlicer and Orca) and Orca **crosszag** ([`zag`]).
+//! - **zigzag** (PrusaSlicer and Orca), Orca **crosszag** and **lockedzag** ([`zag`]).
 //!
 //! [`toolpaths`] additionally handles variable-width solid concentric and ensuring fill.
 //! Adaptive cubic, support cubic and lightning require [`PreparedFill`], created once by
@@ -49,7 +49,7 @@ mod honeycomb;
 mod plane_path;
 mod rectilinear;
 mod zag;
-pub use zag::ZagSettings;
+pub use zag::{ZagSettings, line_width as locked_zag_line_width};
 
 use std::f64::consts::{FRAC_PI_2, PI};
 
@@ -88,6 +88,8 @@ pub enum Pattern {
     ZigZag,
     /// Orca `crosszag`: Zig Zag shifted sideways every two layers.
     CrossZag,
+    /// Orca `lockedzag`: a Cross Zag skin near the walls locked onto a turned Zig Zag skeleton.
+    LockedZag,
 }
 
 impl Pattern {
@@ -117,6 +119,7 @@ impl Pattern {
             "monotonicline" => Self::MonotonicLines,
             "zigzag" => Self::ZigZag,
             "crosszag" => Self::CrossZag,
+            "lockedzag" => Self::LockedZag,
             _ => return None,
         })
     }
@@ -136,7 +139,7 @@ impl Pattern {
     }
     /// One of the zig-zag family (`has_consistent_pattern`).
     pub fn is_zag(self) -> bool {
-        matches!(self, Self::ZigZag | Self::CrossZag)
+        matches!(self, Self::ZigZag | Self::CrossZag | Self::LockedZag)
     }
     pub fn needs_object(self) -> bool {
         matches!(
@@ -165,6 +168,7 @@ impl Pattern {
                 | Pattern::MonotonicLines
                 | Pattern::ZigZag
                 | Pattern::CrossZag
+                | Pattern::LockedZag
         );
         if alternates && layer_id & 1 == 1 {
             FRAC_PI_2
@@ -206,6 +210,8 @@ pub struct Filled {
     pub polylines: Vec<Polyline>,
     /// The line spacing actually used, mm: solid fills widen it to fit the area evenly.
     pub spacing: f64,
+    /// Locked Zag: the polylines from this index on are skin lines, the ones before it skeleton lines.
+    pub skin_from: Option<usize>,
 }
 
 fn translate(points: &mut [Point], dx: i64, dy: i64) {
@@ -279,6 +285,7 @@ fn fill_with_bounds(
             translate(h, -ox, -oy);
         }
         let mut spacing = params.spacing;
+        let mut skin_from = None;
         let mut polylines = match pattern {
             Pattern::Rectilinear
             | Pattern::AlignedRectilinear
@@ -292,6 +299,12 @@ fn fill_with_bounds(
                 let (pl, s) = zag::fill_lines(&ex, &zag_lines, mirror_axis);
                 spacing = s;
                 pl
+            }
+            Pattern::LockedZag => {
+                let filled = zag::locked(&ex, &zag_lines, mirror_axis, zag);
+                spacing = filled.spacing;
+                skin_from = Some(filled.skeleton.len());
+                filled.skeleton.into_iter().chain(filled.skin).collect()
             }
             Pattern::Grid | Pattern::Triangles | Pattern::Stars | Pattern::Cubic => {
                 let sweep = |angle_base: f64, pattern_shift: f64| Sweep {
@@ -374,9 +387,16 @@ fn fill_with_bounds(
         for pl in &mut polylines {
             translate(pl, ox, oy);
         }
+        if let Some(k) = skin_from.as_mut() {
+            *k -= polylines[..*k].iter().filter(|p| p.len() < 2).count();
+        }
         polylines.retain(|p| p.len() >= 2);
         if !polylines.is_empty() {
-            out.push(Filled { polylines, spacing });
+            out.push(Filled {
+                polylines,
+                spacing,
+                skin_from,
+            });
         }
     }
     out

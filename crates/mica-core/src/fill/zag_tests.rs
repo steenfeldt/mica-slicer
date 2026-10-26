@@ -2,9 +2,9 @@
 // Provenance: original
 
 //! Tests of the zig-zag family against Orca's algorithm: consistent line layout, the Cross Zag
-//! shift per pair of layers and the Y-axis mirror.
+//! shift per pair of layers, the Y-axis mirror and Locked Zag's skin and skeleton.
 
-use super::super::FillParams;
+use super::super::{FillParams, Filled};
 use super::*;
 use crate::geometry::clip::{diff_ex, union_ex_positive};
 use crate::geometry::{BoundingBox, Point, Polygon};
@@ -238,4 +238,152 @@ fn extended_box_is_square_and_rotation_proof() {
     });
     assert_eq!(b.min, Point::new(-14_142_135, -14_142_135));
     assert_eq!(b.max, Point::new(14_142_135, 14_142_135));
+}
+
+fn square() -> Vec<ExPolygon> {
+    union_ex_positive(&[rect(-15., -15., 15., 15.)])
+}
+
+fn locked_zag(layer_id: usize, zag: &ZagSettings) -> Filled {
+    let mut filled = super::super::fill_with_bounds(
+        Pattern::LockedZag,
+        &square(),
+        &params(layer_id),
+        Some(object()),
+        zag,
+    );
+    assert_eq!(filled.len(), 1);
+    filled.remove(0)
+}
+
+/// Lines of a fill split into its skeleton and skin parts.
+fn split(f: &Filled) -> (&[Polyline], &[Polyline]) {
+    f.polylines
+        .split_at(f.skin_from.expect("locked zag marks its skin"))
+}
+
+/// Distance of a point from the square's outline, mm.
+fn depth(p: &Point) -> f64 {
+    (15. - (p.x.abs().max(p.y.abs()) as f64 / 1e6)).max(0.)
+}
+
+#[test]
+fn locked_zag_splits_skin_and_skeleton_at_the_skin_depth() {
+    // fill_surface_locked_zag: skin = area − offset(area, −skin depth); skeleton =
+    // offset(core, +lock depth) ∩ area.
+    let zag = ZagSettings {
+        skin_infill_depth: 3.0,
+        infill_lock_depth: 1.0,
+        orca: true,
+        ..ZagSettings::default()
+    };
+    let filled = locked_zag(0, &zag);
+    let (skeleton, skin) = split(&filled);
+    assert!(!skeleton.is_empty() && !skin.is_empty());
+    // The skeleton reaches 1 mm into the 3 mm skin band, no further (half a line of tolerance).
+    let deepest_reach = skeleton
+        .iter()
+        .flatten()
+        .map(depth)
+        .fold(f64::MAX, f64::min);
+    assert!(
+        (1.7..=2.1).contains(&deepest_reach),
+        "skeleton reaches {deepest_reach}"
+    );
+    // The skin stays in its band.
+    let innermost = skin.iter().flatten().map(depth).fold(0., f64::max);
+    assert!(innermost <= 3.05, "skin reaches {innermost} mm deep");
+}
+
+#[test]
+fn locked_zag_skeleton_is_turned_and_has_its_own_density() {
+    let zag = ZagSettings {
+        skin_infill_density: 0.4,
+        skeleton_infill_density: 0.1,
+        orca: true,
+        ..ZagSettings::default()
+    };
+    let filled = locked_zag(0, &zag);
+    let (skeleton, skin) = split(&filled);
+    // Layer 0, fill angle 0: skin lines run along X (as Cross Zag), skeleton lines along Y.
+    let skel = line_positions_odd(skeleton);
+    // Skin lines in the left band: horizontal pieces across the 2 mm skin, at its own spacing.
+    let mut skin_y: Vec<i64> = skin
+        .iter()
+        .flat_map(|l| l.windows(2))
+        .filter(|w| {
+            let len = (w[1].x - w[0].x).abs();
+            (w[0].y - w[1].y).abs() < 10
+                && w[0].x < -10_000_000
+                && (1_000_000..2_600_000).contains(&len)
+        })
+        .map(|w| w[0].y / 1000)
+        .collect();
+    skin_y.sort_unstable();
+    skin_y.dedup();
+    assert!(skin_y.len() > 10, "{skin_y:?}");
+    assert!(skel.len() >= 5, "{skel:?}");
+    // Line spacing: 0.4 mm / density.
+    let step = |v: &[i64]| v.windows(2).map(|w| w[1] - w[0]).min().unwrap();
+    // (Positions are truncated to µm.)
+    assert!((step(&skel) - 4000).abs() <= 1, "{skel:?}");
+    assert!((step(&skin_y) - 1000).abs() <= 1, "{skin_y:?}");
+}
+
+/// Positions of the long lines along Y (x values), µm.
+fn line_positions_odd(lines: &[Polyline]) -> Vec<i64> {
+    line_positions(lines, 1)
+}
+
+#[test]
+fn locked_zag_skin_shifts_but_the_skeleton_does_not() {
+    let zag = ZagSettings {
+        infill_shift_step: 0.4,
+        orca: true,
+        ..ZagSettings::default()
+    };
+    let (a, b) = (locked_zag(0, &zag), locked_zag(2, &zag));
+    let (skel_a, skin_a) = split(&a);
+    let (skel_b, skin_b) = split(&b);
+    assert_eq!(line_positions_odd(skel_a), line_positions_odd(skel_b));
+    assert_ne!(line_positions(skin_a, 0), line_positions(skin_b, 0));
+}
+
+#[test]
+fn locked_zag_paths_take_the_skin_and_skeleton_widths() {
+    let mut s =
+        crate::settings::PrintSettings::from_config(&crate::config::Config::defaults()).unwrap();
+    s.zag.skin_infill_line_width = crate::settings::FloatOrPercent::Mm(0.5);
+    s.zag.skeleton_infill_line_width = crate::settings::FloatOrPercent::Percent(110.);
+    let flow = crate::flow::Flow::new(0.45, 0.2);
+    let collections = super::super::collections(
+        Pattern::LockedZag,
+        &square(),
+        &params(0),
+        flow,
+        crate::toolpath::Role::InternalInfill,
+        &s,
+        None,
+    );
+    assert_eq!(collections.len(), 1);
+    let widths: std::collections::BTreeSet<_> = collections[0]
+        .entities
+        .iter()
+        .flatten()
+        .map(|p| (p.flow.width * 1000.).round() as i64)
+        .collect();
+    let skeleton = (f64::from((s.nozzle_diameter * 1.1) as f32) * 1000.).round() as i64;
+    assert_eq!(widths, [500, skeleton].into_iter().collect());
+    assert!(
+        collections[0]
+            .entities
+            .iter()
+            .flatten()
+            .all(|p| p.flow.height == 0.2)
+    );
+    // Orca's automatic width for 0: 112.5 % of the nozzle.
+    assert_eq!(
+        line_width(crate::settings::FloatOrPercent::Mm(0.), 0.4),
+        f64::from(1.125f32 * 0.4f32)
+    );
 }
