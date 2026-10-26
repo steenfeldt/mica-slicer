@@ -120,6 +120,8 @@ OrcaSlicer's where Orca has the option (the GUI follows Orca's layout), else Pru
 | Strength › Infill | Sparse infill density | `fill_density` | `fill_density` | Fill density | `sparse_infill_density` | Sparse infill density | both |  |
 | Strength › Infill | Sparse infill pattern | `fill_pattern` | `fill_pattern` | Fill pattern | `sparse_infill_pattern` | Sparse infill pattern | both |  |
 | Strength › Infill | Sparse infill direction | `fill_angle` | `fill_angle` | Fill angle | `infill_direction` | Sparse infill direction | both |  |
+| Strength › Infill | Symmetric infill Y axis | `symmetric_infill_y_axis` | — |  | `symmetric_infill_y_axis` | Symmetric infill Y axis | both | OrcaSlicer only |
+| Strength › Infill | Infill shift step | `infill_shift_step` | — |  | `infill_shift_step` | Infill shift step | both | OrcaSlicer only |
 | Strength › Infill | Maximum length of the infill anchor | `infill_anchor_max` | `infill_anchor_max` | Maximum length of the infill anchor | `infill_anchor_max` | Maximum length of the infill anchor | both |  |
 | Strength › Infill | Sparse infill anchor length | `infill_anchor` | `infill_anchor` | Length of the infill anchor | `infill_anchor` | Sparse infill anchor length | both |  |
 | Strength › Infill | Filter out tiny gaps | `filter_out_gap_fill` | — |  | `filter_out_gap_fill` | Filter out tiny gaps | both | OrcaSlicer only |

@@ -26,3 +26,5 @@ support_remove_small_overhang	Bool	0	print	1
 support_interface_not_for_body	Bool	0	print	1	
 bridge_line_width	FloatOrPercent	0	print	100%	nozzle_diameter
 z_hop_types	Enums	0	printer	Slope Lift	
+infill_shift_step	Float	0	print	0.4	
+symmetric_infill_y_axis	Bool	0	print	0	

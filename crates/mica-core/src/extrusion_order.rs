@@ -51,7 +51,9 @@ fn pattern_index(p: Pattern) -> i64 {
         Pattern::SupportBase => 18,
         Pattern::Lightning => 19,
         Pattern::Ensuring => 20,
-        Pattern::CrossHatch => 21,
+        Pattern::ZigZag => 21,
+        Pattern::CrossHatch => 22,
+        Pattern::CrossZag => 23,
     }
 }
 

@@ -596,6 +596,23 @@ mod orca_vector_tests {
     }
 
     #[test]
+    fn zigzag_family_settings_are_written_back_for_orca() {
+        let s: Settings = [
+            ("fill_pattern", "crosszag"),
+            ("infill_shift_step", "0.6"),
+            ("symmetric_infill_y_axis", "1"),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let orca = patch(&s, Flavour::Prusa, Flavour::Orca);
+        assert_eq!(orca["sparse_infill_pattern"], "crosszag");
+        assert_eq!(orca["infill_shift_step"], "0.6");
+        assert_eq!(orca["symmetric_infill_y_axis"], "1");
+        assert_eq!(patch(&orca, Flavour::Orca, Flavour::Prusa), s);
+    }
+
+    #[test]
     fn shrinkage_converts_between_dialects() {
         let mut s = Settings::new();
         s.insert(

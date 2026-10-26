@@ -242,6 +242,8 @@ pub struct PrintSettings {
     pub top_bottom_infill_overlap: Option<FloatOrPercent>,
     /// Sparse infill pattern.
     pub fill_pattern: Pattern,
+    /// Settings of the zig-zag infill family (Orca `infill_shift_step`, `symmetric_infill_y_axis`, ...).
+    pub zag: crate::fill::ZagSettings,
     /// Pattern of top and bottom surfaces.
     pub top_fill_pattern: Pattern,
     pub bottom_fill_pattern: Pattern,
@@ -437,6 +439,7 @@ impl PrintSettings {
             infill_overlap: FloatOrPercent::Percent(15.0),
             top_bottom_infill_overlap: None,
             fill_pattern: Pattern::Grid,
+            zag: crate::fill::ZagSettings::default(),
             top_fill_pattern: Pattern::MonotonicLines,
             bottom_fill_pattern: Pattern::Monotonic,
             internal_solid_fill_pattern: Pattern::Ensuring,

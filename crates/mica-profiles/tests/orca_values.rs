@@ -501,3 +501,23 @@ fn imported_bridge_density_keeps_orca_policy_when_it_is_not_a_cli_override() {
     assert_eq!(settings.bridge_density, 0.8);
     assert_eq!(settings.internal_bridge_density, 0.85);
 }
+
+#[test]
+fn zigzag_family_imports_as_real_settings() {
+    use mica_core::{fill::Pattern, settings::PrintSettings};
+    for (name, pattern) in [("zigzag", Pattern::ZigZag), ("crosszag", Pattern::CrossZag)] {
+        let input = raw(json!({
+            "sparse_infill_pattern": name,
+            "infill_shift_step": "0.7",
+            "symmetric_infill_y_axis": "1",
+        }));
+        let mapped = map_config(&input, Dialect::Orca242);
+        assert_eq!(mapped.report.count(Disposition::Rejected), 0);
+        assert_eq!(mapped.report.count(Disposition::ExtrasOnly), 0, "{name}");
+        assert_eq!(mapped.config.string("fill_pattern"), Some(name));
+        let s = PrintSettings::from_config(&mapped.config).unwrap();
+        assert_eq!(s.fill_pattern, pattern);
+        assert_eq!(s.zag.infill_shift_step, 0.7);
+        assert!(s.zag.symmetric_infill_y_axis);
+    }
+}

@@ -69,6 +69,8 @@ print	Strength	Top/bottom shells		bottom_fill_pattern	orca:bottom_surface_patter
 print	Strength	Infill		fill_density	orca:sparse_infill_density
 print	Strength	Infill		fill_pattern	orca:sparse_infill_pattern
 print	Strength	Infill		fill_angle	orca:infill_direction
+print	Strength	Infill		symmetric_infill_y_axis	orca:symmetric_infill_y_axis
+print	Strength	Infill		infill_shift_step	orca:infill_shift_step
 print	Strength	Infill		infill_anchor_max	orca:infill_anchor_max
 print	Strength	Infill		infill_anchor	orca:infill_anchor
 print	Strength	Infill		filter_out_gap_fill	orca:filter_out_gap_fill

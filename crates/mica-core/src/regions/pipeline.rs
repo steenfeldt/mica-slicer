@@ -229,6 +229,8 @@ impl FillKind {
                 "infill_speed",
                 "infill_acceleration",
                 "infill_every_layers",
+                "infill_shift_step",
+                "symmetric_infill_y_axis",
             ],
             Self::Top => &[
                 "filter_out_gap_fill",

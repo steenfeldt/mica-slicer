@@ -562,6 +562,7 @@ impl PrintSettings {
                 })
                 .transpose()?,
             fill_pattern: pattern(c, "fill_pattern")?,
+            zag: crate::fill::ZagSettings::from_config(c)?,
             top_fill_pattern: pattern(c, "top_fill_pattern")?,
             bottom_fill_pattern: pattern(c, "bottom_fill_pattern")?,
             internal_solid_fill_pattern: solid,

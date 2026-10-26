@@ -7,12 +7,15 @@
 // Source: prusaslicer@b028299c77 src/libslic3r/Fill/FillRectilinear.cpp :: FillSupportBase::fill_surface
 // Changes: Rust port. Intersection pointers become indices into their vertical line; the ant-colony
 // Changes: path matrix is a lazily filled hash map instead of a dense n²×4 matrix; the random generator
-// Changes: is mt19937_64 with libc++ bounded draws (including singleton draws). The ZigZag branch, the
-// Changes: unused 3-opt stub and the debug SVG output are left out. InfillFailedException becomes `None`.
+// Changes: is mt19937_64 with libc++ bounded draws (including singleton draws). The unused 3-opt stub and
+// Changes: the debug SVG output are left out. InfillFailedException becomes `None`.
 // Changes: Support base fills (normal and organic, Prusa and Orca rules) use connect_base_support.
+// Source: orca@8500fcdcca src/libslic3r/Fill/FillRectilinear.cpp :: FillRectilinear::fill_surface_by_lines, traverse_graph_generate_polylines
+// Changes: Zig-zag family (has_consistent_pattern): object-box line layout, alternating start ends,
+// Changes: next-line-only links, and Orca's single-precision horiz_move shift of the first line.
 
-//! Line-based fills: rectilinear, monotonic, monotonic lines, and the multi-sweep patterns
-//! (grid, triangles, stars, cubic).
+//! Line-based fills: rectilinear, monotonic, monotonic lines, the zig-zag family (see `zag`), and the
+//! multi-sweep patterns (grid, triangles, stars, cubic).
 //!
 //! The area is rotated so the infill lines are vertical. Vertical lines are intersected with the
 //! area's outline shrunk by a little ("outer") and by half a line ("inner"). Line ends are linked
@@ -50,6 +53,15 @@ pub(crate) struct LineFillParams {
     pub anchor_length_max: f64,
     /// Longest perimeter segment linking two lines, scaled; 0 = unlimited.
     pub link_max_length: Coord,
+    /// Zig-zag patterns (`has_consistent_pattern`): the lines are laid out over `object_box`
+    /// instead of the area's own box, every other line is walked downwards and lines only link
+    /// to the next one, so the zig-zags line up from layer to layer.
+    pub consistent: bool,
+    /// The object's extended bounding box (`extended_object_bounding_box`), rotation-proof.
+    pub object_box: Option<BoundingBox>,
+    /// Orca's `horiz_move`: scaled shift of the first line (Cross Zag, Locked Zag), computed in
+    /// single precision like Orca. `None` keeps PrusaSlicer's line positions.
+    pub horiz_move: Option<f32>,
 }
 
 impl LineFillParams {
@@ -1055,6 +1067,7 @@ fn end_of_vertical_run(il: &[SegmentIntersection], start: usize) -> usize {
 fn traverse_graph_generate_polylines(
     pwo: &ExPolygonWithOffset,
     segs: &mut Segs,
+    consistent: bool,
     polylines_out: &mut Vec<Polyline>,
 ) {
     // Outer-only chords are marked consumed.
@@ -1074,7 +1087,12 @@ fn traverse_graph_generate_polylines(
         if i_intersection.is_none() {
             let mut found = None;
             'search: for (i_vline2, vline) in segs.iter().enumerate() {
-                for (i, it) in vline.intersections.iter().enumerate() {
+                // Consistent patterns (zig-zag) start every other line from its top end.
+                let forward = !consistent || i_vline2.is_multiple_of(2);
+                let n = vline.intersections.len();
+                for k in 0..n {
+                    let i = if forward { k } else { n - k - 1 };
+                    let it = &vline.intersections[i];
                     if it.is_outer() {
                         let consumed = if it.is_low() {
                             it.consumed_vertical_up
@@ -1139,8 +1157,9 @@ fn traverse_graph_generate_polylines(
             let pos = segs[i_vline].pos;
             let i_prev = here.left_horizontal();
             let i_next = here.right_horizontal();
-            let prev_valid =
-                intersection_on_prev_next_vertical_line_valid(segs, i_vline, it, Side::Left);
+            // Consistent patterns always continue to the next line, never the previous one.
+            let prev_valid = !consistent
+                && intersection_on_prev_next_vertical_line_valid(segs, i_vline, it, Side::Left);
             let next_valid =
                 intersection_on_prev_next_vertical_line_valid(segs, i_vline, it, Side::Right);
             if i_prev != -1 {
@@ -2285,7 +2304,10 @@ pub(crate) fn fill_surface_by_lines(
         return (out, spacing);
     }
     let bb_src = pwo.bounding_box_src();
-    let mut bb = bb_src;
+    let mut bb = match params.object_box {
+        Some(b) if params.consistent => b,
+        _ => bb_src,
+    };
     if params.full_infill() && !params.dont_adjust {
         line_spacing = adjust_solid_spacing(bb_src.max.x - bb_src.min.x, line_spacing);
         spacing = line_spacing as f64 / SCALE;
@@ -2298,10 +2320,21 @@ pub(crate) fn fill_surface_by_lines(
         );
         merge_point(&mut bb, aligned);
     }
-    let n_vlines = ((bb.max.x - bb.min.x + line_spacing - 1) / line_spacing).max(0) as usize;
+    let mut n_vlines = ((bb.max.x - bb.min.x + line_spacing - 1) / line_spacing).max(0) as usize;
     let mut x0 = bb.min.x;
     if params.full_infill() {
         x0 += (line_spacing + SCALED_EPSILON) / 2;
+    }
+    if let Some(horiz_move) = params.horiz_move {
+        // Orca: shift by whole pairs of lines plus the remainder, so the zig-zag keeps its phase.
+        let gap_line = (horiz_move / line_spacing as f32) as i64;
+        let back = if gap_line % 2 == 0 {
+            gap_line
+        } else {
+            n_vlines += 1;
+            gap_line - 1
+        };
+        x0 = (x0 as f32 + (horiz_move - (back * line_spacing) as f32)) as Coord;
     }
     let Some(mut segs) = slice_region_by_vertical_lines(&pwo, n_vlines, x0, line_spacing) else {
         return (out, spacing);
@@ -2322,7 +2355,7 @@ pub(crate) fn fill_surface_by_lines(
             polylines_from_paths(&path, &regions, &pwo, &segs, &mut out);
         }
     } else {
-        traverse_graph_generate_polylines(&pwo, &mut segs, &mut out);
+        traverse_graph_generate_polylines(&pwo, &mut segs, params.consistent, &mut out);
     }
     // Rotate back.
     for pl in &mut out {

@@ -25,7 +25,8 @@
 //!   to the boundary by [`connect`];
 //! - **gyroid**, **concentric**, **honeycomb**, **3dhoneycomb**;
 //! - **hilbertcurve**, **archimedeanchords**, **octagramspiral**;
-//! - Orca **crosshatch** (single-line).
+//! - Orca **crosshatch** (single-line);
+//! - **zigzag** (PrusaSlicer and Orca) and Orca **crosszag** ([`zag`]).
 //!
 //! [`toolpaths`] additionally handles variable-width solid concentric and ensuring fill.
 //! Adaptive cubic, support cubic and lightning require [`PreparedFill`], created once by
@@ -47,6 +48,8 @@ mod gyroid;
 mod honeycomb;
 mod plane_path;
 mod rectilinear;
+mod zag;
+pub use zag::ZagSettings;
 
 use std::f64::consts::{FRAC_PI_2, PI};
 
@@ -81,6 +84,10 @@ pub enum Pattern {
     Ensuring,
     /// Sparse support lines with fixed layer angle and boundary anchoring.
     SupportBase,
+    /// Rectilinear lines laid out consistently across layers (PrusaSlicer and Orca `zigzag`).
+    ZigZag,
+    /// Orca `crosszag`: Zig Zag shifted sideways every two layers.
+    CrossZag,
 }
 
 impl Pattern {
@@ -108,6 +115,8 @@ impl Pattern {
             "lightning" => Self::Lightning,
             "ensuring" => Self::Ensuring,
             "monotonicline" => Self::MonotonicLines,
+            "zigzag" => Self::ZigZag,
+            "crosszag" => Self::CrossZag,
             _ => return None,
         })
     }
@@ -124,6 +133,10 @@ impl Pattern {
                 | Self::ArchimedeanChords
                 | Self::OctagramSpiral
         )
+    }
+    /// One of the zig-zag family (`has_consistent_pattern`).
+    pub fn is_zag(self) -> bool {
+        matches!(self, Self::ZigZag | Self::CrossZag)
     }
     pub fn needs_object(self) -> bool {
         matches!(
@@ -147,7 +160,11 @@ impl Pattern {
         }
         let alternates = matches!(
             self,
-            Pattern::Rectilinear | Pattern::Monotonic | Pattern::MonotonicLines
+            Pattern::Rectilinear
+                | Pattern::Monotonic
+                | Pattern::MonotonicLines
+                | Pattern::ZigZag
+                | Pattern::CrossZag
         );
         if alternates && layer_id & 1 == 1 {
             FRAC_PI_2
@@ -200,14 +217,16 @@ fn translate(points: &mut [Point], dx: i64, dy: i64) {
 
 /// Fills each ExPolygon of `area` with `pattern`. Results come one per filled ExPolygon.
 pub fn fill(pattern: Pattern, area: &[ExPolygon], params: &FillParams) -> Vec<Filled> {
-    fill_with_bounds(pattern, area, params, None)
+    fill_with_bounds(pattern, area, params, None, &ZagSettings::default())
 }
 
+/// `fill` with the object's bounding box (relative to `params.origin`) and the zig-zag settings.
 fn fill_with_bounds(
     pattern: Pattern,
     area: &[ExPolygon],
     params: &FillParams,
     bounds: Option<crate::geometry::BoundingBox>,
+    zag: &ZagSettings,
 ) -> Vec<Filled> {
     if !params.density.is_finite()
         || !params.spacing.is_finite()
@@ -236,7 +255,21 @@ fn fill_with_bounds(
             params.anchor_length_max
         },
         link_max_length: (params.link_max_length * SCALE).round() as i64,
+        consistent: false,
+        object_box: None,
+        horiz_move: None,
     };
+    // The zig-zag family lays its lines out over the object's extended box.
+    let object_box = bounds
+        .filter(|_| pattern.is_zag())
+        .map(zag::extended_object_bounding_box);
+    let zag_lines = LineFillParams {
+        consistent: true,
+        object_box,
+        horiz_move: zag::horiz_move(pattern, params.layer_id, zag),
+        ..line_params
+    };
+    let mirror_axis = zag::mirror_axis(zag, object_box);
 
     let mut out = Vec::new();
     for ex in area.iter().filter(|ex| ex.contour.len() >= 3) {
@@ -252,6 +285,11 @@ fn fill_with_bounds(
             | Pattern::Monotonic
             | Pattern::MonotonicLines => {
                 let (pl, s) = rectilinear::fill_surface_by_lines(&ex, &line_params);
+                spacing = s;
+                pl
+            }
+            Pattern::ZigZag | Pattern::CrossZag => {
+                let (pl, s) = zag::fill_lines(&ex, &zag_lines, mirror_axis);
                 spacing = s;
                 pl
             }

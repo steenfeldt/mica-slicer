@@ -463,7 +463,6 @@ The report distinguishes these valid values from malformed values.
 | `infill_jerk` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `infill_lock_depth` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `infill_overhang_angle` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `infill_shift_step` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `inherits` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `inherits_group` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `initial_layer_jerk` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
@@ -633,7 +632,6 @@ The report distinguishes these valid values from malformed values.
 | `support_object_skip_flush` | extras-only | Orca support geometry/modes require a separate algorithm mapping. |
 | `support_parallel_printheads` | extras-only | Orca support geometry/modes require a separate algorithm mapping. |
 | `support_threshold_overlap` | extras-only | Orca support geometry/modes require a separate algorithm mapping. |
-| `symmetric_infill_y_axis` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `temperature_vitrification` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `time_cost` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `time_lapse_gcode` | extras-only | Orca printer capability/template context has no direct canonical slot. |
@@ -709,3 +707,5 @@ Batch B source-named options are typed and resolved without injecting Orca defau
 | `seam_slope_type` | `seam_slope_type` | Active; merged with PrusaSlicer's `scarf_seam_*` (`mica_core::merged`, docs/setting-names.md). |
 | `z_hop_types` | `z_hop_types` | Active under OrcaSlicer rules (Orca's travel lift); editable in Printer settings, see [slicing rules](../../../../docs/slicing-rules.md). |
 | `wall_sequence` | `wall_sequence` | Active; merged with PrusaSlicer's `external_perimeters_first` (`mica_core::merged`, docs/setting-names.md). |
+| `infill_shift_step` | `infill_shift_step` | Active for the Cross Zag sparse pattern (`mica_core::fill::ZagSettings`, `fill/zag.rs`). |
+| `symmetric_infill_y_axis` | `symmetric_infill_y_axis` | Active for the Zig Zag and Cross Zag sparse patterns (`mica_core::fill::ZagSettings`). |

@@ -428,6 +428,17 @@ pub fn merged_away(key: &str) -> bool {
     mica_core::merged::is_counterpart(key)
 }
 
+/// Whether an option matters with the configuration's other values: the settings of one sparse
+/// infill pattern only show while that pattern is selected (as in OrcaSlicer's settings tab).
+pub fn relevant(key: &str, c: &mica_core::config::Config) -> bool {
+    let pattern = c.string("fill_pattern").unwrap_or_default();
+    match key {
+        "infill_shift_step" => matches!(pattern, "crosszag"),
+        "symmetric_infill_y_axis" => matches!(pattern, "zigzag" | "crosszag"),
+        _ => true,
+    }
+}
+
 /// Whether an option applies under the printer's slicing rules. PrusaSlicer-only switches that
 /// OrcaSlicer's rules ignore are hidden under Orca rules, and Orca-only options PrusaSlicer's
 /// rules ignore under PrusaSlicer rules (see docs/slicing-rules.md). Options that work the
@@ -875,6 +886,28 @@ pub const OBJECT_OVERRIDES: &[(&str, &[&str])] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn zigzag_settings_show_with_their_pattern_only() {
+        let mut c = mica_core::config::Config::defaults();
+        let shown = |c: &mica_core::config::Config| {
+            ["infill_shift_step", "symmetric_infill_y_axis"].map(|k| relevant(k, c))
+        };
+        c.set_raw("fill_pattern", "grid").unwrap();
+        assert_eq!(shown(&c), [false, false]);
+        c.set_raw("fill_pattern", "zigzag").unwrap();
+        assert_eq!(shown(&c), [false, true]);
+        c.set_raw("fill_pattern", "crosszag").unwrap();
+        assert_eq!(shown(&c), [true, true]);
+        assert!(relevant("fill_density", &c));
+        let t = text();
+        let labels: Vec<_> = t["fill_pattern"]
+            .enums
+            .iter()
+            .map(|(v, _)| v.as_str())
+            .collect();
+        assert!(labels.contains(&"zigzag") && labels.contains(&"crosszag"));
+    }
 
     #[test]
     fn tables_load_with_orca_labels_and_pages() {

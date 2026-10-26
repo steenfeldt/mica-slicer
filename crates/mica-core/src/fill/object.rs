@@ -314,7 +314,7 @@ fn generate(
                 min: Point::new(b.min.x - p.origin.x, b.min.y - p.origin.y),
                 max: Point::new(b.max.x - p.origin.x, b.max.y - p.origin.y),
             });
-            super::fill_with_bounds(pattern, area, p, bounds)
+            super::fill_with_bounds(pattern, area, p, bounds, &s.zag)
         }
     }
 }

@@ -83,10 +83,12 @@ impl FieldContext<'_> {
     pub fn shown(&self, key: &str) -> bool {
         // A merged setting's PrusaSlicer counterpart never shows: the Orca key stands for it
         // (its edits change both).
-        // Settings Mica does not implement are hidden too (`settings::unimplemented`).
+        // Settings Mica does not implement are hidden too (`settings::unimplemented`), and so
+        // are the settings of a sparse infill pattern that is not selected (`settings::relevant`).
         !settings::merged_away(key)
             && ((settings::applies(key, mica_core::rules::Rules::of(self.config))
-                && settings::unimplemented::implemented(key, self.config))
+                && settings::unimplemented::implemented(key, self.config)
+                && settings::relevant(key, self.config))
                 || self.modified(key))
             && (self.force || self.advanced || self.modified(key) || !is_advanced(key))
     }
