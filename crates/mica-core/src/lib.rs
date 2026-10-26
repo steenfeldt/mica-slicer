@@ -12,6 +12,7 @@ pub mod brick_layers;
 pub mod bridge;
 pub mod build_volume;
 pub mod calib;
+pub mod color;
 pub mod config;
 pub mod custom_gcode;
 pub mod cxx_sort;

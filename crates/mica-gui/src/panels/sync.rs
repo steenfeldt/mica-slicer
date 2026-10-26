@@ -37,10 +37,7 @@ impl App {
         let (i, loaded) = self.linked_loaded()?;
         let f = loaded.iter().find(|f| f.tool as usize == tool)?;
         let printer = self.printers.list.get(i)?;
-        let loaded_colour = f
-            .colour
-            .as_deref()
-            .and_then(crate::printhost::explain::parse_colour);
+        let loaded_colour = f.colour.as_deref().and_then(mica_core::color::parse_hex);
         let loaded_material = f
             .material
             .as_deref()
@@ -195,11 +192,7 @@ impl App {
                 continue;
             }
             let mut this = false;
-            if let Some(c) = f
-                .colour
-                .as_deref()
-                .and_then(crate::printhost::explain::parse_colour)
-            {
+            if let Some(c) = f.colour.as_deref().and_then(mica_core::color::parse_hex) {
                 let hex = crate::project::hex(c);
                 // A color within the tolerance is the same spool color: the project keeps its
                 // own description of it.

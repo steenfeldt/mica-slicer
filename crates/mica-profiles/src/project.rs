@@ -582,14 +582,10 @@ fn tool_value(config: &Config, key: &str, tool: usize) -> Option<String> {
     }
 }
 
-/// `#RRGGBB` (also `#RRGGBBAA`) to RGB; anything else is `None`.
+/// `#RRGGBB` (also `#RRGGBBAA`, alpha dropped), quoted or not, to RGB (`mica_core::color`);
+/// anything else is `None`.
 pub fn parse_colour(s: &str) -> Option<[u8; 3]> {
-    let hex = s.trim().trim_matches('"').strip_prefix('#')?;
-    if hex.len() < 6 {
-        return None;
-    }
-    let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
-    Some([channel(0)?, channel(2)?, channel(4)?])
+    mica_core::color::parse_hex(s.trim().trim_matches('"'))
 }
 
 /// Sets `key` for one tool: element `tool` of a vector option, or the whole value for scalars.

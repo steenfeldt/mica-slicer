@@ -97,7 +97,7 @@ pub fn hex(c: [u8; 3]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::u1_mapping::parse_hex;
+    use mica_core::color::parse_hex;
 
     fn h(s: &str) -> [u8; 3] {
         parse_hex(s).unwrap()

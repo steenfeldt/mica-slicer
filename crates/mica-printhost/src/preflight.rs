@@ -184,8 +184,8 @@ fn check_attribute(
 fn same(actual: &str, wanted: &str, kind: IssueKind) -> bool {
     if kind == IssueKind::Colour
         && let (Some(a), Some(w)) = (
-            crate::u1_mapping::parse_hex(actual),
-            crate::u1_mapping::parse_hex(wanted),
+            mica_core::color::parse_hex(actual),
+            mica_core::color::parse_hex(wanted),
         )
     {
         return crate::colour::same_colour(a, w);

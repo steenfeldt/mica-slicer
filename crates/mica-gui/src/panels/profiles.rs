@@ -896,7 +896,7 @@ impl Profiles {
                     })
             }
         }?;
-        parse_colour(raw.trim().trim_matches('"'))
+        mica_core::color::parse_hex(raw.trim().trim_matches('"'))
     }
 
     pub fn nozzle_count(&self) -> usize {
@@ -1178,15 +1178,6 @@ fn ensure(value: &mut String, options: &[String]) {
     if !options.contains(value) {
         *value = options.first().cloned().unwrap_or_default();
     }
-}
-
-pub fn parse_colour(s: &str) -> Option<[u8; 3]> {
-    let hex = s.strip_prefix('#')?;
-    if hex.len() < 6 {
-        return None;
-    }
-    let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
-    Some([channel(0)?, channel(2)?, channel(4)?])
 }
 
 #[cfg(test)]

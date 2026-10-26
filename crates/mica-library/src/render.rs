@@ -108,12 +108,6 @@ pub fn preview_cells(size: [f32; 3], picture: [u16; 2], zoom: f32) -> u32 {
     }
 }
 
-fn hex_rgb(s: &str) -> Option<[u8; 3]> {
-    let h = s.strip_prefix('#')?;
-    let byte = |i: usize| u8::from_str_radix(h.get(i..i + 2)?, 16).ok();
-    Some([byte(0)?, byte(2)?, byte(4)?])
-}
-
 /// The preview mesh of a model file's content: a 3MF's first plate in its filament colours
 /// (when its settings name them), anything else as [`load_mesh`] without colours.
 pub fn load_preview(kind: Kind, data: &[u8]) -> Result<PreviewMesh, String> {
@@ -145,7 +139,7 @@ impl PreviewProject {
             mica_core::threemf::read_3mf(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
         let colours = project_colours(&project)
             .iter()
-            .map(|c| c.as_deref().and_then(hex_rgb))
+            .map(|c| c.as_deref().and_then(mica_core::color::parse_hex))
             .collect();
         let names = crate::extract::plate_names(&project);
         Ok(Self {

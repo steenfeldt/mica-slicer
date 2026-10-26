@@ -762,14 +762,10 @@ pub fn summary(m: &Model) -> String {
     parts.join(" · ")
 }
 
+/// A library entry's colour text (`mica_core::color`) as an opaque egui colour.
 pub fn parse_colour(hex: &str) -> Option<egui::Color32> {
-    let h = hex.strip_prefix('#')?;
-    let v = u32::from_str_radix(h.get(..6)?, 16).ok()?;
-    Some(egui::Color32::from_rgb(
-        (v >> 16) as u8,
-        (v >> 8) as u8,
-        v as u8,
-    ))
+    let [r, g, b] = mica_core::color::parse_hex(hex)?;
+    Some(egui::Color32::from_rgb(r, g, b))
 }
 
 /// Shows a file in Finder (or the file manager), selected.

@@ -699,11 +699,7 @@ impl App {
                 let mut x = inner.left();
                 for f in &filaments {
                     let r = Rect::from_min_size(Pos2::new(x, y + 1.), Vec2::splat(14.));
-                    match f
-                        .colour
-                        .as_deref()
-                        .and_then(crate::printhost::explain::parse_colour)
-                    {
+                    match f.colour.as_deref().and_then(mica_core::color::parse_hex) {
                         Some(c) => {
                             ui.painter()
                                 .rect_filled(r, 4., Color32::from_rgb(c[0], c[1], c[2]));
@@ -1302,10 +1298,8 @@ impl App {
                                 );
                                 ui.spacing_mut().item_spacing.x = 6.;
                                 for f in &r.filaments {
-                                    if let Some(c) = f
-                                        .colour
-                                        .as_deref()
-                                        .and_then(crate::printhost::explain::parse_colour)
+                                    if let Some(c) =
+                                        f.colour.as_deref().and_then(mica_core::color::parse_hex)
                                     {
                                         swatch(ui, c, 12.);
                                     }

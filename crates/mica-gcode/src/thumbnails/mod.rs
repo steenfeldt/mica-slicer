@@ -113,11 +113,11 @@ pub fn make_and_check_thumbnail_list(
 /// Color of the first tool: explicit extruder override, then filament color, then orange.
 pub fn filament_color(config: &Config) -> [u8; 3] {
     for key in ["extruder_colour", "filament_colour"] {
-        if let Some(s) = config.string_at(key, 0).and_then(|s| s.strip_prefix('#'))
-            && s.len() == 6
-            && let Ok(rgb) = u32::from_str_radix(s, 16)
+        if let Some(rgb) = config
+            .string_at(key, 0)
+            .and_then(mica_core::color::parse_hex)
         {
-            return [(rgb >> 16) as u8, (rgb >> 8) as u8, rgb as u8];
+            return rgb;
         }
     }
     [255, 128, 0]

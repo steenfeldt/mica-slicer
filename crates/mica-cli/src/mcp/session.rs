@@ -252,7 +252,7 @@ impl Scene {
         }
         let colors = project_settings::colours(&config)
             .iter()
-            .map(|c| colors::parse_hex(c).unwrap_or([0xF5; 3]))
+            .map(|c| mica_core::color::parse_hex(c).unwrap_or([0xF5; 3]))
             .collect();
         let mut scene = Self {
             source,

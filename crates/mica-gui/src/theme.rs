@@ -548,20 +548,6 @@ pub fn to_color32(c: [f32; 3]) -> Color32 {
     )
 }
 
-/// Parses `#RRGGBB` / `#RRGGBBAA` / `RRGGBB` as used by `filament_colour` and `extruder_colour`.
-pub fn parse_hex(text: &str) -> Option<[f32; 3]> {
-    let hex = text.trim().trim_start_matches('#');
-    if hex.len() != 6 && hex.len() != 8 {
-        return None;
-    }
-    let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
-    Some([
-        channel(0)? as f32 / 255.,
-        channel(2)? as f32 / 255.,
-        channel(4)? as f32 / 255.,
-    ])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -580,14 +566,6 @@ mod tests {
         assert_eq!(Choice::Light.resolve(Some(egui::Theme::Dark)), Mode::Light);
         // `Mode` alone never reads the new value as light.
         assert_eq!(Mode::from_name("follow-system"), Mode::Dark);
-    }
-    #[test]
-    fn hex_colours() {
-        assert_eq!(parse_hex("#FF8000"), Some([1., 128. / 255., 0.]));
-        assert_eq!(parse_hex("29B2B2"), parse_hex("#29b2b2"));
-        assert_eq!(parse_hex("#29B2B2FF"), parse_hex("#29B2B2"));
-        assert_eq!(parse_hex(""), None);
-        assert_eq!(parse_hex("#GGGGGG"), None);
     }
     #[test]
     fn dark_is_the_default_and_system_resolves_to_dark() {

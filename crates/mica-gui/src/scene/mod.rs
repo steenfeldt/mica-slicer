@@ -1315,7 +1315,7 @@ pub fn tool_colors(c: &Config) -> Vec<[f32; 3]> {
                 .into_iter()
                 .filter(|k| c.vector_len(k) > i)
                 .filter_map(|k| c.string_at(k, i))
-                .find_map(crate::theme::parse_hex)
+                .find_map(mica_core::color::parse_hex_f32)
                 .unwrap_or_else(|| crate::preview::legend::tool_color(i))
         })
         .collect()

@@ -174,15 +174,6 @@ pub struct Preflight {
     pub warnings: Vec<String>,
 }
 
-pub fn parse_colour(text: &str) -> Option<[u8; 3]> {
-    let hex = text.trim().trim_start_matches('#');
-    if hex.len() < 6 || !hex.is_char_boundary(6) {
-        return None;
-    }
-    let channel = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
-    Some([channel(0)?, channel(2)?, channel(4)?])
-}
-
 /// The printer's side of a filament row: `PLA · yellow`, never a hex code.
 pub fn loaded_text(material: Option<&str>, colour: Option<[u8; 3]>) -> String {
     let name = colour.map(mica_printhost::colour::colour_name);
@@ -250,7 +241,9 @@ pub fn present(
             let present = info.tools.as_ref().is_none_or(|t| t.contains(&jt.tool));
             let f = loaded.iter().find(|f| f.tool == jt.tool);
             let loaded_material = f.and_then(|f| f.material.clone());
-            let loaded_colour = f.and_then(|f| f.colour.as_deref()).and_then(parse_colour);
+            let loaded_colour = f
+                .and_then(|f| f.colour.as_deref())
+                .and_then(mica_core::color::parse_hex);
             let verdict = if !present {
                 Verdict::Missing
             } else if f.is_none() || (loaded_material.is_none() && loaded_colour.is_none()) {
@@ -491,6 +484,7 @@ mod tests {
             issue_text(&i),
             "The job uses T5 but the printer has no such tool."
         );
+        let parse_colour = mica_core::color::parse_hex;
         assert_eq!(parse_colour("#41B4F0"), Some([0x41, 0xB4, 0xF0]));
         assert_eq!(parse_colour("FF7D38FF"), Some([0xFF, 0x7D, 0x38]));
         assert_eq!(parse_colour("red"), None);

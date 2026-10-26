@@ -481,10 +481,7 @@ fn heater_tiles(live: &Live) -> Vec<Tile> {
             } else {
                 match live.filaments.iter().find(|f| f.tool == h.tool) {
                     Some(f) => Spool::Loaded {
-                        colour: f
-                            .colour
-                            .as_deref()
-                            .and_then(crate::printhost::explain::parse_colour),
+                        colour: f.colour.as_deref().and_then(mica_core::color::parse_hex),
                         material: f.material.clone(),
                     },
                     None => Spool::Empty,

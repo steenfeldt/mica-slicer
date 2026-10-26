@@ -59,7 +59,7 @@ fn u1_app(ctx: &egui::Context) -> Option<App> {
 }
 
 fn hex(s: &str) -> [u8; 3] {
-    mica_printhost::u1_mapping::parse_hex(s).unwrap()
+    mica_core::color::parse_hex(s).unwrap()
 }
 
 /// A real U1 (2026-10-20): what is loaded, and what its project says.

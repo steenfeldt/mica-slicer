@@ -25,20 +25,6 @@ pub fn dialect(c: &Config) -> Dialect {
     }
 }
 
-/// `#RRGGBB` → linear-ish 0..1 RGB as the rest of the GUI uses.
-pub fn parse_hex(s: &str) -> Option<[f32; 3]> {
-    let h = s.trim().strip_prefix('#')?;
-    if h.len() != 6 {
-        return None;
-    }
-    let v = u32::from_str_radix(h, 16).ok()?;
-    Some([
-        ((v >> 16) & 255) as f32 / 255.,
-        ((v >> 8) & 255) as f32 / 255.,
-        (v & 255) as f32 / 255.,
-    ])
-}
-
 /// `[r, g, b]` (0..1) → `#RRGGBB`.
 pub fn to_hex(c: [f32; 3]) -> String {
     let b = c.map(|v| (v.clamp(0., 1.) * 255.).round() as u8);
@@ -146,9 +132,14 @@ impl ColorPrint {
                         };
                         let k = out.colors.len();
                         if tools + k < PALETTE {
-                            out.colors.push(parse_hex(&item.color).unwrap_or_else(|| {
-                                parse_hex(custom_gcode::COLOR_PRINT_COLORS[k % 7]).unwrap()
-                            }));
+                            out.colors.push(
+                                mica_core::color::parse_hex_f32(&item.color).unwrap_or_else(|| {
+                                    mica_core::color::parse_hex_f32(
+                                        custom_gcode::COLOR_PRINT_COLORS[k % 7],
+                                    )
+                                    .unwrap()
+                                }),
+                            );
                             if tool < PACKED_TOOLS {
                                 generation[tool] = (tools + k) as u32;
                             }
@@ -324,8 +315,11 @@ mod tests {
 
     #[test]
     fn helpers() {
-        assert_eq!(parse_hex("#0080ff"), Some([0., 128. / 255., 1.]));
-        assert_eq!(parse_hex("red"), None);
+        assert_eq!(
+            mica_core::color::parse_hex_f32("#0080ff"),
+            Some([0., 128. / 255., 1.])
+        );
+        assert_eq!(mica_core::color::parse_hex_f32("red"), None);
         assert_eq!(to_hex([1., 0.5, 0.]), "#FF8000");
         assert_eq!(layer_for_z(&zs(10), 1.0), 4);
         assert_eq!(layer_for_z(&zs(10), 1.05), 5);

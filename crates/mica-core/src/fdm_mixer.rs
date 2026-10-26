@@ -103,14 +103,9 @@ pub fn lab_to_rgb(lab: Lab) -> [u8; 3] {
     xyz_to_rgb([XN * lab_f_inv(fx), YN * lab_f_inv(fy), ZN * lab_f_inv(fz)])
 }
 
-/// `#rrggbb` or `rrggbb`, either case.
+/// `#rrggbb` or `rrggbb`, either case (also `#rrggbbaa`, alpha dropped: `crate::color`).
 pub fn hex_to_rgb(hex: &str) -> Result<[u8; 3], String> {
-    let s = hex.strip_prefix('#').unwrap_or(hex);
-    if s.len() != 6 || !s.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return Err(format!("expected 6 hex digits, got: {hex}"));
-    }
-    let byte = |i: usize| u8::from_str_radix(&s[i..i + 2], 16).expect("checked hex digits");
-    Ok([byte(0), byte(2), byte(4)])
+    crate::color::parse_hex(hex).ok_or_else(|| format!("expected 6 hex digits, got: {hex}"))
 }
 
 /// Lowercase `#rrggbb`.

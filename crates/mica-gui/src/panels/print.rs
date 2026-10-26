@@ -1056,11 +1056,8 @@ fn slot_map(ui: &mut egui::Ui, plan: &mut crate::printhost::u1map::Plan) {
     let p = theme::of(ui);
     let mut pick: Option<(usize, u32)> = None;
     let slot_label = slot_text;
-    let slot_rgb = |s: &mica_printhost::U1Slot| {
-        s.colour
-            .as_deref()
-            .and_then(mica_printhost::u1_mapping::parse_hex)
-    };
+    let slot_rgb =
+        |s: &mica_printhost::U1Slot| s.colour.as_deref().and_then(mica_core::color::parse_hex);
     ui.spacing_mut().item_spacing.y = 6.;
     for (i, row) in plan.rows.iter().enumerate() {
         ui.horizontal(|ui| {
@@ -1254,11 +1251,7 @@ pub(crate) fn slot_text(s: &mica_printhost::U1Slot) -> String {
         Some(sub) => format!("Slot {} · {m} {sub}", s.index + 1),
         None => format!("Slot {} · {m}", s.index + 1),
     };
-    if let Some(c) = s
-        .colour
-        .as_deref()
-        .and_then(mica_printhost::u1_mapping::parse_hex)
-    {
+    if let Some(c) = s.colour.as_deref().and_then(mica_core::color::parse_hex) {
         text.push_str(" · ");
         text.push_str(mica_printhost::colour::colour_name(c));
     }

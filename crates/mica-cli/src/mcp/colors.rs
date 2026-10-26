@@ -39,23 +39,13 @@ const NAMES: &[(&str, [u8; 3])] = &[
     ("natural", [0xEE, 0xE8, 0xD8]),
 ];
 
-/// `#RRGGBB`, `RRGGBB` or `#RRGGBBAA` (alpha ignored).
-pub fn parse_hex(text: &str) -> Option<[u8; 3]> {
-    let h = text.trim().trim_start_matches('#');
-    if !(h.len() == 6 || h.len() == 8) || !h.is_ascii() {
-        return None;
-    }
-    let byte = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
-    Some([byte(0)?, byte(2)?, byte(4)?])
-}
-
 pub fn hex(c: [u8; 3]) -> String {
     format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
 }
 
-/// A colour from a name ("red", "light blue") or hex text.
+/// A colour from a name ("red", "light blue") or hex text (`mica_core::color`; alpha ignored).
 pub fn parse(text: &str) -> Option<[u8; 3]> {
-    parse_hex(text).or_else(|| {
+    mica_core::color::parse_hex(text).or_else(|| {
         let wanted = text.trim().to_ascii_lowercase().replace(['-', '_'], " ");
         NAMES.iter().find(|(n, _)| *n == wanted).map(|(_, c)| *c)
     })

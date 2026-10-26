@@ -136,7 +136,7 @@ impl LayerGCode<'_> {
 
 fn marker_color(item: &Item, g: &LayerGCode<'_>) -> Color32 {
     match item.kind {
-        Kind::ColorChange | Kind::ToolChange => super::color_print::parse_hex(&item.color)
+        Kind::ColorChange | Kind::ToolChange => mica_core::color::parse_hex_f32(&item.color)
             .map(theme::to_color32)
             .unwrap_or_else(|| {
                 theme::to_color32(super::legend::tool_color(item.extruder.saturating_sub(1)))

@@ -72,18 +72,8 @@ const DEFAULT_COLOUR: [u8; 3] = [0x26, 0xA6, 0x9A];
 pub(crate) fn slot_rgb(slot: &U1Slot) -> [u8; 3] {
     slot.colour
         .as_deref()
-        .and_then(parse_hex)
+        .and_then(mica_core::color::parse_hex)
         .unwrap_or(DEFAULT_COLOUR)
-}
-
-/// `RRGGBB`, `RRGGBBAA`, with or without `#`.
-pub fn parse_hex(text: &str) -> Option<[u8; 3]> {
-    let hex = text.trim().trim_start_matches('#');
-    if !(hex.len() == 6 || hex.len() == 8) || !hex.is_ascii() {
-        return None;
-    }
-    let c = |i: usize| u8::from_str_radix(&hex[i..i + 2], 16).ok();
-    Some([c(0)?, c(2)?, c(4)?])
 }
 
 /// The verdicts for tool `tool` printed from `slot`.
@@ -363,6 +353,7 @@ pub(crate) mod tests {
         let p = propose(std::slice::from_ref(&t), &cfg.slots);
         assert!(p[0].slot.is_some());
         assert!(p[0].issues.is_empty(), "no type means no mismatch");
+        let parse_hex = mica_core::color::parse_hex;
         assert_eq!(parse_hex("#F8F81CFF"), Some([0xF8, 0xF8, 0x1C]));
         assert_eq!(parse_hex("F8F81C"), Some([0xF8, 0xF8, 0x1C]));
         assert_eq!(parse_hex("F8F"), None);

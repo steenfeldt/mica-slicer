@@ -620,7 +620,7 @@ impl App {
                 let c = f
                     .colour
                     .as_deref()
-                    .and_then(crate::printhost::explain::parse_colour)
+                    .and_then(mica_core::color::parse_hex)
                     .or_else(|| colours.get(f.tool as usize).copied());
                 let label = f.material.clone().unwrap_or_else(|| "?".into());
                 let g = ui

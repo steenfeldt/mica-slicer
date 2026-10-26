@@ -3147,6 +3147,7 @@ name = "mica-printhost"
 version = "0.0.3"
 dependencies = [
  "mica-camera",
+ "mica-core",
  "serde",
  "serde_json",
  "ureq",
