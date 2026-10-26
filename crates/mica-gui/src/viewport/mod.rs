@@ -2763,8 +2763,10 @@ impl Viewport {
         }
         let mut zone = None;
         for plate in scene.plates {
+            // The tag sits inside its plate's front-left corner and grows away from the
+            // front edge. Hanging in front of the plate, it read as the next plate's in a grid.
             let corner = scene.bed.min + plate.origin.extend(0.);
-            let Some(p) = gp.project(corner + Vec3::new(0., -4., 0.)) else {
+            let Some(p) = gp.project(corner + Vec3::new(4., 4., 0.)) else {
                 continue;
             };
             if !gp.rect.contains(p) {
@@ -2798,8 +2800,8 @@ impl Viewport {
             let galley = gp
                 .painter
                 .layout_no_wrap(text, FontId::proportional(12.5), color);
-            let r =
-                Rect::from_min_size(p + EVec2::new(0., 4.), galley.size() + EVec2::new(10., 6.));
+            let size = galley.size() + EVec2::new(10., 6.);
+            let r = Rect::from_min_size(p - EVec2::new(0., size.y), size);
             gp.painter.rect_filled(
                 r,
                 4.,
