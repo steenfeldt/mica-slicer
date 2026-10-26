@@ -1295,7 +1295,11 @@ pub fn styled_button(
     } else {
         theme::sans(13.)
     };
-    let galley = ui.painter().layout_no_wrap(text.to_string(), font, p.text);
+    // Laid out in the placeholder color, so the color passed to `painter.galley` below
+    // (the accent's own ink on a primary button) is the one drawn.
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font, Color32::PLACEHOLDER);
     let size = Vec2::new(galley.size().x + 24., height);
     let (rect, response) = ui.allocate_exact_size(
         size,
@@ -1356,7 +1360,10 @@ pub fn split_button(
     } else {
         theme::sans(13.)
     };
-    let galley = ui.painter().layout_no_wrap(text.to_string(), font, p.text);
+    // Placeholder color: the color passed to `painter.galley` is the one drawn.
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_string(), font, Color32::PLACEHOLDER);
     const CHEVRON: f32 = 24.;
     let size = Vec2::new(galley.size().x + 24. + CHEVRON, 30.);
     let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
