@@ -132,11 +132,6 @@ pub(crate) fn object_groups(plate: &Plate) -> Vec<Vec<usize>> {
         .collect()
 }
 
-/// `#RRGGBB`.
-fn hex(c: [u8; 3]) -> String {
-    crate::project::hex(c)
-}
-
 /// Whether every entry of `inner` is in `outer` with the same value.
 fn contains(outer: &Overlays, inner: &Overlays) -> bool {
     let sub = |o: &Overlay, i: &Overlay| i.iter().all(|(k, v)| o.get(k) == Some(v));
@@ -785,7 +780,7 @@ impl App {
                 (*applied == presets && contains(&self.overlays, overlays))
                     .then(|| (original.clone(), minus(&self.overlays, overlays)))
             });
-        let colours: Vec<String> = self.tool_colours().into_iter().map(hex).collect();
+        let colours: Vec<String> = self.tool_colour_texts();
         let (original, edits) = verbatim.map_or_else(
             || (None, self.overlays.clone()),
             |(original, edits)| (Some(original), edits),
@@ -1531,6 +1526,7 @@ mod tests {
             1,
             Pick {
                 colour: teal,
+                alpha: None,
                 commit: true,
             },
         );
@@ -1579,6 +1575,105 @@ mod tests {
                 flavour.name()
             );
         }
+    }
+
+    /// A translucent filament colour (`#RRGGBBAA`, as Bambu Studio / Orca projects store
+    /// it) survives import, the G-code's settings block, saving in both flavours and reopening
+    /// byte for byte; opaque colours stay `#RRGGBB`. Changing only the RGB of a translucent
+    /// colour keeps its alpha; an 8-digit hex pick sets a new one.
+    #[test]
+    fn translucent_filament_colour_round_trips_as_imported() {
+        use crate::panels::colour::Pick;
+        let ctx = egui::Context::default();
+        let mut a = app(&ctx);
+        xl(&mut a);
+        let printer = a.profiles.printer.clone();
+        // The synthetic Orca project with T2 translucent (upper case) and T3 lower case.
+        let mut project = mica_core::threemf::load_3mf(models().join("plates-orca.3mf")).unwrap();
+        let config = project.config.as_mut().unwrap();
+        assert!(config.text.contains("\"#000000\"") && config.text.contains("\"#FFFFFF\""));
+        config.text = config
+            .text
+            .replace("\"#000000\"", "\"#B5001180\"")
+            .replace("\"#FFFFFF\"", "\"#ffffff40\"");
+        let source = temp("translucent-source.3mf");
+        mica_core::threemf::write(&source, &project, Flavour::Orca).unwrap();
+        let result = crate::app::load_files(vec![source.clone()], &a.config, a.bed.center());
+        a.finish_load(result);
+        assert!(!a.plates.is_blank(), "{}", a.status);
+        a.keep_my_settings();
+        assert_eq!(a.overlays.colour(1), Some("#B5001180"));
+        assert_eq!(a.overlays.colour(2), Some("#ffffff40"));
+        assert_eq!(a.tool_colours_rgba()[1], [0xB5, 0x00, 0x11, 0x80]);
+        assert_eq!(a.tool_colours()[1], [0xB5, 0x00, 0x11]);
+        assert_eq!(a.tool_colours_rgba()[0], [0xCB, 0x8F, 0x29, 255]);
+        let texts = a.tool_colour_texts();
+        assert_eq!(&texts[..3], ["#CB8F29", "#B5001180", "#ffffff40"]);
+        // The 3D view draws them translucent (0x80 / 255, and 0x40 / 255).
+        let alphas = a.scene_alphas();
+        assert!((alphas[1] - 128. / 255.).abs() < 1e-6 && alphas[0] == 1.);
+        // The G-code's settings block keeps the text as imported.
+        let (bytes, _) = gcode(&a);
+        let text = String::from_utf8_lossy(&bytes);
+        let line = text
+            .lines()
+            .find(|l| l.starts_with("; filament_colour ="))
+            .expect("filament_colour in the G-code");
+        assert!(line.contains("#CB8F29;#B5001180;#ffffff40"), "{line}");
+        for flavour in [Flavour::Orca, Flavour::Prusa] {
+            let path = temp(&format!("translucent-{}.3mf", flavour.name()));
+            a.save_project_to(&path, flavour).unwrap();
+            let saved = mica_core::threemf::load_3mf(&path).unwrap();
+            let settings = &saved.config.as_ref().unwrap().text;
+            assert!(
+                settings.contains("#B5001180") && settings.contains("#ffffff40"),
+                "{}: {settings}",
+                flavour.name()
+            );
+            let b = reopen(&ctx, &path, Some(&printer));
+            assert_eq!(
+                b.tool_colours_rgba()[1],
+                [0xB5, 0x00, 0x11, 0x80],
+                "{}",
+                flavour.name()
+            );
+            assert_eq!(b.tool_colour_texts()[2], "#ffffff40", "{}", flavour.name());
+        }
+        // A palette pick changes the colour, not the alpha.
+        a.set_filament_colour(
+            1,
+            Pick {
+                colour: [0x1E, 0x9C, 0xA0],
+                alpha: None,
+                commit: true,
+            },
+        );
+        a.end_gesture();
+        assert_eq!(a.overlays.colour(1), Some("#1E9CA080"));
+        // The hex field's 6-digit colour makes it opaque; an 8-digit one sets the alpha.
+        a.set_filament_colour(
+            1,
+            Pick {
+                colour: [0x1E, 0x9C, 0xA0],
+                alpha: Some(255),
+                commit: true,
+            },
+        );
+        assert_eq!(a.overlays.colour(1), Some("#1E9CA0"));
+        a.set_filament_colour(
+            1,
+            Pick {
+                colour: [0x1E, 0x9C, 0xA0],
+                alpha: Some(0x33),
+                commit: true,
+            },
+        );
+        assert_eq!(a.overlays.colour(1), Some("#1E9CA033"));
+        // The settings editor's swatch keeps the alpha of the text it edits.
+        assert_eq!(
+            crate::panels::colour::colour_text("#b5001180", [0xB5, 0, 0x11, 0x80]),
+            "#b5001180"
+        );
     }
 
     /// Orca flavour: the synthetic Orca project opened on the XL (its settings offered, kept;

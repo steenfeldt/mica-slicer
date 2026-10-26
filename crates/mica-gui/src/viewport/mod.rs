@@ -79,6 +79,9 @@ pub struct Scene<'a> {
     pub bed: &'a Bed,
     pub plates: &'a [Plate],
     pub tool_colors: &'a [[f32; 3]],
+    /// Each tool's alpha in the 3D view (`tool_colors` order; missing = opaque): translucent
+    /// filaments draw their objects and painted areas translucent.
+    pub tool_alphas: &'a [f32],
     /// The Textures feature is on (Settings › Features): Texture painting is offered.
     pub textures: bool,
     /// The tools' names for menus, `tool_colors` order (physical tools, then mixed colors).
@@ -1897,6 +1900,7 @@ impl Viewport {
             },
             hovered: self.hovered.filter(|_| editing),
             tool_colors: scene.tool_colors.to_vec(),
+            tool_alphas: scene.tool_alphas.to_vec(),
             overlays: if scene.preview.is_none() {
                 scene.overlays.to_vec()
             } else {

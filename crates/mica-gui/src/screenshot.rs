@@ -19,7 +19,7 @@
 //!          [--plate N] [--show-paint support,seam,fuzzy] [--escape] [--deselect]
 //!          [--object-tool layers|ears] [--adaptive Q] [--smooth-layers R] [--band W]
 //!          [--brim-ear X,Y,D] [--auto-ears]
-//!          [--colour T=#RRGGBB] [--lay-on-face]
+//!          [--colour T=#RRGGBB[AA]] [--lay-on-face]
 //!          [--save out.3mf] [--flavour orca|prusa] [--save-as] [--unsaved-prompt]
 //!          [--calibrate TEST[:TOOL]] [--calibrate-create] [--calibrate-result V] [--calibrate-save]
 //!          [--preferences] [--preferences-tab T] [--auto-slice] [--toolbar compact|normal|large]
@@ -240,9 +240,9 @@ struct Args {
     auto_ears: bool,
     /// `--filament T=NAME`: the filament preset (prefix) for one-based tool T.
     filaments: Vec<(usize, String)>,
-    /// `--colour T=#RRGGBB`: pick a filament colour for one-based tool T after slicing (as
+    /// `--colour T=#RRGGBB` (or `#RRGGBBAA`): pick a filament colour for one-based tool T after slicing (as
     /// the sidebar's colour popup does; the slice is kept). Repeatable.
-    colours: Vec<(usize, [u8; 3])>,
+    colours: Vec<(usize, [u8; 4])>,
     /// Turn on Lay on face (`--lay-on-face`); planes are found before the passes.
     lay_on_face: bool,
     /// Keep only the top part, in points.
@@ -493,10 +493,10 @@ fn parse(args: &[String]) -> Result<Args, String> {
             "--lay-on-face" => a.lay_on_face = true,
             "--colour" | "--color" => {
                 let v = value(&mut iter, "--colour")?;
-                let usage = "--colour T=#RRGGBB (one-based tool)";
+                let usage = "--colour T=#RRGGBB or T=#RRGGBBAA (one-based tool)";
                 let (t, c) = v.split_once('=').ok_or(usage)?;
                 let t: usize = t.trim().parse().map_err(|_| usage)?;
-                let c = mica_profiles::project::parse_colour(c.trim()).ok_or(usage)?;
+                let c = mica_core::color::parse_hex_rgba(c).ok_or(usage)?;
                 a.colours.push((t, c));
             }
             "--plate" => {
@@ -1931,14 +1931,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
         app.set_filament_colour(
             tool,
             crate::panels::colour::Pick {
-                colour,
+                colour: [colour[0], colour[1], colour[2]],
+                alpha: Some(colour[3]),
                 commit: true,
             },
         );
         app.end_gesture();
         eprintln!(
             "Color T{t} = {} (slice kept: {})",
-            crate::project::hex(colour),
+            mica_core::color::to_hex_rgba(colour),
             app.finished().is_some()
         );
     }

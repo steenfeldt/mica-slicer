@@ -268,6 +268,9 @@ pub struct Frame {
     pub selection: Vec<usize>,
     pub hovered: Option<usize>,
     pub tool_colors: Vec<[f32; 3]>,
+    /// Each tool's alpha (missing = 1): objects whose own tool is translucent are drawn after
+    /// the opaque scene, back to front, showing their nearest surface blended over it.
+    pub tool_alphas: Vec<f32>,
     /// Painted facets to draw over the objects (Prepare only).
     pub overlays: Vec<crate::scene::paint::PaintOverlay>,
     pub preview: Option<Arc<Preview>>,
@@ -335,6 +338,9 @@ impl Frame {
         }
         for c in &self.tool_colors {
             c.map(f32::to_bits).hash(&mut h);
+        }
+        for a in &self.tool_alphas {
+            a.to_bits().hash(&mut h);
         }
         for o in &self.objects {
             o.id.hash(&mut h);
@@ -439,6 +445,13 @@ enum Kind {
     Mesh(u64),
     /// A translucent lit mesh drawn after the objects (no depth write).
     Volume(u64),
+    /// A translucent object (its filament has an alpha): the depth of its nearest surface
+    /// first, then its colour painting (depth written), then its own colour blended where
+    /// the paint is not, then its patterned paint. See `Renderer::draw`.
+    Depth(u64),
+    TranslucentPaint(u64),
+    Translucent(u64),
+    TranslucentMarks(u64),
     /// The bed texture quad for plate `n`; `true` = see-through (no depth write).
     Texture(usize, bool),
     /// A section cap (`Renderer::caps` key).
@@ -466,6 +479,12 @@ pub struct Renderer {
     mesh_pipeline: wgpu::RenderPipeline,
     volume_pipeline: wgpu::RenderPipeline,
     paint_pipeline: wgpu::RenderPipeline,
+    /// Translucent objects: depth prepass, blended colour, colour paint (depth written) and
+    /// patterned paint.
+    depth_pipeline: wgpu::RenderPipeline,
+    translucent_pipeline: wgpu::RenderPipeline,
+    paint_solid_pipeline: wgpu::RenderPipeline,
+    paint_marks_pipeline: wgpu::RenderPipeline,
     mask_pipeline: wgpu::RenderPipeline,
     outside_mask_pipeline: wgpu::RenderPipeline,
     lines_pipeline: wgpu::RenderPipeline,
@@ -959,6 +978,60 @@ impl Renderer {
                 "fs",
             ),
         );
+        // Translucent objects (a filament colour with an alpha, as OrcaSlicer draws them after
+        // the opaque volumes with blending): each, back to front, first writes the depth of its
+        // nearest surface only, so the colour pass blends exactly one layer of it over what is
+        // behind (no inner or back faces, whatever the triangle order), and the opaque objects
+        // behind it stay visible through it.
+        let depth_pipeline = pipeline(
+            device,
+            PipelineDesc {
+                writes: wgpu::ColorWrites::empty(),
+                ..base(
+                    include_str!("mesh.wgsl"),
+                    &positions,
+                    Some((true, wgpu::CompareFunction::LessEqual)),
+                    None,
+                    tri,
+                    "fs_depth",
+                )
+            },
+        );
+        let translucent_pipeline = pipeline(
+            device,
+            base(
+                include_str!("mesh.wgsl"),
+                &positions,
+                Some((false, wgpu::CompareFunction::LessEqual)),
+                Some(wgpu::BlendState::ALPHA_BLENDING),
+                tri,
+                "fs",
+            ),
+        );
+        // A translucent object's colour painting writes its (lifted) depth, so the object's
+        // own colour is not blended in under it; patterned paint goes over both.
+        let paint_solid_pipeline = pipeline(
+            device,
+            base(
+                include_str!("paint.wgsl"),
+                &paint_layout,
+                Some((true, wgpu::CompareFunction::LessEqual)),
+                Some(wgpu::BlendState::ALPHA_BLENDING),
+                tri,
+                "fs_solid",
+            ),
+        );
+        let paint_marks_pipeline = pipeline(
+            device,
+            base(
+                include_str!("paint.wgsl"),
+                &paint_layout,
+                Some((false, wgpu::CompareFunction::LessEqual)),
+                Some(wgpu::BlendState::ALPHA_BLENDING),
+                tri,
+                "fs_marks",
+            ),
+        );
         let mask_pipeline = pipeline(
             device,
             PipelineDesc {
@@ -1109,6 +1182,10 @@ impl Renderer {
             mesh_pipeline,
             volume_pipeline,
             paint_pipeline,
+            depth_pipeline,
+            translucent_pipeline,
+            paint_solid_pipeline,
+            paint_marks_pipeline,
             mask_pipeline,
             outside_mask_pipeline,
             lines_pipeline,
@@ -1670,6 +1747,9 @@ impl Renderer {
         // Outside-part mask entries, every object: (GPU mesh, its uniform).
         let mut outside_items: Vec<(u64, Uniform)> = vec![];
         let mut any_outside = false;
+        // Translucent objects, drawn after everything opaque: (distance from the eye, object
+        // id, its uniform).
+        let mut translucent: Vec<(f32, u64, Uniform)> = vec![];
         if frame.preview.is_none() {
             for (i, o) in frame.objects.iter().enumerate() {
                 self.ensure_source(device, o.id, &o.mesh);
@@ -1707,18 +1787,23 @@ impl Renderer {
                     // Its skirt or brim does not fit: warning stripes over the whole object.
                     flags |= 2;
                 }
+                let alpha = frame.tool_alphas.get(tool).copied().unwrap_or(1.);
                 let uniform = Uniform {
                     model: transform.to_cols_array_2d(),
-                    color: to4(color, 1.),
+                    color: to4(color, alpha.min(1.)),
                     params: [flags, 0, 0, 0],
                     clip,
                     volume: [origin.x, origin.y, frame.bed.height, OUTSIDE_TOLERANCE],
                     ..base
                 };
-                items.push(Item {
-                    kind: Kind::Mesh(o.id),
-                    uniform,
-                });
+                if alpha < 1. {
+                    translucent.push(((((bmin + bmax) * 0.5) - eye).length(), o.id, uniform));
+                } else {
+                    items.push(Item {
+                        kind: Kind::Mesh(o.id),
+                        uniform,
+                    });
+                }
                 outside_items.push((o.id, uniform));
                 if frame.selected == Some(i) || frame.selection.contains(&i) {
                     mask_items.push((o.id, transform, 1.));
@@ -1792,7 +1877,9 @@ impl Renderer {
                     mask_items.push((id, v.transform, 0.5));
                 }
             }
-            // Painted facets after every object, lifted a little towards the eye.
+            // Painted facets after every object, lifted a little towards the eye (a
+            // translucent object's with the object itself, below).
+            let mut translucent_paint: HashMap<u64, Vec<(u64, Uniform)>> = HashMap::new();
             for overlay in &frame.overlays {
                 let Some(o) = frame.objects.iter().find(|o| o.id == overlay.object) else {
                     continue;
@@ -1809,15 +1896,23 @@ impl Renderer {
                     (buffer, overlay.vertices.len() as u32)
                 });
                 let lift = ((eye - o.pivot_world()).length() * 0.0015).clamp(0.05, 0.6);
-                items.push(Item {
-                    kind: Kind::Paint(overlay.key),
-                    uniform: Uniform {
-                        model: o.transform().to_cols_array_2d(),
-                        extra: [lift, 0., 0., 0.],
-                        clip,
-                        ..base
-                    },
-                });
+                let uniform = Uniform {
+                    model: o.transform().to_cols_array_2d(),
+                    extra: [lift, 0., 0., 0.],
+                    clip,
+                    ..base
+                };
+                if translucent.iter().any(|(_, id, _)| *id == o.id) {
+                    translucent_paint
+                        .entry(o.id)
+                        .or_default()
+                        .push((overlay.key, uniform));
+                } else {
+                    items.push(Item {
+                        kind: Kind::Paint(overlay.key),
+                        uniform,
+                    });
+                }
             }
             // Section caps: the cut faces, flat in the object's colour (never clipped).
             for cap in &frame.caps {
@@ -1836,6 +1931,32 @@ impl Renderer {
                         ..base
                     },
                 });
+            }
+            // Translucent objects last, farthest first (as OrcaSlicer sorts its transparent
+            // volumes), each over everything drawn before it.
+            translucent.sort_by(|a, b| b.0.total_cmp(&a.0));
+            for (_, id, uniform) in translucent {
+                let paint = translucent_paint.remove(&id).unwrap_or_default();
+                items.push(Item {
+                    kind: Kind::Depth(id),
+                    uniform,
+                });
+                for (key, u) in &paint {
+                    items.push(Item {
+                        kind: Kind::TranslucentPaint(*key),
+                        uniform: *u,
+                    });
+                }
+                items.push(Item {
+                    kind: Kind::Translucent(id),
+                    uniform,
+                });
+                for (key, u) in paint {
+                    items.push(Item {
+                        kind: Kind::TranslucentMarks(key),
+                        uniform: u,
+                    });
+                }
             }
         }
         // Plate tags last: depth-tested against everything above, writing none themselves.
@@ -1961,13 +2082,27 @@ impl Renderer {
                             Self::draw_mesh(&mut pass, group, mesh);
                         }
                     }
-                    Kind::Paint(key) => {
+                    Kind::Paint(key)
+                    | Kind::TranslucentPaint(key)
+                    | Kind::TranslucentMarks(key) => {
                         if let Some((buffer, count)) = self.overlays.get(&key) {
-                            pass.set_pipeline(&self.paint_pipeline);
+                            pass.set_pipeline(match item.kind {
+                                Kind::TranslucentPaint(_) => &self.paint_solid_pipeline,
+                                Kind::TranslucentMarks(_) => &self.paint_marks_pipeline,
+                                _ => &self.paint_pipeline,
+                            });
                             pass.set_bind_group(0, group, &[]);
                             pass.set_vertex_buffer(0, buffer.slice(..));
                             pass.draw(0..*count, 0..1);
                         }
+                    }
+                    Kind::Depth(id) | Kind::Translucent(id) => {
+                        pass.set_pipeline(if matches!(item.kind, Kind::Depth(_)) {
+                            &self.depth_pipeline
+                        } else {
+                            &self.translucent_pipeline
+                        });
+                        Self::draw_mesh(&mut pass, group, &self.meshes[&id]);
                     }
                     Kind::Cap(key) => {
                         if let Some(mesh) = self.caps.get(&key) {

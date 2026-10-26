@@ -594,6 +594,7 @@ impl App {
         let tools = self.tool_count();
         // Mixed colors follow the physical tools (`mixes`).
         let colours = self.model_colours();
+        let alphas: Vec<u8> = self.tool_colours_rgba().iter().map(|c| c[3]).collect();
         let choices = self.tool_choices();
         let selected = self.selected;
         let selection = self.selection();
@@ -821,13 +822,23 @@ impl App {
                         }
                     }
                     let tool = o.tools.0[0].unwrap_or(0);
-                    let c = colours[tool.min(colours.len().saturating_sub(1))];
+                    let t = tool.min(colours.len().saturating_sub(1));
+                    let c = colours[t];
                     let sw = Rect::from_center_size(
                         Pos2::new(x0 + 20., cy),
                         Vec2::splat(if object_row { 10. } else { 8. }),
                     );
-                    ui.painter()
-                        .rect_filled(sw, 3., Color32::from_rgb(c[0], c[1], c[2]));
+                    let a = alphas.get(t).copied().unwrap_or(255);
+                    super::colour::paint_colour(ui.painter(), sw, 3., [c[0], c[1], c[2], a]);
+                    if a < 255 {
+                        // The checker's light half needs an edge on a light panel.
+                        ui.painter().rect_stroke(
+                            sw,
+                            3.,
+                            egui::Stroke::new(1., p.border_raised),
+                            egui::StrokeKind::Inside,
+                        );
+                    }
                     label = if object_row {
                         short_name(&o.name)
                     } else {
@@ -876,7 +887,7 @@ impl App {
                         egui::Popup::menu(&r).show(|ui| {
                             for c in &choices {
                                 let row = ui.horizontal(|ui| {
-                                    super::swatch(ui, c.colour, 12.);
+                                    super::swatch(ui, c.rgba(), 12.);
                                     ui.selectable_label(c.tool == tool, &c.label)
                                 });
                                 if row.inner.clicked() {

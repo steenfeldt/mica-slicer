@@ -41,6 +41,17 @@ pub fn has_alpha(text: &str) -> bool {
     digits(text).is_some_and(|h| h.len() == 8)
 }
 
+/// The text a project keeps for a color: the 6-digit form as `#RRGGBB` (uppercase, as Mica
+/// always wrote it), the 8-digit form exactly as written (trimmed), so a translucent filament's
+/// color survives import and save byte for byte, as in OrcaSlicer (which keeps the string).
+pub fn project_text(text: &str) -> Option<String> {
+    if has_alpha(text) {
+        Some(text.trim().to_string())
+    } else {
+        parse_hex(text).map(to_hex)
+    }
+}
+
 /// `#RRGGBB`, uppercase.
 pub fn to_hex(c: [u8; 3]) -> String {
     format!("#{:02X}{:02X}{:02X}", c[0], c[1], c[2])
@@ -101,6 +112,9 @@ mod tests {
         assert!(has_alpha("b5001180"));
         assert!(!has_alpha("#B50011"));
         assert_eq!(to_hex([0xB5, 0, 0x11]), "#B50011");
+        assert_eq!(project_text(" #b5001180 ").as_deref(), Some("#b5001180"));
+        assert_eq!(project_text("b50011").as_deref(), Some("#B50011"));
+        assert_eq!(project_text("red"), None);
         assert_eq!(to_hex_rgba([0xB5, 0, 0x11, 0x80]), "#B5001180");
         assert_eq!(
             parse_hex_rgba(&to_hex_rgba([1, 2, 3, 4])),

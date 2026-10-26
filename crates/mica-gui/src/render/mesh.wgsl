@@ -4,7 +4,9 @@
 // hemisphere lighting. params.x flags: 1 hovered, 2 warning stripes over the whole object (its
 // skirt or brim does not fit), 16 a section cap (flat, hatched), 32 the object reaches outside
 // the printable volume: the fragments outside it (`outside_volume`) get fine red stripes, the
-// rest keeps its look. Fragments beyond the section plane (u.clip) are discarded.
+// rest keeps its look. Fragments beyond the section plane (u.clip) are discarded. The colour's
+// alpha is the output alpha: below 1 for a translucent filament (drawn blended, after a
+// `fs_depth` prepass of the same object).
 struct Output { @builtin(position) clip: vec4<f32>, @location(0) world: vec3<f32> }
 @vertex fn vs(@location(0) p: vec3<f32>) -> Output {
     var o: Output;
@@ -37,7 +39,12 @@ struct Output { @builtin(position) clip: vec4<f32>, @location(0) world: vec3<f32
         }
         albedo = albedo * 0.82;
     }
-    return vec4(shade(n, o.world, albedo), 1.0);
+    return vec4(shade(n, o.world, albedo), u.color.a);
+}
+// Depth only (colour writes off): a translucent object's nearest surface, before its colour.
+@fragment fn fs_depth(o: Output) -> @location(0) vec4<f32> {
+    if clipped(o.world) { discard; }
+    return vec4(0.0);
 }
 // Translucent volumes (modifiers, negative volumes, range slabs, the cut plane): lit with the
 // uniform colour's alpha. params.x flags: 1 hovered, 4 cut-out stripes (negative volumes),

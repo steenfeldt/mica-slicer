@@ -96,6 +96,7 @@ impl App {
             tool,
             super::colour::Pick {
                 colour: c,
+                alpha: None,
                 commit: true,
             },
         );
@@ -192,8 +193,14 @@ impl App {
                 continue;
             }
             let mut this = false;
-            if let Some(c) = f.colour.as_deref().and_then(mica_core::color::parse_hex) {
-                let hex = crate::project::hex(c);
+            if let Some(rgba) = f
+                .colour
+                .as_deref()
+                .and_then(mica_core::color::parse_hex_rgba)
+            {
+                let c = [rgba[0], rgba[1], rgba[2]];
+                // The printer's alpha too (`#RRGGBB` when it is opaque).
+                let hex = super::colour::colour_text("", rgba);
                 // A color within the tolerance is the same spool color: the project keeps its
                 // own description of it.
                 let same = self

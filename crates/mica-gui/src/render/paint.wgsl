@@ -6,7 +6,10 @@
 // the model's base colour: a diagonal hatch (support), stripes (seam) or a stipple (fuzzy
 // skin), blended at the vertex colour's alpha (full for the active tool, half alongside
 // another tool). Between the pattern's marks the fragment is discarded, so the filament or
-// colour-painting colour underneath stays visible and recognisable at any zoom.
+// colour-painting colour underneath stays visible and recognisable at any zoom. Colour
+// painting carries its filament's alpha (translucent filaments blend). `fs_solid` and
+// `fs_marks` draw only the colour painting or only the patterns (a translucent object's paint,
+// around its own colour pass).
 struct Input {
     @location(0) p: vec3<f32>,
     @location(1) color: vec4<f32>,
@@ -36,12 +39,23 @@ fn cell_hash(c: vec2<u32>) -> f32 {
     return f32(h & 0xffffu) / 65535.0;
 }
 @fragment fn fs(o: Output) -> @location(0) vec4<f32> {
+    return painted(o);
+}
+@fragment fn fs_solid(o: Output) -> @location(0) vec4<f32> {
+    if o.pattern != 0u { discard; }
+    return painted(o);
+}
+@fragment fn fs_marks(o: Output) -> @location(0) vec4<f32> {
+    if o.pattern == 0u { discard; }
+    return painted(o);
+}
+fn painted(o: Output) -> vec4<f32> {
     if clipped(o.world) { discard; }
     let n = normalize(cross(dpdx(o.world), dpdy(o.world)));
     // A touch of self-illumination keeps the paint colour readable in shadow.
     let lit = shade(n, o.world, o.color.rgb);
     if o.pattern == 0u {
-        return vec4(mix(lit, o.color.rgb, 0.25), 1.0);
+        return vec4(mix(lit, o.color.rgb, 0.25), o.color.a);
     }
     let px = o.clip.xy;
     var mark = false;

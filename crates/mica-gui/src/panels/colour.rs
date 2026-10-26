@@ -10,6 +10,11 @@
 //! is kept. The G-code mentions the colours (settings block, thumbnails), so exporting or
 //! printing a slice made before the change slices once more first, unless a slice with
 //! these colours is cached (`App::reslice_for_colours`).
+//!
+//! Translucent filaments (`#RRGGBBAA`, from Bambu Studio / OrcaSlicer projects) show as a split
+//! swatch: the colour itself on the left, the colour at its alpha over a checkerboard on the
+//! right. The picker edits the colour only; its alpha stays unless the hex field is given an
+//! 8-digit colour (or a 6-digit one, which makes it opaque).
 
 use super::widgets;
 use crate::app::App;
@@ -44,19 +49,117 @@ const GAP: f32 = 6.;
 const COLUMNS: usize = 8;
 
 /// A colour chosen in the popup. `commit` is false while the custom picker is being dragged
-/// (the change is shown live; the pick is remembered as recent on release).
+/// (the change is shown live; the pick is remembered as recent on release). `alpha` is `None`
+/// when the pick leaves the current alpha as it is (palette, recent, custom picker) and the
+/// new alpha when the hex field set one (an 8-digit colour, or 255 for a 6-digit one).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Pick {
     pub colour: [u8; 3],
+    pub alpha: Option<u8>,
     pub commit: bool,
 }
 
-fn color32(c: [u8; 3]) -> Color32 {
-    Color32::from_rgb(c[0], c[1], c[2])
+impl Pick {
+    /// The picked colour with its alpha: the pick's own, else `current`'s.
+    pub fn rgba(&self, current: u8) -> [u8; 4] {
+        let [r, g, b] = self.colour;
+        [r, g, b, self.alpha.unwrap_or(current)]
+    }
+}
+
+/// A swatch colour: RGB (opaque) or RGBA (a translucent filament).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SwatchColour(pub [u8; 4]);
+impl From<[u8; 3]> for SwatchColour {
+    fn from([r, g, b]: [u8; 3]) -> Self {
+        Self([r, g, b, 255])
+    }
+}
+impl From<[u8; 4]> for SwatchColour {
+    fn from(c: [u8; 4]) -> Self {
+        Self(c)
+    }
+}
+
+/// Paints a colour square into `rect`: opaque colours filled, translucent ones split (left
+/// half the colour itself, right half the colour at its alpha over a checkerboard).
+pub fn paint_colour(
+    painter: &egui::Painter,
+    rect: Rect,
+    radius: f32,
+    colour: impl Into<SwatchColour>,
+) {
+    let [r, g, b, a] = colour.into().0;
+    let solid = Color32::from_rgb(r, g, b);
+    if a == 255 {
+        painter.rect_filled(rect, radius, solid);
+        return;
+    }
+    let rad = radius.round().clamp(0., 255.) as u8;
+    let mid = rect.center().x.round();
+    let left = Rect::from_min_max(rect.min, egui::pos2(mid, rect.max.y));
+    let right = Rect::from_min_max(egui::pos2(mid, rect.min.y), rect.max);
+    painter.rect_filled(
+        left,
+        egui::CornerRadius {
+            nw: rad,
+            sw: rad,
+            ne: 0,
+            se: 0,
+        },
+        solid,
+    );
+    let corners = egui::CornerRadius {
+        nw: 0,
+        sw: 0,
+        ne: rad,
+        se: rad,
+    };
+    painter.rect_filled(right, corners, Color32::from_gray(235));
+    // Checker cells: about four across a 16 px swatch's half, at least 3 px.
+    let cell = (right.height() / 4.).max(3.);
+    let clip = painter.with_clip_rect(right.shrink(0.5).intersect(painter.clip_rect()));
+    let (cols, rows) = (
+        (right.width() / cell).ceil() as usize,
+        (right.height() / cell).ceil() as usize,
+    );
+    for row in 0..rows {
+        for col in 0..cols {
+            if (row + col) % 2 == 1 {
+                let min = right.min + Vec2::new(col as f32 * cell, row as f32 * cell);
+                clip.rect_filled(
+                    Rect::from_min_size(min, Vec2::splat(cell)).intersect(right),
+                    0.,
+                    Color32::from_gray(150),
+                );
+            }
+        }
+    }
+    painter.rect_filled(right, corners, Color32::from_rgba_unmultiplied(r, g, b, a));
+}
+
+/// "Red, 50% opaque" style hover text for a colour (`hex` shown in brackets).
+pub fn describe(colour: impl Into<SwatchColour>) -> String {
+    let [r, g, b, a] = colour.into().0;
+    let name = mica_printhost::colour::colour_name([r, g, b]);
+    if a == 255 {
+        format!("{name} ({})", mica_core::color::to_hex([r, g, b]))
+    } else {
+        format!(
+            "{name}, translucent: {}% opaque ({})",
+            (f32::from(a) / 2.55).round(),
+            mica_core::color::to_hex_rgba([r, g, b, a])
+        )
+    }
 }
 
 /// A clickable colour square: hover ring and pointer cursor, accent ring while `open`.
-pub fn swatch_button(ui: &mut egui::Ui, colour: [u8; 3], size: f32, open: bool) -> egui::Response {
+pub fn swatch_button(
+    ui: &mut egui::Ui,
+    colour: impl Into<SwatchColour>,
+    size: f32,
+    open: bool,
+) -> egui::Response {
     let p = theme::of(ui);
     let (rect, response) = ui.allocate_exact_size(Vec2::splat(size), Sense::click());
     paint_swatch(ui, rect, colour, response.hovered() || open);
@@ -74,9 +177,9 @@ pub fn swatch_button(ui: &mut egui::Ui, colour: [u8; 3], size: f32, open: bool) 
     response
 }
 
-fn paint_swatch(ui: &egui::Ui, rect: Rect, colour: [u8; 3], hot: bool) {
+fn paint_swatch(ui: &egui::Ui, rect: Rect, colour: impl Into<SwatchColour>, hot: bool) {
     let p = theme::of(ui);
-    ui.painter().rect_filled(rect, 3., color32(colour));
+    paint_colour(ui.painter(), rect, 3., colour);
     ui.painter().rect_stroke(
         rect,
         3.,
@@ -91,7 +194,7 @@ pub fn popup(
     anchor: &egui::Response,
     id: Id,
     title: &str,
-    current: [u8; 3],
+    current: [u8; 4],
     recent: &[[u8; 3]],
 ) -> Option<Pick> {
     egui::Popup::menu(anchor)
@@ -102,14 +205,17 @@ pub fn popup(
         .and_then(|r| r.inner)
 }
 
-/// The popup's content (also usable inline).
+/// The popup's content (also usable inline). `current` carries the alpha the hex field shows
+/// (`#RRGGBBAA` when it is not 255); every other control keeps it.
 pub fn picker(
     ui: &mut egui::Ui,
     id: Id,
     title: &str,
-    current: [u8; 3],
+    current_rgba: [u8; 4],
     recent: &[[u8; 3]],
 ) -> Option<Pick> {
+    let [r, g, b, alpha] = current_rgba;
+    let current = [r, g, b];
     let p = theme::of(ui);
     let mut pick = None;
     let width = COLUMNS as f32 * (CELL + GAP) - GAP;
@@ -124,7 +230,7 @@ pub fn picker(
                 ui.spacing_mut().item_spacing.x = GAP;
                 for (name, c) in row {
                     let (rect, r) = ui.allocate_exact_size(Vec2::splat(CELL), Sense::click());
-                    paint_swatch(ui, rect, *c, r.hovered());
+                    paint_swatch(ui, rect, [c[0], c[1], c[2], alpha], r.hovered());
                     if *c == current {
                         ui.painter().rect_stroke(
                             rect.expand(2.),
@@ -147,6 +253,7 @@ pub fn picker(
     if let Some(c) = grid(ui, &mut PALETTE.iter().map(|(n, c)| (n.to_string(), *c))) {
         pick = Some(Pick {
             colour: c,
+            alpha: None,
             commit: true,
         });
     }
@@ -166,6 +273,7 @@ pub fn picker(
         ) {
             pick = Some(Pick {
                 colour: c,
+                alpha: None,
                 commit: true,
             });
         }
@@ -185,12 +293,14 @@ pub fn picker(
         }
         pick = Some(Pick {
             colour,
+            alpha: None,
             commit: !down,
         });
     } else if !down && ui.data(|d| d.get_temp::<bool>(dragging)).unwrap_or(false) {
         ui.data_mut(|d| d.remove::<bool>(dragging));
         pick = Some(Pick {
             colour: current,
+            alpha: None,
             commit: true,
         });
     }
@@ -206,19 +316,17 @@ pub fn picker(
             Vec2::new(ui.available_width(), widgets::COMBO_H),
             Sense::hover(),
         );
-        if let Some(text) = widgets::text_field(
-            ui,
-            id.with("hex"),
-            rect,
-            &crate::project::hex(current),
-            true,
-        ) {
-            match mica_profiles::project::parse_colour(text.trim())
-                .or_else(|| mica_profiles::project::parse_colour(&format!("#{}", text.trim())))
-            {
-                Some(colour) => {
+        let shown = if alpha == 255 {
+            crate::project::hex(current)
+        } else {
+            mica_core::color::to_hex_rgba(current_rgba)
+        };
+        if let Some(text) = widgets::text_field(ui, id.with("hex"), rect, &shown, true) {
+            match mica_core::color::parse_hex_rgba(text.trim()) {
+                Some([r, g, b, a]) => {
                     pick = Some(Pick {
-                        colour,
+                        colour: [r, g, b],
+                        alpha: Some(a),
                         commit: true,
                     })
                 }
@@ -330,7 +438,7 @@ fn sv_hue(ui: &mut egui::Ui, id: Id, current: [u8; 3], width: f32) -> (bool, [u8
 }
 
 /// The swatch-and-hex control of a colour option in the settings editor (`filament_colour`,
-/// `extruder_colour`). Returns the new `#RRGGBB` text.
+/// `extruder_colour`). Returns the new text (`#RRGGBB`, or `#RRGGBBAA` for a translucent one).
 pub fn option_control(
     ui: &mut egui::Ui,
     id: Id,
@@ -343,7 +451,7 @@ pub fn option_control(
     let recent: Vec<[u8; 3]> = ui
         .data(|d| d.get_temp::<Vec<[u8; 3]>>(recent_id()))
         .unwrap_or_default();
-    let current = mica_profiles::project::parse_colour(value.trim());
+    let current = mica_core::color::parse_hex_rgba(value);
     let popup_id = id.with("colour");
     let open = egui::Popup::is_id_open(ui.ctx(), popup_id);
     let response = ui.interact(
@@ -372,7 +480,7 @@ pub fn option_control(
         }
     }
     let text = match current {
-        Some(c) => crate::project::hex(c),
+        Some(c) => colour_text(value, c),
         None if value.trim().is_empty() => "None".into(),
         None => value.trim().to_string(),
     };
@@ -396,13 +504,29 @@ pub fn option_control(
         &response,
         popup_id,
         title,
-        current.unwrap_or([0x80, 0x80, 0x80]),
+        current.unwrap_or([0x80, 0x80, 0x80, 255]),
         &recent,
     )?;
     if pick.commit {
         ui.data_mut(|d| d.insert_temp(committed_id(), pick.colour));
     }
-    Some(crate::project::hex(pick.colour))
+    let alpha = current.map_or(255, |c| c[3]);
+    Some(colour_text(value, pick.rgba(alpha)))
+}
+
+/// The text for colour `c` that was `previous`: `#RRGGBB` when opaque, else `previous` itself
+/// when it already says `c` (an imported `#RRGGBBAA` is kept byte for byte), else `#RRGGBBAA`.
+pub fn colour_text(previous: &str, c: [u8; 4]) -> String {
+    let [r, g, b, a] = c;
+    if mica_core::color::has_alpha(previous)
+        && mica_core::color::parse_hex_rgba(previous) == Some(c)
+    {
+        previous.trim().to_string()
+    } else if a == 255 {
+        crate::project::hex([r, g, b])
+    } else {
+        mica_core::color::to_hex_rgba(c)
+    }
 }
 
 impl App {
@@ -447,10 +571,13 @@ impl App {
             .profiles
             .filaments
             .get(tool)
-            .and_then(|f| self.profiles.filament_colour(f));
+            .and_then(|f| self.profiles.filament_colour_rgba(f));
         // Project state (`Overlays::colours`), not an edit of the filament profile; the
-        // preset's own colour needs no entry.
-        let colour = (preset != Some(pick.colour)).then(|| crate::project::hex(pick.colour));
+        // preset's own colour needs no entry. The alpha stays unless the pick sets one.
+        let current = self.tool_colours_rgba().get(tool).copied();
+        let previous = self.overlays.colour(tool).unwrap_or_default().to_string();
+        let rgba = pick.rgba(current.map_or(255, |c| c[3]));
+        let colour = (preset != Some(rgba)).then(|| colour_text(&previous, rgba));
         self.overlays.set_colour(tool, colour);
         self.colours_changed();
         if pick.commit {

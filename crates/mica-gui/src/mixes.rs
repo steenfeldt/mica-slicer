@@ -62,11 +62,21 @@ pub enum MixAct {
     Swap(usize, usize),
 }
 
+impl ToolChoice {
+    /// The swatch colour with its alpha.
+    pub fn rgba(&self) -> [u8; 4] {
+        let [r, g, b] = self.colour;
+        [r, g, b, self.alpha]
+    }
+}
+
 /// A tool picker entry: zero-based tool index, its color and its label.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ToolChoice {
     pub tool: usize,
     pub colour: [u8; 3],
+    /// The filament's alpha (255 = opaque; mixes are opaque).
+    pub alpha: u8,
     pub label: String,
     /// The tool chip text: `T3`, or `M1` for the first mix.
     pub short: String,
@@ -460,6 +470,7 @@ impl App {
     /// Every tool an object, part or brush can use: the physical tools, then the mixes.
     pub(crate) fn tool_choices(&self) -> Vec<ToolChoice> {
         let colours = self.model_colours();
+        let alphas: Vec<u8> = self.tool_colours_rgba().iter().map(|c| c[3]).collect();
         let physical = self.tool_count();
         // With ColorMix off only the physical tools are offered.
         let count = if self.prefs.features.color_mix {
@@ -474,6 +485,7 @@ impl App {
                     ToolChoice {
                         tool: t,
                         colour: colours[t],
+                        alpha: 255,
                         label: self.mix_name(k),
                         short: short_name(k),
                     }
@@ -481,6 +493,7 @@ impl App {
                     ToolChoice {
                         tool: t,
                         colour: colours[t],
+                        alpha: alphas.get(t).copied().unwrap_or(255),
                         label: format!("Tool {}", t + 1),
                         short: format!("T{}", t + 1),
                     }
@@ -488,6 +501,7 @@ impl App {
                     ToolChoice {
                         tool: t,
                         colour: colours[t],
+                        alpha: 255,
                         label: format!("Tool {} (not on this printer)", t + 1),
                         short: format!("T{}", t + 1),
                     }

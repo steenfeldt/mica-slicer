@@ -256,7 +256,7 @@ impl App {
                                         .show_ui(ui, |ui| {
                                             for c in &choices {
                                                 let row = ui.horizontal(|ui| {
-                                                    super::swatch(ui, c.colour, 12.);
+                                                    super::swatch(ui, c.rgba(), 12.);
                                                     ui.selectable_label(c.tool == tool, &c.label)
                                                 });
                                                 if row.inner.clicked() {

@@ -189,6 +189,7 @@ pub fn frame(preview: &Arc<Preview>, camera: Camera, view: View, size: [u32; 2])
         selection: vec![],
         hovered: None,
         tool_colors: vec![[0.9, 0.5, 0.2]],
+        tool_alphas: vec![],
         overlays: vec![],
         preview: Some(preview.clone()),
         view,

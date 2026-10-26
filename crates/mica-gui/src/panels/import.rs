@@ -465,7 +465,7 @@ pub(crate) fn visible_chooser(
                 ui.horizontal(|ui| {
                     ui.spacing_mut().item_spacing.x = 6.;
                     let mut toggle = star(ui, on);
-                    if let Some(c) = profiles.filament_colour(n) {
+                    if let Some(c) = profiles.filament_colour_rgba(n) {
                         super::swatch(ui, c, 12.);
                     } else {
                         ui.add_space(12.);

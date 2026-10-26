@@ -5,6 +5,7 @@
 // Changes: Original Mica application; arrange2 spacing/margin adapter, fixed per-plate towers and instance identities preserved during overflow.
 // Source: orca@8500fcdcca src/slic3r/GUI/3DScene.cpp :: adjust_color_for_rendering
 // Changes: Near-black display colours lifted so the brightest channel reaches 0.2, keeping the hue (Orca greys them).
+// Changes: Filament alpha below 0.1 drawn at 0.3 (Orca's FullyTransparentMaterialThreshold), keeping the colour (Orca whitens it).
 // Changes: Engine choices read mica_slicing_rules (mica_core::rules), not gcode_flavor or the presence of Orca keys (docs/slicing-rules.md).
 // Source: prusaslicer@b028299c77 src/slic3r/GUI/ConfigManipulation.cpp :: ConfigManipulation::update_print_fff_config
 // Changes: Turning spiral vase on in the print settings also sets what it needs (mica_core::spiral_vase::companions) in the same undo step, with a notice instead of a dialog.
@@ -1486,22 +1487,44 @@ impl App {
     /// palette), for models and swatches. When every tool has the same colour the palette
     /// tells them apart instead.
     pub(crate) fn tool_colours(&self) -> Vec<[u8; 3]> {
-        let mine: Vec<Option<[u8; 3]>> = (0..self.tool_count())
+        self.tool_colours_rgba()
+            .into_iter()
+            .map(|[r, g, b, _]| [r, g, b])
+            .collect()
+    }
+
+    /// The colour text tool `t`'s colour comes from: the project colour, else the preset's.
+    fn tool_colour_source(&self, t: usize) -> Option<String> {
+        match self.overlays.colour(t) {
+            Some(text) => Some(text.to_string()),
+            None => self
+                .profiles
+                .filaments
+                .get(t)
+                .and_then(|f| self.profiles.filament_colour_text(f)),
+        }
+    }
+
+    /// [`Self::tool_colours`] with each filament's alpha (`#RRGGBBAA` colours of translucent
+    /// filaments, from Bambu Studio / OrcaSlicer projects; 255 when the text has none).
+    pub(crate) fn tool_colours_rgba(&self) -> Vec<[u8; 4]> {
+        let mine: Vec<Option<[u8; 4]>> = (0..self.tool_count())
             .map(|t| {
                 self.overlays
                     .colour(t)
-                    .and_then(mica_profiles::project::parse_colour)
+                    .and_then(mica_core::color::parse_hex_rgba)
                     .or_else(|| {
                         self.profiles
                             .filaments
                             .get(t)
-                            .and_then(|f| self.profiles.filament_colour(f))
+                            .and_then(|f| self.profiles.filament_colour_rgba(f))
                     })
             })
             .collect();
         let distinct = mine
             .iter()
             .flatten()
+            .map(|[r, g, b, _]| [r, g, b])
             .collect::<std::collections::BTreeSet<_>>()
             .len();
         // A colour someone chose (picked, from a project or the printer) is shown as it is,
@@ -1516,8 +1539,45 @@ impl App {
             .enumerate()
             .map(|(t, c)| match c {
                 Some(c) if chosen || distinct > 1 || self.tool_count() == 1 => c,
-                _ => crate::preview::legend::TOOLS[t % 8],
+                _ => {
+                    let [r, g, b] = crate::preview::legend::TOOLS[t % 8];
+                    [r, g, b, 255]
+                }
             })
+            .collect()
+    }
+
+    /// The `filament_colour` text of each tool for saved projects: `#RRGGBB`, or for a
+    /// translucent filament its `#RRGGBBAA` text as imported or picked (kept byte for byte).
+    pub(crate) fn tool_colour_texts(&self) -> Vec<String> {
+        self.tool_colours_rgba()
+            .into_iter()
+            .enumerate()
+            .map(|(t, c)| {
+                let source = self.tool_colour_source(t);
+                match source {
+                    Some(text)
+                        if mica_core::color::has_alpha(&text)
+                            && mica_core::color::parse_hex_rgba(&text) == Some(c) =>
+                    {
+                        text.trim().to_string()
+                    }
+                    _ if c[3] != 255 => mica_core::color::to_hex_rgba(c),
+                    _ => mica_core::color::to_hex([c[0], c[1], c[2]]),
+                }
+            })
+            .collect()
+    }
+
+    /// Each tool's alpha for the 3D view (0..1, see [`display_alpha`]): the physical tools'
+    /// filaments, then 1 for the mixes. The Preview draws toolpaths opaque, as OrcaSlicer's.
+    pub(crate) fn scene_alphas(&self) -> Vec<f32> {
+        if self.gcode.is_some() {
+            return vec![];
+        }
+        self.tool_colours_rgba()
+            .into_iter()
+            .map(|c| display_alpha(f32::from(c[3]) / 255.))
             .collect()
     }
     /// Tool colours for drawing models and toolpaths. Near-black filaments are lifted so their
@@ -1569,6 +1629,7 @@ impl App {
         &mut self,
         objects: &[Object],
         tool_colors: &[[f32; 3]],
+        tool_alphas: &[f32],
     ) -> Vec<scene::paint::PaintOverlay> {
         self.overlay_cache
             .retain(|id, _| objects.iter().any(|o| o.id == *id));
@@ -1588,6 +1649,9 @@ impl App {
             let mut h = std::collections::hash_map::DefaultHasher::new();
             for c in tool_colors {
                 c.map(f32::to_bits).hash(&mut h);
+            }
+            for a in tool_alphas {
+                a.to_bits().hash(&mut h);
             }
             h.finish()
         };
@@ -1615,6 +1679,7 @@ impl App {
                         &o.painting,
                         show,
                         tool_colors,
+                        tool_alphas,
                     )),
                 };
             }
@@ -3510,6 +3575,7 @@ impl App {
                     }
                 }
                 let tool_colors = self.scene_colours_f32();
+                let tool_alphas = self.scene_alphas();
                 let tool_labels: Vec<String> =
                     self.tool_choices().into_iter().map(|c| c.label).collect();
                 // A Preview waiting for its new slice shows the models, not for editing.
@@ -3535,7 +3601,7 @@ impl App {
                     delta: self.plates.current().delta().and_then(|d| d.text()),
                     cause: self.last_change.clone(),
                 });
-                let mut overlays = self.paint_overlays(&objects, &tool_colors);
+                let mut overlays = self.paint_overlays(&objects, &tool_colors, &tool_alphas);
                 // Surface texture previews for the 3D view (none with Textures switched off).
                 let surfaces = match self.effective_config() {
                     Some(c) if self.prefs.features.textures => {
@@ -3702,6 +3768,7 @@ impl App {
                             .unwrap_or(&self.bed),
                         plates: &snapshot,
                         tool_colors: &tool_colors,
+                        tool_alphas: &tool_alphas,
                         tool_labels: &tool_labels,
                         overlays: &overlays,
                         paint: paint_view,
@@ -4609,9 +4676,32 @@ pub(crate) fn display_colour(c: [f32; 3]) -> [f32; 3] {
     c.map(|v| v + lift)
 }
 
+/// Display alpha of a filament (Orca's `adjust_color_for_rendering`): a (nearly) fully
+/// transparent filament, alpha below 0.1, is drawn at 0.3 so the model stays visible. Orca
+/// also turns it white; Mica keeps the colour, like [`display_colour`] keeps the hue.
+pub(crate) fn display_alpha(a: f32) -> f32 {
+    const FULLY_TRANSPARENT: f32 = 0.1;
+    const SHOWN_AS: f32 = 0.3;
+    if a < FULLY_TRANSPARENT {
+        SHOWN_AS
+    } else {
+        a.min(1.)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Orca's rule for (nearly) fully transparent filaments: drawn at 0.3, not invisible.
+    #[test]
+    fn display_alpha_keeps_clear_filaments_visible() {
+        assert_eq!(display_alpha(1.), 1.);
+        assert_eq!(display_alpha(0.5), 0.5);
+        assert_eq!(display_alpha(0.1), 0.1);
+        assert_eq!(display_alpha(0.05), 0.3);
+        assert_eq!(display_alpha(0.), 0.3);
+    }
 
     fn headless_app(ctx: &egui::Context, model: &str) -> App {
         let dir = std::env::temp_dir().join(format!(
@@ -4858,6 +4948,7 @@ mod tests {
             &painted.painting,
             scene::paint::Show::ALL,
             &project_colours,
+            &[],
         );
         assert_eq!(
             vertices.len(),

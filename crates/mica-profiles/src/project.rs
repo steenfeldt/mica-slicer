@@ -178,8 +178,9 @@ pub struct ProjectSettings {
     pub process: Option<String>,
     /// `filament_settings_id`, one per tool.
     pub filaments: Vec<String>,
-    /// `filament_colour`, one per tool (`None` when not a `#RRGGBB` colour).
-    pub colours: Vec<Option<[u8; 3]>>,
+    /// `filament_colour`, one per tool, as the project keeps it (`mica_core::color::project_text`:
+    /// `#RRGGBB`, or the project's own `#RRGGBBAA` text); `None` when not a hex colour.
+    pub colours: Vec<Option<String>>,
     /// `filament_type`, one per tool (PLA, PETG, …).
     pub filament_types: Vec<String>,
     /// Orca's `curr_bed_type`: the plate type the project was set up for.
@@ -243,9 +244,9 @@ impl ProjectSettings {
                 .unwrap_or_default()
         };
         let filaments = strings("filament_settings_id");
-        let colours: Vec<Option<[u8; 3]>> = strings("filament_colour")
+        let colours: Vec<Option<String>> = strings("filament_colour")
             .iter()
-            .map(|c| parse_colour(c))
+            .map(|c| mica_core::color::project_text(c))
             .collect();
         let tools = filaments.len().max(colours.len());
         // `different_settings_to_system`: process, then one entry per filament, then printer;
@@ -393,7 +394,7 @@ impl ProjectSettings {
         let filaments = list("filament_settings_id");
         let colours = list("filament_colour")
             .iter()
-            .map(|c| parse_colour(c))
+            .map(|c| mica_core::color::project_text(c.trim().trim_matches('"')))
             .collect();
         Some(Self {
             dialect: ProjectDialect::Prusa,
@@ -634,13 +635,8 @@ impl ProjectSettings {
     pub fn apply_colours(&self, config: &mut Config) -> Result<(), String> {
         let tools = config.vector_len("nozzle_diameter").max(1);
         for (tool, colour) in self.colours.iter().take(tools).enumerate() {
-            if let Some([r, g, b]) = colour {
-                set_tool_value(
-                    config,
-                    "filament_colour",
-                    &format!("#{r:02X}{g:02X}{b:02X}"),
-                    tool,
-                )?;
+            if let Some(text) = colour {
+                set_tool_value(config, "filament_colour", text, tool)?;
             }
         }
         Ok(())
@@ -888,12 +884,7 @@ mod tests {
         assert_eq!(s.tool_count(), 4);
         assert_eq!(
             s.colours,
-            [
-                Some([0xCB, 0x8F, 0x29]),
-                Some([0, 0, 0]),
-                Some([255, 255, 255]),
-                Some([0xFB, 0x02, 0x07])
-            ]
+            ["#CB8F29", "#000000", "#FFFFFF", "#FB0207"].map(|c| Some(c.to_string()))
         );
         assert_eq!(
             s.towers,
@@ -954,7 +945,10 @@ mod tests {
             Some("Original Prusa XL - 5T Input Shaper 0.4 nozzle")
         );
         assert_eq!(s.filaments, ["Prusament PLA @XLIS", "Prusament PETG @XLIS"]);
-        assert_eq!(s.colours, [Some([255, 128, 0]), Some([0, 128, 255])]);
+        assert_eq!(
+            s.colours,
+            [Some("#FF8000".to_string()), Some("#0080FF".to_string())]
+        );
         let mut base = Config::defaults();
         base.set_raw("nozzle_diameter", "0.4,0.4").unwrap();
         base.set_raw("perimeters", "2").unwrap();

@@ -947,17 +947,22 @@ impl App {
     }
 
     /// Slot colors as project colors (none where it is the preset's own), as the color
-    /// picker sets them.
+    /// picker sets them: a translucent filament keeps its alpha (and an unchanged one its text).
     fn mcp_apply_colors(&mut self, colors: &[[u8; 3]]) {
         let n = self.tool_count();
         self.overlays.resize(n);
+        let current = self.tool_colours_rgba();
         for (tool, c) in colors.iter().enumerate().take(n) {
             let preset = self
                 .profiles
                 .filaments
                 .get(tool)
-                .and_then(|f| self.profiles.filament_colour(f));
-            let colour = (preset != Some(*c)).then(|| crate::project::hex(*c));
+                .and_then(|f| self.profiles.filament_colour_rgba(f));
+            let alpha = current.get(tool).map_or(255, |k| k[3]);
+            let rgba = [c[0], c[1], c[2], alpha];
+            let previous = self.overlays.colour(tool).unwrap_or_default().to_string();
+            let colour =
+                (preset != Some(rgba)).then(|| crate::panels::colour::colour_text(&previous, rgba));
             self.overlays.set_colour(tool, colour);
         }
         self.colours_changed();

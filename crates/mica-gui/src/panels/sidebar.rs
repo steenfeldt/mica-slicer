@@ -605,7 +605,7 @@ impl App {
     fn filament_card(&mut self, ui: &mut egui::Ui) {
         let p = theme::of(ui);
         let tools = self.profiles.filaments.len();
-        let colours = self.tool_colours();
+        let colours = self.tool_colours_rgba();
         let mut change: Option<(usize, String)> = None;
         let mut show_all = None;
         // (tool, act) from a picker's visible-filament list.
@@ -763,9 +763,8 @@ impl App {
                                                 colour_open,
                                             )
                                             .on_hover_text(format!(
-                                                "{} ({}). Change the color",
-                                                mica_printhost::colour::colour_name(*colour),
-                                                mica_printhost::colour::hex(*colour)
+                                                "{}. Change the color",
+                                                super::colour::describe(*colour)
                                             )),
                                         );
                                         if let Some(f) = &theirs {
@@ -878,7 +877,7 @@ impl App {
                                 &name,
                                 Some(super::import::Visibility { hidden }),
                                 |ui, m, label| {
-                                    if let Some(c) = profiles.filament_colour(m) {
+                                    if let Some(c) = profiles.filament_colour_rgba(m) {
                                         swatch(ui, c, 12.);
                                     } else {
                                         ui.add_space(12.);

@@ -877,6 +877,17 @@ impl Profiles {
 
     /// Colour of a filament preset (`#RRGGBB`), from the preset or the tool's extruder colour.
     pub fn filament_colour(&self, name: &str) -> Option<[u8; 3]> {
+        self.filament_colour_rgba(name)
+            .map(|[r, g, b, _]| [r, g, b])
+    }
+
+    /// [`Self::filament_colour`] with its alpha (255 unless the preset says `#RRGGBBAA`).
+    pub fn filament_colour_rgba(&self, name: &str) -> Option<[u8; 4]> {
+        mica_core::color::parse_hex_rgba(&self.filament_colour_text(name)?)
+    }
+
+    /// The preset's colour text as written (unquoted, trimmed), hex or not.
+    pub fn filament_colour_text(&self, name: &str) -> Option<String> {
         let (_, v) = self.vendors.get(self.vendor)?;
         let raw = match v {
             Vendor::Prusa(b) => b
@@ -896,7 +907,7 @@ impl Profiles {
                     })
             }
         }?;
-        mica_core::color::parse_hex(raw.trim().trim_matches('"'))
+        Some(raw.trim().trim_matches('"').trim().to_string())
     }
 
     pub fn nozzle_count(&self) -> usize {

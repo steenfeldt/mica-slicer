@@ -132,11 +132,11 @@ pub fn hex(c: [u8; 3]) -> String {
 /// Puts the project's filament colours into the project colours (`Overlays::colours`: the
 /// swatches and the models follow them; they are not filament edits). Tools beyond the
 /// overlays' count are skipped.
-pub fn colour_overlay(overlays: &mut Overlays, colours: &[Option<[u8; 3]>]) {
+pub fn colour_overlay(overlays: &mut Overlays, colours: &[Option<String>]) {
     let tools = overlays.filaments.len();
     for (tool, colour) in colours.iter().enumerate().take(tools) {
         if let Some(c) = colour {
-            overlays.set_colour(tool, Some(hex(*c)));
+            overlays.set_colour(tool, Some(c.clone()));
         }
     }
 }

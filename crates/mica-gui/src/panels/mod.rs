@@ -46,15 +46,15 @@ pub mod widgets;
 
 use eframe::egui;
 
-/// A small square colour swatch.
-pub fn swatch(ui: &mut egui::Ui, colour: [u8; 3], size: f32) -> egui::Response {
+/// A small square colour swatch (split over a checkerboard for a translucent colour).
+pub fn swatch(
+    ui: &mut egui::Ui,
+    colour: impl Into<colour::SwatchColour>,
+    size: f32,
+) -> egui::Response {
     let (rect, response) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
     let painter = ui.painter();
-    painter.rect_filled(
-        rect,
-        3.,
-        egui::Color32::from_rgb(colour[0], colour[1], colour[2]),
-    );
+    colour::paint_colour(painter, rect, 3., colour);
     painter.rect_stroke(
         rect,
         3.,

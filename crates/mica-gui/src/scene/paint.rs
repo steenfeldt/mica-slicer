@@ -141,12 +141,14 @@ pub fn state_color(kind: PaintKind, state: u8, tool_colors: &[[f32; 3]]) -> Opti
 }
 
 /// Vertices of every painted leaf of the kinds `show` gives a strength: colour painting
-/// solid first, then the patterned kinds over it (later kinds draw over earlier ones).
+/// solid first (at its filament's alpha from `tool_alphas`, missing = opaque), then the
+/// patterned kinds over it (later kinds draw over earlier ones).
 pub fn overlay_vertices(
     mesh: &TriangleMesh,
     painting: &FacetPainting,
     show: Show,
     tool_colors: &[[f32; 3]],
+    tool_alphas: &[f32],
 ) -> Vec<PaintVertex> {
     let mut out = Vec::new();
     let order = [
@@ -166,14 +168,14 @@ pub fn overlay_vertices(
             continue;
         }
         let pattern = pattern_of(kind);
-        let alpha = if pattern == Pattern::Solid {
-            1.
-        } else {
-            strength
-        };
         states.visit(mesh, false, |state, t| {
             if let Some(mut color) = state_color(kind, state, tool_colors) {
-                color[3] = alpha;
+                color[3] = if pattern == Pattern::Solid {
+                    let tool = usize::from(state).saturating_sub(1);
+                    tool_alphas.get(tool).copied().unwrap_or(1.)
+                } else {
+                    strength
+                };
                 for p in t {
                     out.push(PaintVertex {
                         position: p.map(|v| v as f32),
@@ -252,7 +254,7 @@ mod tests {
         painting.material.push(0, "8").unwrap();
         painting.supports.push(1, "4").unwrap();
         let tools = [[1., 0., 0.], [0., 0., 1.]];
-        let all = overlay_vertices(&mesh, &painting, Show::ALL, &tools);
+        let all = overlay_vertices(&mesh, &painting, Show::ALL, &tools, &[]);
         assert_eq!(all.len(), 6);
         // Colour painting is solid in the tool's colour; the support paint is a hatch at
         // full strength.
@@ -268,12 +270,26 @@ mod tests {
                 .count(),
             3
         );
-        let material = overlay_vertices(&mesh, &painting, Show::COLOUR_ONLY, &tools);
+        let material = overlay_vertices(&mesh, &painting, Show::COLOUR_ONLY, &tools, &[]);
         assert_eq!(material.len(), 3);
+        // A translucent filament's colour painting carries its alpha; patterns keep theirs.
+        let translucent = overlay_vertices(&mesh, &painting, Show::ALL, &tools, &[1., 0.5]);
+        assert!(
+            translucent
+                .iter()
+                .filter(|v| v.pattern == Pattern::Solid as u32)
+                .all(|v| v.color == [0., 0., 1., 0.5])
+        );
+        assert!(
+            translucent
+                .iter()
+                .filter(|v| v.pattern == Pattern::Hatch as u32)
+                .all(|v| v.color == SUPPORT_ENFORCER)
+        );
         // A kind shown alongside another tool is subtler: the strength is the alpha.
         let mut show = Show::COLOUR_ONLY;
         show.set(PaintKind::Supports, Show::SUBTLE);
-        let subtle = overlay_vertices(&mesh, &painting, show, &tools);
+        let subtle = overlay_vertices(&mesh, &painting, show, &tools, &[]);
         assert_eq!(subtle.len(), 6);
         assert!(
             subtle
@@ -284,7 +300,7 @@ mod tests {
         // Fuzzy skin over colour painting keeps the colour: the colour stays solid underneath
         // and the fuzzy stipple is a pattern, not a yellow fill.
         painting.fuzzy.push(0, "4").unwrap();
-        let both = overlay_vertices(&mesh, &painting, Show::ALL, &tools);
+        let both = overlay_vertices(&mesh, &painting, Show::ALL, &tools, &[]);
         assert_eq!(both.len(), 9);
         let fuzzy: Vec<_> = both
             .iter()
@@ -298,7 +314,7 @@ mod tests {
         );
         assert_ne!(overlay_key(1, 2, Show::ALL, 0), overlay_key(1, 2, show, 0));
         assert_eq!(
-            overlay_vertices(&mesh, &painting, Show([0.; 5]), &tools).len(),
+            overlay_vertices(&mesh, &painting, Show([0.; 5]), &tools, &[]).len(),
             0
         );
     }
