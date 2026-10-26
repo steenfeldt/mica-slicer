@@ -12,6 +12,7 @@ pub mod gizmo;
 pub mod icons;
 pub mod measure;
 mod plate_bar;
+pub mod plate_tags;
 mod preview_plates;
 pub mod section;
 mod toolbar;
@@ -29,7 +30,7 @@ use crate::{
     theme,
     tower::{TowerCommand, TowerView},
 };
-use eframe::egui::{self, Align2, Color32, FontId, Key, PointerButton, Pos2, Rect, Vec2 as EVec2};
+use eframe::egui::{self, Align2, Color32, Key, PointerButton, Pos2, Rect, Vec2 as EVec2};
 use glam::{Vec2, Vec3};
 use icons::Icon;
 use mica_core::painting::PaintKind;
@@ -373,6 +374,9 @@ pub struct Viewport {
     /// The hovered plate's label plus icon strip (screen), last frame: the pointer keeps the
     /// plate hovered there, so the icons stay reachable after leaving the plate itself.
     plate_hover_zone: Option<(usize, Rect)>,
+    /// This frame's plate tags on the ground (drawn by the renderer, clicked here).
+    plate_tags: Vec<plate_tags::PlateTag>,
+    tag_cache: plate_tags::TagCache,
     /// The plate name being edited in the plate bar.
     pub plate_rename: Option<PlateRename>,
     /// Open the plate list (or the plate menu) on the next frame.
@@ -461,6 +465,8 @@ impl Viewport {
             hovered: None,
             hovered_plate: None,
             plate_hover_zone: None,
+            plate_tags: vec![],
+            tag_cache: Default::default(),
             plate_rename: None,
             open_plate_list: false,
             open_plate_menu: false,
@@ -1845,6 +1851,33 @@ impl Viewport {
             }),
             _ => vec![],
         };
+        // Plate tags on the ground next to each plate, hovered unless an object stands in
+        // front of the ground under the pointer.
+        {
+            let gp_tags = gizmo::Painter {
+                painter: &probe,
+                rect,
+                camera: &self.camera,
+            };
+            let camera = &self.camera;
+            let tag_pointer = pointer.filter(|p| rect.contains(*p));
+            self.plate_tags = plate_tags::layout(
+                &ctx,
+                &mut self.tag_cache,
+                scene.bed,
+                scene.plates,
+                dark,
+                rect,
+                |w| gp_tags.project(w),
+                tag_pointer,
+                || {
+                    tag_pointer.is_some_and(|p| {
+                        let (origin, dir) = camera.ray(uv(rect, p), aspect);
+                        picking::pick_face(scene.objects, origin, dir).is_some()
+                    })
+                },
+            );
+        }
         let frame = render::Frame {
             camera: self.camera.clone(),
             bed: scene.bed.clone(),
@@ -1898,6 +1931,7 @@ impl Viewport {
             },
             moving,
             pick: in_preview.then(|| self.pick.clone()),
+            tags: self.plate_tags.iter().map(|t| t.draw.clone()).collect(),
         };
         ui.painter()
             .add(egui_wgpu::Callback::new_paint_callback(rect, frame));
@@ -2769,94 +2803,41 @@ impl Viewport {
                     });
             });
     }
-    /// Plate index labels at each bed's front-left corner, plus hover icons for the plate under
-    /// the pointer.
-    /// A label's right-click opens the plate menu for its plate; the hover strip's ⋯ opens
-    /// the plate bar's menu (`None` in the returned picks).
+    /// Plate tags (number and name lying on the ground next to each plate, laid out by
+    /// `plate_tags` and drawn by the renderer) as handles: a click shows the plate, a
+    /// right-click opens its plate menu; plus hover icons for the plate under the pointer.
+    /// The hover strip's ⋯ opens the plate bar's menu (`None` in the returned picks).
     #[allow(clippy::type_complexity)]
     fn plate_labels(
         &self,
         ui: &mut egui::Ui,
-        gp: &gizmo::Painter<'_>,
+        _gp: &gizmo::Painter<'_>,
         scene: &Scene<'_>,
         actions: &mut Vec<Action>,
     ) -> (
         Option<(usize, Rect)>,
         Vec<(usize, Option<crate::plate_menu::PlateCommand>, String)>,
     ) {
-        let dark = ui.visuals().dark_mode;
         let mut picks = vec![];
         if scene.plates.len() < 2 {
-            // A single plate needs no corner label; the plate bar names it.
+            // A single plate needs no tag; the plate bar names it.
             return (None, picks);
         }
         let mut zone = None;
         for plate in scene.plates {
-            // The tag sits inside its plate's front-left corner and grows away from the
-            // front edge. Hanging in front of the plate, it read as the next plate's in a grid.
-            let corner = scene.bed.min + plate.origin.extend(0.);
-            let Some(p) = gp.project(corner + Vec3::new(4., 4., 0.)) else {
+            let tags: Vec<&plate_tags::PlateTag> = self
+                .plate_tags
+                .iter()
+                .filter(|t| t.plate == plate.index)
+                .collect();
+            // Too small to read (or out of view): no handle either.
+            let Some(number) = tags.iter().find(|t| t.kind == plate_tags::TagKind::Number) else {
                 continue;
             };
-            if !gp.rect.contains(p) {
-                continue;
-            }
-            let mut text = if plate.current {
-                format!("Plate {}", plate.index + 1)
-            } else {
-                format!("{}", plate.index + 1)
-            };
-            if let Some(name) = &plate.name {
-                text = format!("{text} · {name}");
-            }
-            if plate.locked {
-                text.push_str(" · locked");
-            }
-            if plate.alert > 0 {
-                text = format!("{} {text}", if plate.alert > 1 { "✕" } else { "!" });
-            }
-            let color = if plate.alert > 1 {
-                theme::DANGER
-            } else if plate.alert == 1 && !plate.current {
-                theme::WARNING
-            } else if plate.current {
-                theme::ACCENT_BRIGHT
-            } else if dark {
-                Color32::from_gray(150)
-            } else {
-                Color32::from_gray(90)
-            };
-            let galley = gp
-                .painter
-                .layout_no_wrap(text, FontId::proportional(12.5), color);
-            let size = galley.size() + EVec2::new(10., 6.);
-            let r = Rect::from_min_size(p - EVec2::new(0., size.y), size);
-            gp.painter.rect_filled(
-                r,
-                4.,
-                if dark {
-                    Color32::from_rgba_unmultiplied(20, 22, 26, 170)
-                } else {
-                    Color32::from_rgba_unmultiplied(255, 255, 255, 190)
-                },
-            );
-            gp.painter.galley(r.min + EVec2::new(5., 3.), galley, color);
-            // The label is a handle on its plate: a click shows it, a right-click opens the
-            // plate menu.
             let full_name = plate
                 .name
                 .clone()
                 .unwrap_or_else(|| crate::plates::default_name(plate.index));
-            let label = ui
-                .interact(
-                    r,
-                    ui.scope_id().with(("plate label", plate.index)),
-                    egui::Sense::click(),
-                )
-                .on_hover_text("Click to show this plate, right-click for the plate menu");
-            if label.clicked() && !plate.current {
-                actions.push(Action::SelectPlate(plate.index));
-            }
             let info = crate::plate_menu::PlateMenuInfo {
                 index: plate.index,
                 count: scene.plates.len(),
@@ -2865,11 +2846,40 @@ impl Viewport {
                 objects: plate.objects,
                 editable: scene.editable,
             };
-            label.context_menu(|ui| {
-                if let Some(c) = crate::plate_menu::plate_menu(ui, &info) {
-                    picks.push((plate.index, Some(c), full_name.clone()));
+            let mut tip = format!("Plate {}", plate.index + 1);
+            if let Some(name) = &plate.name {
+                tip = format!("{tip} · {name}");
+            }
+            if plate.locked {
+                tip.push_str(" · locked");
+            }
+            tip.push_str("\nClick to show this plate, right-click for the plate menu");
+            for tag in &tags {
+                // Only the quad itself is a handle (the pointer test is done on the projected
+                // quad, objects in front win); elsewhere the viewport keeps the pointer.
+                let bounds = tag.bounds();
+                let r = if tag.hovered {
+                    bounds
+                } else {
+                    Rect::from_min_size(bounds.min, EVec2::ZERO)
+                };
+                let label = ui
+                    .interact(
+                        r,
+                        ui.scope_id().with(("plate tag", plate.index, tag.kind)),
+                        egui::Sense::click(),
+                    )
+                    .on_hover_text(&tip);
+                if label.clicked() && !plate.current {
+                    actions.push(Action::SelectPlate(plate.index));
                 }
-            });
+                label.context_menu(|ui| {
+                    if let Some(c) = crate::plate_menu::plate_menu(ui, &info) {
+                        picks.push((plate.index, Some(c), full_name.clone()));
+                    }
+                });
+            }
+            let r = number.bounds();
             let hovered = self.hovered_plate == Some(plate.index) && scene.preview.is_none();
             if hovered {
                 let id = ui.scope_id().with(("plate icons", plate.index));
@@ -2926,8 +2936,16 @@ impl Viewport {
                                 });
                             });
                     });
-                // Label, gap and icons, with a small margin, keep this plate hovered.
-                zone = Some((plate.index, r.union(icons.response.rect).expand(8.)));
+                // The number, gap and icons (and a hovered name), with a small margin, keep
+                // this plate hovered.
+                let mut z = r.union(icons.response.rect);
+                for t in tags.iter().filter(|t| t.hovered) {
+                    z = z.union(t.bounds());
+                }
+                zone = Some((plate.index, z.expand(8.)));
+            } else if let Some(t) = tags.iter().find(|t| t.hovered) {
+                // On a tag in the gap the plate counts as hovered from the next frame on.
+                zone = Some((plate.index, t.bounds()));
             }
         }
         (zone, picks)

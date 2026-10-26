@@ -526,6 +526,7 @@ pub async fn run(b: Options, mut shot: Shot, mut viewport: Viewport) -> Result<(
                     surface_textures: vec![],
                     moving: variant == "moving",
                     pick: None,
+                    tags: vec![],
                 };
                 let (_, rgb) = frame(
                     &mut g,

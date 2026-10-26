@@ -553,6 +553,7 @@ async fn render(
                             surface_textures: vec![],
                             moving: false,
                             pick: None,
+                            tags: vec![],
                         };
                         ui.painter()
                             .add(egui_wgpu::Callback::new_paint_callback(rect, frame));

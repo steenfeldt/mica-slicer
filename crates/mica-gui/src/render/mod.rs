@@ -13,6 +13,7 @@ pub mod bench;
 mod gpu_tests;
 pub mod screenshot;
 mod surface;
+mod tags;
 pub mod toolpaths;
 use crate::{
     preview::{ColorMode, Preview, View},
@@ -27,6 +28,7 @@ use egui_wgpu::{
 };
 use glam::{Mat4, Vec3};
 use std::{collections::HashMap, sync::Arc};
+pub use tags::{TagDraw, TagImage};
 
 pub const FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 pub const SAMPLES: u32 = 4;
@@ -287,6 +289,8 @@ pub struct Frame {
     pub moving: bool,
     /// Preview: the hover pick shared with the viewport (not part of the redraw check).
     pub pick: Option<toolpaths::SharedPick>,
+    /// Plate tags lying on the ground next to their plates (`viewport::plate_tags`).
+    pub tags: Vec<TagDraw>,
 }
 /// The model matrix of the preview's toolpaths: their records are in bed (G-code)
 /// coordinates and the preview shows the current plate, so they move to its world origin.
@@ -373,6 +377,9 @@ impl Frame {
         self.view.tool_mask.hash(&mut h);
         (self.view.color as u32).hash(&mut h);
         self.clip.map(|c| c.map(f32::to_bits)).hash(&mut h);
+        for t in &self.tags {
+            t.hash_into(&mut h);
+        }
         for c in &self.caps {
             c.key.hash(&mut h);
             c.color.map(f32::to_bits).hash(&mut h);
@@ -438,6 +445,8 @@ enum Kind {
     Cap(u64),
     /// A surface texture preview (index into `Surfaces::draws`).
     Surface(usize),
+    /// Every plate tag (`tags::Tags`), after everything that writes depth.
+    Tags,
 }
 struct Item {
     kind: Kind,
@@ -467,6 +476,7 @@ pub struct Renderer {
     chunk_layout: wgpu::BindGroupLayout,
     blit_pipeline: wgpu::RenderPipeline,
     surfaces: surface::Surfaces,
+    tags: tags::Tags,
     pool: Pool,
     meshes: HashMap<u64, GpuMesh>,
     /// The scene meshes (objects, tracked volumes) the GPU copies under the same keys in
@@ -1083,8 +1093,10 @@ impl Renderer {
         });
         let targets = targets(device, &blit_layout, &blit_uniform, &sampler, [1, 1]);
         let surfaces = surface::Surfaces::new(device, &texture_layout);
+        let tags = tags::Tags::new(device, &texture_layout);
         Self {
             surfaces,
+            tags,
             uniform_layout,
             segment_layout,
             texture_layout,
@@ -1826,6 +1838,16 @@ impl Renderer {
                 });
             }
         }
+        // Plate tags last: depth-tested against everything above, writing none themselves.
+        // From below the bed they would read mirrored through the plates: none.
+        if !frame.tags.is_empty() && !from_below {
+            self.tags
+                .prepare(device, queue, &self.texture_layout, &frame.tags, &base);
+            items.push(Item {
+                kind: Kind::Tags,
+                uniform: base,
+            });
+        }
         if !any_outside {
             outside_items.clear();
         }
@@ -1960,6 +1982,7 @@ impl Renderer {
                             .map(|m| (&m.vertices, &m.indices, m.count));
                         self.surfaces.draw(&mut pass, n, mesh);
                     }
+                    Kind::Tags => self.tags.draw(&mut pass),
                 }
             }
             self.draw_toolpaths(&mut pass, &toolpaths, false, frame.clip.is_some());

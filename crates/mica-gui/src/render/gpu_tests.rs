@@ -201,6 +201,7 @@ pub fn frame(preview: &Arc<Preview>, camera: Camera, view: View, size: [u32; 2])
         surface_textures: vec![],
         moving: false,
         pick: None,
+        tags: vec![],
     }
 }
 /// Renders `frame` through egui's paint callback and returns the RGB pixels.
