@@ -233,6 +233,9 @@ pub enum Sub {
     Range(u64),
 }
 
+/// A footprint hull's points, shared by an object's clones.
+type HullPoints = Arc<[[f64; 2]]>;
+
 #[derive(Clone)]
 pub struct Object {
     pub id: u64,
@@ -292,6 +295,8 @@ pub struct Object {
     /// Exact world bounds of a tilted object for the transform they were measured with
     /// (shared by clones, which is harmless: the transform is the key).
     bounds_cache: Arc<std::sync::Mutex<Option<(Mat4, Vec3, Vec3)>>>,
+    /// `footprint_hull` for the transform it was measured with.
+    hull_cache: Arc<std::sync::Mutex<Option<(Mat4, HullPoints)>>>,
     /// The project's mixed colors, set on the copies a slice job gets (`App::slice_job`);
     /// `None` on the plate's own objects.
     pub mixes: Option<Arc<mica_core::full_spectrum::FullSpectrum>>,
@@ -578,6 +583,7 @@ impl Object {
             repair: None,
             emboss: imported.object,
             bounds_cache: Default::default(),
+            hull_cache: Default::default(),
             mixes: None,
         }
     }
@@ -613,6 +619,7 @@ impl Object {
             emboss: None,
             frame: None,
             bounds_cache: Default::default(),
+            hull_cache: Default::default(),
             mixes: None,
         }
     }
@@ -625,6 +632,7 @@ impl Object {
         self.mesh = Arc::new(mesh);
         self.frame = None;
         self.bounds_cache = Default::default();
+        self.hull_cache = Default::default();
         let d = self.center() - old;
         let rs = Mat4::from_quat(self.rotation()) * Mat4::from_scale(self.scale * self.mirror);
         self.position += rs.transform_vector3(d) - d;
@@ -1013,6 +1021,11 @@ impl Object {
     /// XY convex hull of the placed mesh (bed coordinates), for arranging and spacing.
     pub fn footprint_hull(&self) -> Vec<[f64; 2]> {
         let t = self.transform();
+        if let Some((cached, hull)) = &*self.hull_cache.lock().unwrap()
+            && *cached == t
+        {
+            return hull.to_vec();
+        }
         let points: Vec<[f64; 2]> = self
             .mesh
             .vertices
@@ -1022,7 +1035,9 @@ impl Object {
                 [p.x as f64, p.y as f64]
             })
             .collect();
-        hull2d(points)
+        let hull = hull2d(points);
+        *self.hull_cache.lock().unwrap() = Some((t, hull.as_slice().into()));
+        hull
     }
     /// World bounding box. Untilted objects use the transformed local box (exact in Z, which
     /// is what the bed checks need); a tilted object's box corners would dip below its real

@@ -1783,6 +1783,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         "Printer: {}\nProcess: {}\nFilaments: {:?}",
         app.profiles.printer, app.profiles.process, app.profiles.filaments
     );
+    eprintln!("Plate warnings: {:?}", app.warnings);
     if let Some(p) = &app.project {
         eprintln!(
             "Project: {:?} -> {:?}; {} changes; {}",

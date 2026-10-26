@@ -211,7 +211,14 @@ pub fn plate_warnings(objects: &[Object], bed: &Bed, config: &Config) -> Vec<Str
         for b in &objects[i + 1..] {
             let (amin, amax) = a.bounds();
             let (bmin, bmax) = b.bounds();
-            if amin.x < bmax.x && bmin.x < amax.x && amin.y < bmax.y && bmin.y < amax.y {
+            // Boxes first (cheap); then the footprints, so a part tucked beside a round one
+            // inside its box is not reported.
+            if amin.x < bmax.x
+                && bmin.x < amax.x
+                && amin.y < bmax.y
+                && bmin.y < amax.y
+                && mica_core::arrange::polygons_overlap(&a.footprint_hull(), &b.footprint_hull())
+            {
                 out.push(format!("{} and {} overlap", a.name, b.name));
             }
         }
