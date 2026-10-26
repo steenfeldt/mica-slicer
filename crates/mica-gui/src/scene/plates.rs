@@ -8,13 +8,13 @@
 use super::bed::Bed;
 use glam::{Vec2, Vec3};
 
-/// Grid of plates in rows of `columns` with `gap` millimetres between beds: the layout the
-/// editor's plate model uses.
-pub fn grid_origin(i: usize, columns: usize, bed_size: Vec2, gap: f32) -> Vec2 {
+/// Grid of plates in rows of `columns` with `gap` millimetres between beds (per axis): the
+/// layout the editor's plate model uses.
+pub fn grid_origin(i: usize, columns: usize, bed_size: Vec2, gap: Vec2) -> Vec2 {
     let columns = columns.max(1);
     let col = (i % columns) as f32;
     let row = (i / columns) as f32;
-    Vec2::new(col * (bed_size.x + gap), row * (bed_size.y + gap))
+    Vec2::new(col * (bed_size.x + gap.x), row * (bed_size.y + gap.y))
 }
 
 pub trait PlateLayout {
@@ -135,7 +135,7 @@ mod tests {
             1
         }
         fn origin(&self, i: usize) -> Vec2 {
-            grid_origin(i, 2, Vec2::new(250., 220.), 20.)
+            grid_origin(i, 2, Vec2::new(250., 220.), Vec2::splat(20.))
         }
     }
     #[test]

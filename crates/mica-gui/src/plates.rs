@@ -15,8 +15,9 @@ use crate::worker::Finished;
 use glam::{Vec2, Vec3};
 use std::collections::BTreeMap;
 
-/// Gap between neighbouring plates, mm.
-pub const GAP: f32 = 20.;
+/// Gap between neighbouring plates: the bed size divided by this (OrcaSlicer's
+/// `LOGICAL_PART_PLATE_GAP`, a fifth), far enough apart that each plate reads as its own.
+pub const GAP_DIVISOR: f32 = 5.;
 
 static NEXT_PLATE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
 
@@ -304,7 +305,13 @@ impl Plates {
     }
     /// World offset of plate `i`: plates fill rows left to right, then the next row behind.
     pub fn offset(&self, i: usize) -> Vec3 {
-        grid_origin(i, self.columns(), self.bed_size.truncate(), GAP).extend(0.)
+        grid_origin(
+            i,
+            self.columns(),
+            self.bed_size.truncate(),
+            self.bed_size.truncate() / GAP_DIVISOR,
+        )
+        .extend(0.)
     }
 
     /// Objects of plate `i` moved to world coordinates (for drawing all plates at once).
@@ -487,9 +494,9 @@ mod tests {
         p.add();
         assert_eq!(p.current, 3);
         assert_eq!(p.columns(), 2);
-        assert_eq!(p.offset(1), Vec3::new(270., 0., 0.));
-        assert_eq!(p.offset(3), Vec3::new(270., 240., 0.));
-        assert_eq!(p.origin(2), Vec2::new(0., 240.));
+        assert_eq!(p.offset(1), Vec3::new(300., 0., 0.));
+        assert_eq!(p.offset(3), Vec3::new(300., 264., 0.));
+        assert_eq!(p.origin(2), Vec2::new(0., 264.));
         assert_eq!(p.count(), 4);
         assert_eq!(p.plate(3).name, "Plate 4");
         p.remove(1);
