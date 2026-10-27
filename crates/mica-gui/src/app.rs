@@ -683,7 +683,7 @@ impl App {
         viewport.zoom_to_pointer = prefs.zoom_to_pointer;
         viewport.reverse_zoom = prefs.reverse_zoom;
         viewport.toolbar_size = prefs.toolbar_size;
-        viewport.fit_plate(&bed, &plates::snapshot(&plates), false, 1.5);
+        viewport.fit_plate(&bed, &plates::snapshot(&plates), false, 1.5, false);
         let mut app = Self {
             overlays: Overlays::new(profiles.nozzle_count()),
             profiles,
@@ -1355,8 +1355,13 @@ impl App {
             if new_bed != self.bed {
                 self.bed = new_bed;
                 self.plates.set_bed(&self.bed);
-                self.viewport
-                    .fit_plate(&self.bed, &plates::snapshot(&self.plates), false, 1.5);
+                self.viewport.fit_plate(
+                    &self.bed,
+                    &plates::snapshot(&self.plates),
+                    false,
+                    1.5,
+                    self.previewing(),
+                );
                 for p in &mut self.plates.plates {
                     p.tower_placement = None;
                 }
@@ -1933,11 +1938,16 @@ impl App {
         if let Some(doc) = &self.gcode {
             let bed = doc.bed.as_ref().unwrap_or(&self.bed);
             self.viewport
-                .fit_plate(bed, &crate::gcode_doc::single_plate(), false, aspect);
+                .fit_plate(bed, &crate::gcode_doc::single_plate(), false, aspect, false);
             return;
         }
-        self.viewport
-            .fit_plate(&self.bed, &plates::snapshot(&self.plates), all, aspect);
+        self.viewport.fit_plate(
+            &self.bed,
+            &plates::snapshot(&self.plates),
+            all,
+            aspect,
+            self.previewing(),
+        );
     }
     pub(crate) fn set_theme(&mut self, ctx: &egui::Context, mode: theme::Mode) {
         self.set_theme_choice(

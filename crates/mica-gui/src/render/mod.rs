@@ -1757,6 +1757,10 @@ impl Renderer {
                 let (bmin, bmax) = o.bounds();
                 // The object against the printable volume of its own plate.
                 let plate = frame.plate_of.get(i).copied().unwrap_or(0);
+                // Preview draws the current plate alone: objects of the others stay hidden.
+                if !frame.plates.is_empty() && !frame.plates.iter().any(|p| p.index == plate) {
+                    continue;
+                }
                 let origin = frame
                     .plates
                     .iter()

@@ -64,6 +64,8 @@ mod plates_ui_tests;
 mod preset_names;
 mod preview;
 #[cfg(test)]
+mod preview_one_plate_tests;
+#[cfg(test)]
 mod printer_filament_tests;
 mod printhost;
 mod project;

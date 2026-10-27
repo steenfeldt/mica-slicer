@@ -339,7 +339,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     viewport.mode = o.gizmo;
     viewport.lay_on_face = o.lay_on_face;
     viewport.hovered = o.hover;
-    viewport.fit_plate(&bed, &plates, o.plates > 1, aspect);
+    viewport.fit_plate(&bed, &plates, o.plates > 1, aspect, false);
     if let Some(i) = o.select
         && let Some(obj) = objects.get(i)
         && o.plates == 1

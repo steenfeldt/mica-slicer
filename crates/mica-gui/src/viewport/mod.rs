@@ -131,6 +131,32 @@ pub struct Scene<'a> {
     /// The skirt and brim outlines (world mm, on the bed) that do not fit: drawn in red.
     pub adhesion_outlines: &'a [Vec<[f32; 2]>],
 }
+impl<'a> Scene<'a> {
+    /// Preview with several plates shows the current plate alone, as OrcaSlicer's preview
+    /// canvas does (`PartPlateList::render` with `only_current`): its bed, its toolpaths (or
+    /// its models while it has no slice) and its tower, where the plate stands in the grid.
+    /// The plate list at the left edge is the navigator, so no plate strips either.
+    pub fn one_plate(&self) -> bool {
+        (self.preview.is_some() || self.previewing) && self.plates.len() > 1
+    }
+    /// The plates the 3D view draws and picks: the current one alone in Preview
+    /// ([`Self::one_plate`]), else all of them.
+    pub fn shown_plates(&self) -> &'a [Plate] {
+        let plates = self.plates;
+        match plates.iter().position(|p| p.current) {
+            Some(i) if self.one_plate() => &plates[i..=i],
+            _ => plates,
+        }
+    }
+    /// Whether object `i` (a scene index) stands on a plate the 3D view draws.
+    pub fn shows_object(&self, i: usize) -> bool {
+        !self.one_plate()
+            || self
+                .shown_plates()
+                .iter()
+                .any(|p| p.index == self.plate_of.get(i).copied().unwrap_or(0))
+    }
+}
 /// The painting tool as the viewport shows it: brush shape and radius (mm) for the cursor.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct PaintView {
@@ -398,6 +424,11 @@ pub struct Viewport {
     /// current (a newly shown plate scrolls into view).
     pub preview_plates_probe: preview_plates::PreviewPlatesProbe,
     preview_plates_shown: Option<usize>,
+    /// The plate Preview last showed alone ([`Scene::one_plate`]): another one (or entering
+    /// Preview) frames its bed.
+    preview_framed: Option<usize>,
+    /// The plates the renderer drew last frame (their indices; UI tests).
+    pub drawn_plates: Vec<usize>,
     /// The plate the right-clicked bed belongs to (the bed menu's plate section).
     menu_plate: Option<usize>,
     /// A volume of the selected object under the pointer.
@@ -483,6 +514,8 @@ impl Viewport {
             plate_probe: PlateProbe::default(),
             preview_plates_probe: Default::default(),
             preview_plates_shown: None,
+            preview_framed: None,
+            drawn_plates: vec![],
             menu_plate: None,
             hovered_volume: None,
             hovered_tower: false,
@@ -572,9 +605,24 @@ impl Viewport {
         self.measure_on = true;
         self.measure.pick_at(objects, &gp, ray, at, shift)
     }
-    /// Frames the current plate (or all plates with `all`).
-    pub fn fit_plate(&mut self, bed: &Bed, plates: &[Plate], all: bool, aspect: f32) {
-        let (min, max) = if all {
+    /// Frames the current plate (or all plates with `all`). In Preview (`preview`) the view
+    /// shows the current plate's bed alone ([`Scene::one_plate`]), so that bed is framed,
+    /// also for `all`, without the strip in front of it.
+    pub fn fit_plate(
+        &mut self,
+        bed: &Bed,
+        plates: &[Plate],
+        all: bool,
+        aspect: f32,
+        preview: bool,
+    ) {
+        let (min, max) = Self::plate_framing(bed, plates, all, preview);
+        // Fit the plate footprint plus a third of the height so the bed fills the view.
+        self.camera.fit(min, max.with_z(max.z * 0.35), aspect);
+    }
+    /// The box [`Self::fit_plate`] frames.
+    pub fn plate_framing(bed: &Bed, plates: &[Plate], all: bool, preview: bool) -> (Vec3, Vec3) {
+        if all && !preview {
             plates::all_bounds(bed, plates)
         } else {
             let origin = plates
@@ -583,15 +631,56 @@ impl Viewport {
                 .map_or(Vec2::ZERO, |p| p.origin);
             let (mut min, max) = plates::plate_bounds(bed, origin);
             if plates.len() > 1 {
-                // The plate's strip and name line in front of it are part of the plate, with
-                // some ground below them so the plate bar at the bottom leaves them free.
                 let (lo, hi) = (bed.min.truncate(), bed.max.truncate());
-                min.y -= plate_tags::reach(lo, hi, bed.overhang()) + 0.22 * (hi.y - lo.y);
+                min.y -= if preview {
+                    // The sheet in front of the printable area, with some ground below it so
+                    // the move slider at the bottom leaves it free.
+                    bed.overhang().front + 0.22 * (hi.y - lo.y)
+                } else {
+                    // The plate's strip and name line in front of it are part of the plate,
+                    // with some ground below them so the plate bar at the bottom leaves them
+                    // free.
+                    plate_tags::reach(lo, hi, bed.overhang()) + 0.22 * (hi.y - lo.y)
+                };
             }
             (min, max)
+        }
+    }
+    /// Preview with several plates draws the current plate alone: entering it, or showing
+    /// another plate there (plate list, keyboard, plate bar, a finished slice), frames that
+    /// plate's bed, the way OrcaSlicer moves its camera to a plate selected in Preview
+    /// (`PartPlateList::select_plate_view`). Only the target and zoom change; the orbit angle
+    /// stays (Orca resets it to its top-front view). Entering Preview leaves a camera that is
+    /// already closer in on this plate (a detail being looked at) as it is.
+    fn frame_shown_plate(&mut self, scene: &Scene<'_>, aspect: f32) {
+        let shown = if scene.one_plate() {
+            scene.plates.iter().position(|p| p.current)
+        } else {
+            None
         };
-        // Fit the plate footprint plus a third of the height so the bed fills the view.
-        self.camera.fit(min, max.with_z(max.z * 0.35), aspect);
+        let before = std::mem::replace(&mut self.preview_framed, shown);
+        if shown.is_none() || before == shown {
+            return;
+        }
+        let (min, max) = Self::plate_framing(scene.bed, scene.plates, false, true);
+        if before.is_none() && Self::looks_into(&self.camera, min, max, aspect) {
+            return;
+        }
+        self.fit_plate(scene.bed, scene.plates, false, aspect, true);
+    }
+    /// Whether the camera aims at a point over the box's footprint from no farther out than
+    /// framing the box would put it.
+    pub fn looks_into(
+        camera: &crate::scene::camera::Camera,
+        min: Vec3,
+        max: Vec3,
+        aspect: f32,
+    ) -> bool {
+        let mut framed = camera.clone();
+        framed.fit(min, max.with_z(max.z * 0.35), aspect);
+        let t = camera.target;
+        let over = (min.x..=max.x).contains(&t.x) && (min.y..=max.y).contains(&t.y);
+        over && camera.span_goal <= framed.span * 1.02
     }
     /// Frames one object with some air around it.
     pub fn focus(&mut self, o: &Object, aspect: f32) {
@@ -739,7 +828,7 @@ impl Viewport {
                     {
                         self.focus(o, aspect);
                     } else {
-                        self.fit_plate(scene.bed, scene.plates, all, aspect);
+                        self.fit_plate(scene.bed, scene.plates, all, aspect, scene.one_plate());
                     }
                 }
                 Act::ZoomIn => self.camera.zoom(ZOOM_STEP),
@@ -1068,6 +1157,7 @@ impl Viewport {
             ctx.request_repaint();
         }
         self.shortcuts(&keys, &scene, aspect, &mut actions);
+        self.frame_shown_plate(&scene, aspect);
         let dt = ctx.input(|i| i.stable_dt).min(0.1);
         if self.camera.animate(dt, aspect) {
             ctx.request_repaint();
@@ -1217,7 +1307,7 @@ impl Viewport {
                     self.bed_hover = Some(bp);
                     if self.hovered.is_none()
                         && let Some(plate) =
-                            plates::plate_at(scene.bed, scene.plates, bp.truncate())
+                            plates::plate_at(scene.bed, scene.shown_plates(), bp.truncate())
                     {
                         self.hovered_plate = Some(plate);
                     }
@@ -1653,7 +1743,7 @@ impl Viewport {
                             toggle: false,
                         });
                     }
-                    _ => self.fit_plate(scene.bed, scene.plates, false, aspect),
+                    _ => self.fit_plate(scene.bed, scene.plates, false, aspect, scene.one_plate()),
                 }
             }
         } else if response.clicked()
@@ -1663,7 +1753,7 @@ impl Viewport {
             let plate_under = || {
                 self.camera
                     .bed_point(uv(rect, p), aspect)
-                    .and_then(|bp| plates::plate_at(scene.bed, scene.plates, bp.truncate()))
+                    .and_then(|bp| plates::plate_at(scene.bed, scene.shown_plates(), bp.truncate()))
                     .filter(|i| scene.plates.get(*i).is_some_and(|pl| !pl.current))
             };
             let toggle = shift || command;
@@ -1784,7 +1874,8 @@ impl Viewport {
                 self.bed_hover = Some(bp);
                 // On a plate's bed the menu is that plate's (it becomes the current one).
                 if hit.is_none() && !self.menu_tower {
-                    self.menu_plate = plates::plate_at(scene.bed, scene.plates, bp.truncate());
+                    self.menu_plate =
+                        plates::plate_at(scene.bed, scene.shown_plates(), bp.truncate());
                     if let Some(i) = self.menu_plate
                         && scene.plates.get(i).is_some_and(|pl| !pl.current)
                     {
@@ -1882,7 +1973,8 @@ impl Viewport {
                 &ctx,
                 &mut self.tag_cache,
                 scene.bed,
-                scene.plates,
+                // Preview names its one plate in the plate list and the sidebar: no strip.
+                scene.shown_plates(),
                 &plate_tags::Options {
                     dark,
                     hovered_plate: self.hovered_plate,
@@ -1903,7 +1995,7 @@ impl Viewport {
         let frame = render::Frame {
             camera: self.camera.clone(),
             bed: scene.bed.clone(),
-            plates: scene.plates.to_vec(),
+            plates: scene.shown_plates().to_vec(),
             objects: scene.objects.to_vec(),
             plate_of: scene.plate_of.to_vec(),
             volumes: if scene.preview.is_none() {
@@ -1956,6 +2048,7 @@ impl Viewport {
             pick: in_preview.then(|| self.pick.clone()),
             tags: self.plate_tags.iter().map(|t| t.draw.clone()).collect(),
         };
+        self.drawn_plates = frame.plates.iter().map(|p| p.index).collect();
         ui.painter()
             .add(egui_wgpu::Callback::new_paint_callback(rect, frame));
         // Overlays drawn in 2D.
@@ -2280,6 +2373,9 @@ impl Viewport {
     fn volume_draws(&self, scene: &Scene<'_>) -> Vec<render::VolumeDraw> {
         let mut out = vec![];
         for (i, o) in scene.objects.iter().enumerate() {
+            if !scene.shows_object(i) {
+                continue;
+            }
             let primary = scene.selected == Some(i);
             for v in &o.volumes {
                 let selected = primary && scene.sub == Some(Sub::Volume(v.id));
@@ -2365,6 +2461,9 @@ impl Viewport {
         let current = scene.plates.iter().position(|p| p.current);
         for t in scene.towers {
             let own = current == Some(t.plate);
+            if !own && scene.one_plate() {
+                continue;
+            }
             let selected = own && scene.tower_selected && scene.selected.is_none();
             let hovered = own && self.hovered_tower;
             let mut color = TOWER_COLOR;
@@ -2404,6 +2503,9 @@ impl Viewport {
         let current = scene.plates.iter().position(|p| p.current);
         for t in scene.towers {
             let own = current == Some(t.plate);
+            if !own && scene.one_plate() {
+                continue;
+            }
             let (min, max) = t.bounds();
             let centre = (min + max) * 0.5;
             if let Some(p) = t.problems.first()
@@ -2980,6 +3082,9 @@ impl Viewport {
             }
         }
         for (i, o) in scene.objects.iter().enumerate() {
+            if !scene.shows_object(i) {
+                continue;
+            }
             let (min, max) = o.bounds();
             let center = (min + max) * 0.5;
             // An object outside the printable volume carries no label: its outside part is
@@ -3029,6 +3134,11 @@ impl Viewport {
             .iter()
             .find(|t| t.plate == plate && t.kind == kind)
             .map(|t| t.bounds())
+    }
+    /// Tests: how many plate strip parts lie on the ground this frame.
+    #[cfg(test)]
+    pub fn plate_tag_count(&self) -> usize {
+        self.plate_tags.len()
     }
     /// Benchmarks: whether the hover pick has answered the current pointer position, and
     /// whether it found a move there.

@@ -1311,7 +1311,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         let snapshot = crate::scene::plates::snapshot(&app.plates);
         app.viewport
-            .fit_plate(&app.bed, &snapshot, a.plates > 1, aspect);
+            .fit_plate(&app.bed, &snapshot, a.plates > 1, aspect, a.preview);
     }
     if let Some([x, y]) = a.place {
         let i = app.selected.unwrap_or(0);
