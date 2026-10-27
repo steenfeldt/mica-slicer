@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Provenance: adapted
 // Source: orca@8500fcdcca src/slic3r/GUI/PartPlate.cpp :: PartPlate::calc_vertex_for_number, PartPlate::generate_plate_name_texture, PartPlate::calc_vertex_for_plate_name_edit_icon
-// Changes: Only Orca's ideas are kept: plate labels (number, name texture) are textured quads lying flat on the ground in plate space, sized by factor = bed depth / 200 mm, and an edit pencil follows the name. The layout is Mica's own: one strip along each plate's front edge in the gap in front of it (number badge with alert mark and "locked" on the left, the plate tools as icons on the right) and the name on its own line in front of the strip with a rename pencil; all of it stays in the front half of the gap, hugging its own plate. Text and icons are rasterised from egui's font atlas and icon shapes into coverage masks coloured in the shader; parts too small to read are left out (icons first, then the name line, then the strip); hit testing uses the projected quads and lets objects in front win.
+// Changes: Only Orca's ideas are kept: plate labels (number, name texture) are textured quads lying flat on the ground in plate space, sized by factor = bed depth / 200 mm, and an edit pencil follows the name. The layout is Mica's own: one strip along each plate's front edge in the gap in front of it (number badge with alert mark and "locked" on the left, the plate tools as icons on the right) and the name on its own line in front of the strip with a rename pencil; all of it measured from the front rim of the plate's drawn bed sheet, with the plate rows spaced for the sheets and labels (`row_gap`) so the labels sit clear of both sheets and clearly nearer their own. Text and icons are rasterised from egui's font atlas and icon shapes into coverage masks coloured in the shader; parts too small to read are left out (icons first, then the name line, then the strip); hit testing uses the projected quads and lets objects in front win.
 
 //! Plate strips: each plate's number, tools and name lying flat on the ground in the gap in
 //! front of the plate, so they foreshorten with the plates and never cover objects. A strip
@@ -11,7 +11,7 @@
 //! hit-tests them; `render::tags` draws them.
 use super::icons::{self, Icon};
 use crate::render::{TagDraw, TagImage};
-use crate::scene::{bed::Bed, plates::Plate};
+use crate::scene::{bed::Bed, bed_assets::Overhang, plates::Plate};
 use crate::theme;
 use eframe::egui::{self, Color32, Pos2, Vec2 as EVec2};
 use glam::{Vec2, Vec3};
@@ -21,27 +21,31 @@ use std::{
     sync::Arc,
 };
 
-// Sizes in units of `factor` (bed depth / 200 mm, as Orca sizes its plate labels). The gap
-// between plate rows is a fifth of the bed depth, 40 units; everything here stays in the
-// front half of it (`DEPTH` = 19.5 units from the plate, 20.5 clear before the next row),
-// 2.5 units from its own plate's edge.
-/// From the plate's front edge to the strip.
-const STRIP_OFFSET: f32 = 2.5;
+// Sizes in units of `factor` (bed depth / 200 mm, as Orca sizes its plate labels), measured
+// from the front rim of the plate's drawn bed sheet (`Bed::overhang`), which reaches past the
+// printable area. The rows of plates are spaced for them (`row_gap`): the sheet in front, a
+// clear distance, the strip, the name line, then more ground before the next row's sheet
+// than between the strip and its own sheet.
+/// From the sheet's front rim to the strip.
+const SHEET_CLEAR: f32 = 4.;
 /// The strip's depth.
-const STRIP_H: f32 = 10.;
+const STRIP_H: f32 = 16.;
 /// Between the strip and the name line.
-const LINE_GAP: f32 = 0.75;
+const LINE_GAP: f32 = 1.5;
 /// The name line's depth (and its pencil's size).
-const NAME_H: f32 = 6.25;
-/// How far in front of the plate the name line ends.
-const DEPTH: f32 = STRIP_OFFSET + STRIP_H + LINE_GAP + NAME_H;
+const NAME_H: f32 = 9.;
+/// How far in front of the sheet's rim the name line ends.
+const DEPTH: f32 = SHEET_CLEAR + STRIP_H + LINE_GAP + NAME_H;
+/// From the name line to the next row's sheet: three times the strip's distance from its own
+/// sheet, so the labels clearly belong to the plate behind them.
+const NEXT_CLEAR: f32 = 3. * SHEET_CLEAR;
 /// Inside the strip: the margin around the badge and icons.
-const PAD: f32 = 1.5;
+const PAD: f32 = 2.5;
 /// The number badge's height and a tool icon's size.
 const BADGE_H: f32 = STRIP_H - 2. * PAD;
 const ICON: f32 = BADGE_H;
 /// Between two icons.
-const ICON_GAP: f32 = 0.5;
+const ICON_GAP: f32 = 0.8;
 
 /// Texture rows of a quad; the text's em is a fraction of it.
 const TEXELS: f32 = 64.;
@@ -140,23 +144,41 @@ fn factor(min: Vec2, max: Vec2) -> f32 {
     ((max.y - min.y) / 200.).max(0.05)
 }
 
+/// The gap between plate rows (mm) for a bed `min`..`max` whose sheet reaches `overhang`
+/// past it: the sheet in front of the plate, its strip and name line with their clearances,
+/// and the sheet behind the next row's plate.
+pub fn row_gap(min: Vec2, max: Vec2, overhang: Overhang) -> f32 {
+    overhang.front + overhang.back + (DEPTH + NEXT_CLEAR) * factor(min, max)
+}
+
+/// How far in front of the plate's printable area its labels reach (mm), for framing.
+pub fn reach(min: Vec2, max: Vec2, overhang: Overhang) -> f32 {
+    overhang.front + DEPTH * factor(min, max)
+}
+
 /// The ground rectangles (`[x0, y0, x1, y1]`, world mm) of a plate's strip and name line,
-/// for the plate's bed corners `min` (front-left) and `max`.
-fn strip_rect(min: Vec2, max: Vec2) -> [f32; 4] {
+/// for the plate's bed corners `min` (front-left) and `max` and its sheet's `front`
+/// overhang.
+fn strip_rect(min: Vec2, max: Vec2, front: f32) -> [f32; 4] {
     let f = factor(min, max);
-    let y1 = min.y - STRIP_OFFSET * f;
+    let y1 = min.y - front - SHEET_CLEAR * f;
     [min.x, y1 - STRIP_H * f, max.x, y1]
 }
-fn name_line_rect(min: Vec2, max: Vec2) -> [f32; 4] {
+fn name_line_rect(min: Vec2, max: Vec2, front: f32) -> [f32; 4] {
     let f = factor(min, max);
-    let y1 = strip_rect(min, max)[1] - LINE_GAP * f;
-    [min.x + PAD * f, min.y - DEPTH * f, max.x - PAD * f, y1]
+    let y1 = strip_rect(min, max, front)[1] - LINE_GAP * f;
+    [
+        min.x + PAD * f,
+        min.y - front - DEPTH * f,
+        max.x - PAD * f,
+        y1,
+    ]
 }
 
 /// The icon squares on the right of the strip, left to right.
-fn tool_rects(min: Vec2, max: Vec2) -> Vec<[f32; 4]> {
+fn tool_rects(min: Vec2, max: Vec2, front: f32) -> Vec<[f32; 4]> {
     let f = factor(min, max);
-    let [_, y0, x1, y1] = strip_rect(min, max);
+    let [_, y0, x1, y1] = strip_rect(min, max, front);
     let (cy, n) = ((y0 + y1) / 2., PlateTool::ALL.len());
     (0..n)
         .map(|k| {
@@ -174,7 +196,7 @@ fn tool_rects(min: Vec2, max: Vec2) -> Vec<[f32; 4]> {
 /// How wide (in name-line heights) the name may be: the line less its pencil.
 fn name_max_width(min: Vec2, max: Vec2) -> f32 {
     let f = factor(min, max);
-    let [x0, _, x1, _] = name_line_rect(min, max);
+    let [x0, _, x1, _] = name_line_rect(min, max, 0.);
     ((x1 - x0) / f - NAME_H * 1.1) / NAME_H
 }
 
@@ -581,6 +603,7 @@ pub fn layout(
     }
     let mut used = vec![];
     let (min, max) = (bed.min.truncate(), bed.max.truncate());
+    let front = bed.overhang().front;
     let f = factor(min, max);
     let name_max = name_max_width(min, max);
     let quad = |rect: [f32; 4]| -> Option<[Pos2; 4]> {
@@ -594,8 +617,8 @@ pub fn layout(
     };
     for plate in plates {
         let (o_min, o_max) = (min + plate.origin, max + plate.origin);
-        let strip = strip_rect(o_min, o_max);
-        let line = name_line_rect(o_min, o_max);
+        let strip = strip_rect(o_min, o_max, front);
+        let line = name_line_rect(o_min, o_max, front);
         let Some(strip_q) = quad(strip) else {
             continue;
         };
@@ -606,15 +629,25 @@ pub fn layout(
         if !view.intersects(all) {
             continue;
         }
-        // Screen points per unit, through the strip's middle (foreshortened).
-        let mid = (strip[0] + strip[2]) / 2.;
-        let (Some(a), Some(b)) = (
-            project(Vec3::new(mid, strip[1], 0.)),
-            project(Vec3::new(mid, strip[3], 0.)),
-        ) else {
+        // Screen points per unit (foreshortened): across the strip where it is largest in
+        // view, so a strip reaching off screen reads as its visible part does.
+        let across = |k: usize| {
+            let x = strip[0] + (strip[2] - strip[0]) * k as f32 / 4.;
+            let a = project(Vec3::new(x, strip[1], 0.))?;
+            let b = project(Vec3::new(x, strip[3], 0.))?;
+            Some((view.contains(a) || view.contains(b), a.distance(b)))
+        };
+        let samples: Vec<(bool, f32)> = (0..=4).filter_map(across).collect();
+        let in_view = samples
+            .iter()
+            .filter(|(seen, _)| *seen)
+            .map(|(_, d)| *d)
+            .reduce(f32::max);
+        // None in view: through the middle.
+        let Some(span) = in_view.or_else(|| across(2).map(|(_, d)| d)) else {
             continue;
         };
-        let unit_px = a.distance(b) / STRIP_H;
+        let unit_px = span / STRIP_H;
         let show_name = NAME_H * unit_px >= NAME_MIN_PX;
         let show_tools = show_name && options.tools && ICON * unit_px >= ICON_MIN_PX;
         let (number, name) = texts(plate);
@@ -651,7 +684,7 @@ pub fn layout(
         if !show_name {
             // Zoomed out too far for the name line: only the number, grown into the room of
             // the strip and the name line so the plates stay told apart.
-            let h = (NUMBER_TARGET_PX / unit_px).clamp(BADGE_H, DEPTH - STRIP_OFFSET);
+            let h = (NUMBER_TARGET_PX / unit_px).clamp(BADGE_H, DEPTH - SHEET_CLEAR);
             if h * unit_px >= NUMBER_MIN_PX {
                 let [x0, _, _, y1] = strip;
                 let rect = [x0, y1 - h * f, x0 + aspect * h * f, y1];
@@ -697,7 +730,10 @@ pub fn layout(
         }
         // The tools on its right.
         if show_tools {
-            for (tool, rect) in PlateTool::ALL.into_iter().zip(tool_rects(o_min, o_max)) {
+            for (tool, rect) in PlateTool::ALL
+                .into_iter()
+                .zip(tool_rects(o_min, o_max, front))
+            {
                 let image = cache.image(ctx, &mut used, Content::Icon(tool.icon(plate.locked)));
                 push(
                     TagKind::Tool(tool),
@@ -798,31 +834,45 @@ mod tests {
         }
     }
 
-    /// On the common beds (U1 270 × 270, CORE One 250 × 220, XL 360 × 360) the strip and the
-    /// name line lie in the gap in front of the plate, across its width, clearly nearer the
-    /// plate than the next row's back edge.
+    /// The common beds with their sheets' overhang (front, back; from the pinned bed models):
+    /// U1 270 × 270, CORE One 250 × 220, XL 360 × 360.
+    const BEDS: [(f32, f32, f32, f32); 3] = [
+        (270., 270., 11.5, 11.5),
+        (250., 220., 13.3, 35.7),
+        (360., 360., 13.3, 7.5),
+    ];
+
+    /// The strip and the name line lie on the ground between the plate's sheet and the next
+    /// row's sheet, across the plate's width, clear of both and clearly nearer their own.
     #[test]
-    fn strip_and_name_line_sit_in_the_front_half_of_the_gap() {
-        for (w, d) in [(270., 270.), (250., 220.), (360., 360.)] {
+    fn strip_and_name_line_sit_between_the_sheets_nearer_their_own() {
+        for (w, d, front, back) in BEDS {
             let (min, max) = (Vec2::ZERO, Vec2::new(w, d));
-            let gap = d / crate::plates::GAP_DIVISOR;
-            let s = strip_rect(min, max);
-            let n = name_line_rect(min, max);
-            // In front of the plate, with a clear distance from its edge.
-            assert!(s[3] < 0. && -s[3] >= 0.01 * d, "{w}×{d}: {s:?}");
-            // The name line in front of the strip, not overlapping it.
+            let overhang = Overhang {
+                front,
+                back,
+                ..Overhang::default()
+            };
+            let gap = row_gap(min, max, overhang);
+            // Never closer than before (a fifth of the bed), on these beds much wider.
+            assert!(gap > d / crate::plates::GAP_DIVISOR, "{w}×{d}: {gap}");
+            let own_rim = -front;
+            let next_rim = -gap + back;
+            let s = strip_rect(min, max, front);
+            let n = name_line_rect(min, max, front);
+            // In front of the own sheet with a clear distance, the name line in front of the
+            // strip, and ground left before the next row's sheet.
+            let to_own = own_rim - s[3];
+            let to_next = n[1] - next_rim;
+            assert!(to_own > 0.01 * d, "{w}×{d}: {to_own}");
             assert!(n[3] < s[1], "{w}×{d}");
+            assert!(to_next >= 2.9 * to_own, "{w}×{d}: {to_own} vs {to_next}");
+            assert!((reach(min, max, overhang) + n[1]).abs() < 1e-3);
             // Both across the plate's width, left-aligned.
             assert_eq!((s[0], s[2]), (0., w));
             assert!(n[0] > s[0] && n[2] < s[2]);
-            // Front of the name line: less than half way into the gap, so the labels are
-            // nearer their own plate than the next row (and hug their own: 2.5 units off it).
-            let reach = -n[1];
-            assert!(gap - reach > reach, "{w}×{d}: {reach} of {gap}");
-            assert!(-s[3] < 0.15 * (gap - reach), "{w}×{d}");
-            assert!((reach - DEPTH * factor(min, max)).abs() < 1e-3);
             // The icons fit the strip, right-aligned, and never overlap each other.
-            let t = tool_rects(min, max);
+            let t = tool_rects(min, max, front);
             assert!(t[0][0] > s[0] + 0.5 * w, "{w}×{d}: icons crowd the badge");
             assert!(t.last().unwrap()[2] < s[2]);
             for r in &t {
@@ -838,7 +888,7 @@ mod tests {
     fn the_name_and_pencil_fit_the_plate_width() {
         let (min, max) = (Vec2::ZERO, Vec2::new(270., 270.));
         let f = factor(min, max);
-        let n = name_line_rect(min, max);
+        let n = name_line_rect(min, max, 0.);
         let widest = n[0] + name_max_width(min, max) * NAME_H * f;
         // The pencil (0.3 + NAME_H units) still ends inside the line.
         assert!(widest + (0.3 + NAME_H) * f <= n[2] + 1e-3);
@@ -914,7 +964,7 @@ mod tests {
     fn the_pointer_hits_the_icon_under_it() {
         let ctx = ctx();
         let (min, max) = (Vec2::ZERO, Vec2::new(270., 270.));
-        let rects = tool_rects(min, max);
+        let rects = tool_rects(min, max, 0.);
         for (tool, r) in PlateTool::ALL.into_iter().zip(&rects) {
             let centre = Vec2::new((r[0] + r[2]) / 2., (r[1] + r[3]) / 2.);
             let tags = top_view(&ctx, 3., Some(centre), None);
@@ -945,7 +995,7 @@ mod tests {
         let ctx = ctx();
         let long = "A very long plate name that goes on and on past the edge of the plate";
         let tags = top_view(&ctx, 3., None, Some(long));
-        let line = name_line_rect(Vec2::ZERO, Vec2::new(270., 270.));
+        let line = name_line_rect(Vec2::ZERO, Vec2::new(270., 270.), 0.);
         let name = tags
             .iter()
             .find(|t| t.plate == 0 && t.kind == TagKind::Name)
@@ -979,8 +1029,8 @@ mod tests {
         assert!(!tools(&k) && k.contains(&TagKind::Name) && k.contains(&TagKind::Rename));
         let k = at(NAME_MIN_PX / NAME_H * 0.95);
         assert_eq!(k, vec![TagKind::Number], "only a grown number");
-        let k = at(NUMBER_MIN_PX / (DEPTH - STRIP_OFFSET));
+        let k = at(NUMBER_MIN_PX / (DEPTH - SHEET_CLEAR));
         assert_eq!(k, vec![TagKind::Number]);
-        assert!(at(NUMBER_MIN_PX / (DEPTH - STRIP_OFFSET) * 0.9).is_empty());
+        assert!(at(NUMBER_MIN_PX / (DEPTH - SHEET_CLEAR) * 0.9).is_empty());
     }
 }

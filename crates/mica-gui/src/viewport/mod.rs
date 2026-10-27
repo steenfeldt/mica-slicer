@@ -574,7 +574,14 @@ impl Viewport {
                 .iter()
                 .find(|p| p.current)
                 .map_or(Vec2::ZERO, |p| p.origin);
-            plates::plate_bounds(bed, origin)
+            let (mut min, max) = plates::plate_bounds(bed, origin);
+            if plates.len() > 1 {
+                // The plate's strip and name line in front of it are part of the plate, with
+                // some ground below them so the plate bar at the bottom leaves them free.
+                let (lo, hi) = (bed.min.truncate(), bed.max.truncate());
+                min.y -= plate_tags::reach(lo, hi, bed.overhang()) + 0.22 * (hi.y - lo.y);
+            }
+            (min, max)
         };
         // Fit the plate footprint plus a third of the height so the bed fills the view.
         self.camera.fit(min, max.with_z(max.z * 0.35), aspect);

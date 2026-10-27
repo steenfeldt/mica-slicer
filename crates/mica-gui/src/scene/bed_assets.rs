@@ -16,6 +16,8 @@
 // inverted for the dark theme.
 // Changes: The home folder comes from mica_core::user_data (none in tests and test tools).
 // Changes: Also the Orca subset a packaged Mica ships and the Prusa assets it downloaded.
+// Changes: The sheet's overhang past the printable area (Mica's), so plate rows leave room
+// for the sheets and the plate strips between them.
 
 //! The printer's real bed sheet: PrusaSlicer and OrcaSlicer ship a bed model (`*_bed.stl`)
 //! and a texture (`*.svg`) per printer model. Mica reads them from those installations (or
@@ -282,6 +284,53 @@ pub fn model_offset_for(mesh: &TriangleMesh, bed_min: Vec2, bed_max: Vec2) -> Ve
     offset
 }
 
+/// How far the drawn bed sheet reaches past the printable area's bounding box on each side
+/// (mm, never negative). Zero without a bed model (the flat bed then is the printable area).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Overhang {
+    pub left: f32,
+    /// Towards −Y.
+    pub front: f32,
+    pub right: f32,
+    pub back: f32,
+}
+
+/// The sheet's overhang for `model` placed on the bed `bed_min`..`bed_max` (as the renderer
+/// places it); read once per model and bed size, then cached.
+pub fn overhang(model: Option<&Path>, bed_min: Vec2, bed_max: Vec2) -> Overhang {
+    use std::collections::HashMap;
+    use std::sync::{Mutex, OnceLock};
+    type Key = (PathBuf, [u32; 4]);
+    static CACHE: OnceLock<Mutex<HashMap<Key, Overhang>>> = OnceLock::new();
+    let Some(model) = model else {
+        return Overhang::default();
+    };
+    let key = (
+        model.to_path_buf(),
+        [bed_min.x, bed_min.y, bed_max.x, bed_max.y].map(f32::to_bits),
+    );
+    let cache = CACHE.get_or_init(Default::default);
+    if let Some(o) = cache.lock().ok().and_then(|c| c.get(&key).copied()) {
+        return o;
+    }
+    let o = load_model(model, bed_min, bed_max).map_or_else(
+        |_| Overhang::default(),
+        |mesh| {
+            let (lo, hi) = mesh.bounds();
+            Overhang {
+                left: (bed_min.x - lo[0]).max(0.),
+                front: (bed_min.y - lo[1]).max(0.),
+                right: (hi[0] - bed_max.x).max(0.),
+                back: (hi[1] - bed_max.y).max(0.),
+            }
+        },
+    );
+    if let Ok(mut c) = cache.lock() {
+        c.insert(key, o);
+    }
+    o
+}
+
 /// The bed model mesh in printer coordinates (already moved by `model_offset_for`).
 pub fn load_model(path: &Path, bed_min: Vec2, bed_max: Vec2) -> Result<TriangleMesh, String> {
     let mut mesh = TriangleMesh::load_stl(path).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -506,5 +555,14 @@ mod tests {
         // The sheet is centred on the bed and a few millimetres thick.
         assert!((lo[0] + hi[0]) * 0.5 > 100. && (lo[0] + hi[0]) * 0.5 < 150.);
         assert!(hi[2] - lo[2] < 40.);
+        // It reaches past the printable area: 13 mm in front, its tabs 36 mm behind.
+        let o = overhang(files.model.as_deref(), Vec2::ZERO, Vec2::new(250., 220.));
+        assert!((o.front - 13.3).abs() < 0.5, "{o:?}");
+        assert!((o.back - 35.7).abs() < 0.5, "{o:?}");
+        assert!(
+            o.left > 0. && o.left < 5. && o.right > 0. && o.right < 5.,
+            "{o:?}"
+        );
+        assert_eq!(overhang(None, Vec2::ZERO, Vec2::ONE), Overhang::default());
     }
 }

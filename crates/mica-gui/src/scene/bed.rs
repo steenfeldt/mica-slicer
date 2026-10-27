@@ -106,6 +106,14 @@ impl Bed {
         let [x, y] = self.placement;
         Vec3::new(x, y, (self.min.z + self.max.z) * 0.5)
     }
+    /// How far the drawn bed sheet reaches past the printable area (`bed_assets::overhang`).
+    pub fn overhang(&self) -> super::bed_assets::Overhang {
+        super::bed_assets::overhang(
+            self.assets.model.as_deref(),
+            self.min.truncate(),
+            self.max.truncate(),
+        )
+    }
     pub fn size(&self) -> Vec2 {
         (self.max - self.min).truncate()
     }

@@ -670,7 +670,8 @@ impl App {
         // and the old `system` value both resolve to dark).
         let mode = theme::Choice::from_name(&prefs.theme).resolve(ctx.system_theme());
         theme::apply(ctx, mode);
-        let plates = Plates::new(bed.max - bed.min);
+        let mut plates = Plates::new(bed.max - bed.min);
+        plates.set_bed(&bed);
         let mut viewport = Viewport::new(Camera::looking_at(
             bed.center(),
             (bed.max - bed.min).max_element() * 1.25,
@@ -892,7 +893,7 @@ impl App {
     ) {
         use crate::preview::layer_gcode::Edit;
         if self.plates.current().locked {
-            self.status = "This plate is locked; unlock it from its plate label".into();
+            self.status = "This plate is locked; unlock it with the lock on its plate strip or from the plate menu".into();
             return;
         }
         let label = match &edit {
@@ -2524,6 +2525,7 @@ impl App {
         self.cancel_batch();
         self.pending_slice = None;
         self.plates = Plates::new(self.bed.max - self.bed.min);
+        self.plates.set_bed(&self.bed);
         self.selected = None;
         self.multi.clear();
         self.sub = None;
@@ -2763,7 +2765,7 @@ impl App {
     /// Edits on a locked plate are refused with a hint.
     pub(crate) fn plate_locked(&mut self) -> bool {
         if self.plates.current().locked {
-            self.status = "This plate is locked; unlock it from its plate label".into();
+            self.status = "This plate is locked; unlock it with the lock on its plate strip or from the plate menu".into();
             true
         } else {
             false
@@ -3837,7 +3839,7 @@ impl App {
             Action::Arrange if !busy => self.arrange(),
             Action::PlateArrange(i) if !busy => {
                 if i < self.plates.len() && self.plates.plate(i).locked {
-                    self.status = "This plate is locked; unlock it from its plate label".into();
+                    self.status = "This plate is locked; unlock it with the lock on its plate strip or from the plate menu".into();
                 } else if i < self.plates.len() {
                     self.record("Arrange");
                     if i != self.plates.current {

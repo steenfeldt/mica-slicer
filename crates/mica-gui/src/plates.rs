@@ -4,7 +4,9 @@
 //! The project's plates, as in OrcaSlicer: a project has several plates, each with its own
 //! objects, optional setting overrides and slice result. Object positions are stored in
 //! **plate-local** coordinates (the plate's bed at the origin); `Plates::offset` gives the
-//! world offset of a plate for drawing them side by side.
+//! world offset of a plate for drawing them side by side. That spacing is the window's own:
+//! a project file stores its plates on OrcaSlicer's grid (`mica_core::input::grid_origin`,
+//! used by the importer and by `save`), independent of it.
 //!
 //! The viewport consumes this through [`crate::scene::plates::PlateLayout`]:
 //! `count`, `current` and `origin(i)`; `plates.offset(i)` is the same origin as a `Vec3`.
@@ -15,8 +17,9 @@ use crate::worker::Finished;
 use glam::{Vec2, Vec3};
 use std::collections::BTreeMap;
 
-/// Gap between neighbouring plates: the bed size divided by this (OrcaSlicer's
-/// `LOGICAL_PART_PLATE_GAP`, a fifth), far enough apart that each plate reads as its own.
+/// The smallest gap between neighbouring plates on screen: the bed size divided by this.
+/// Display only: the 3MF grid is `mica_core::input::grid_origin`, not this. Rows are spaced
+/// wider where the bed sheets and the plate strips need it (`Plates::set_bed`).
 pub const GAP_DIVISOR: f32 = 5.;
 
 static NEXT_PLATE_ID: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
@@ -231,6 +234,8 @@ pub struct Plates {
     pub current: usize,
     /// Bed size used to space plates; updated when the printer changes.
     pub bed_size: Vec3,
+    /// Gap between neighbouring plates on screen (mm, x between columns, y between rows).
+    pub gap: Vec2,
 }
 
 impl PlateLayout for Plates {
@@ -266,11 +271,24 @@ impl Plates {
             plates: vec![Plate::new("Plate 1")],
             current: 0,
             bed_size,
+            gap: bed_size.truncate() / GAP_DIVISOR,
         }
     }
 
+    /// Spaces the plates for `bed`: columns a fifth of the bed apart (wider if the drawn
+    /// sheets would touch), rows wide enough for the sheets' overhang in front and behind
+    /// and each plate's strip and name line between them (`plate_tags::row_gap`).
     pub fn set_bed(&mut self, bed: &Bed) {
         self.bed_size = bed.max - bed.min;
+        let (min, max) = (bed.min.truncate(), bed.max.truncate());
+        let o = bed.overhang();
+        let least = self.bed_size.truncate() / GAP_DIVISOR;
+        self.gap = Vec2::new(
+            least.x.max(o.left + o.right + least.x * 0.25),
+            least
+                .y
+                .max(crate::viewport::plate_tags::row_gap(min, max, o)),
+        );
     }
 
     pub fn len(&self) -> usize {
@@ -305,13 +323,7 @@ impl Plates {
     }
     /// World offset of plate `i`: plates fill rows left to right, then the next row behind.
     pub fn offset(&self, i: usize) -> Vec3 {
-        grid_origin(
-            i,
-            self.columns(),
-            self.bed_size.truncate(),
-            self.bed_size.truncate() / GAP_DIVISOR,
-        )
-        .extend(0.)
+        grid_origin(i, self.columns(), self.bed_size.truncate(), self.gap).extend(0.)
     }
 
     /// Objects of plate `i` moved to world coordinates (for drawing all plates at once).

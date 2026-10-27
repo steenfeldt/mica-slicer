@@ -903,7 +903,7 @@ impl App {
     /// brim fit on the bed, as one undo step. Never done without being asked.
     pub(crate) fn move_inside(&mut self, i: usize, k: usize) -> bool {
         if self.plates.plate(i).locked {
-            self.status = "This plate is locked; unlock it from its plate label".into();
+            self.status = "This plate is locked; unlock it with the lock on its plate strip or from the plate menu".into();
             return false;
         }
         let Some([dx, dy]) = self.move_inside_shift(i, k) else {
@@ -933,7 +933,7 @@ impl App {
     /// Never done without being asked; refused on a locked plate.
     pub(crate) fn scale_to_fit(&mut self, i: usize, k: usize) -> bool {
         if self.plates.plate(i).locked {
-            self.status = "This plate is locked; unlock it from its plate label".into();
+            self.status = "This plate is locked; unlock it with the lock on its plate strip or from the plate menu".into();
             return false;
         }
         let Some(s) = self

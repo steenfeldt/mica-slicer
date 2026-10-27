@@ -2178,6 +2178,45 @@ mod tests {
         }
     }
 
+    /// A multi-plate Orca project saves every instance at its stored coordinates.
+    #[test]
+    fn a_multi_plate_orca_project_saves_with_the_same_coordinates() {
+        // The 3MF grid is `mica_core::input::grid_origin` (Orca's), whatever spacing the
+        // window shows the plates with (`plates::Plates::offset`): every instance keeps its
+        // stored transform.
+        let ctx = egui::Context::default();
+        let mut a = app(&ctx);
+        open(&mut a, "plates-orca.3mf");
+        a.use_project_settings();
+        assert_eq!(a.plates.len(), 2);
+        let transforms = |p: &mica_core::threemf::Project| {
+            let mut t: Vec<(String, [[f64; 4]; 3])> = p
+                .objects
+                .iter()
+                .flat_map(|o| o.instances.iter().map(|i| (o.name.clone(), i.transform.0)))
+                .collect();
+            t.sort_by(|x, y| x.0.cmp(&y.0));
+            t
+        };
+        let original =
+            transforms(&mica_core::threemf::load_3mf(models().join("plates-orca.3mf")).unwrap());
+        let path = temp("plates-orca-again.3mf");
+        a.save_project_to(&path, Flavour::Orca).unwrap();
+        let saved = transforms(&mica_core::threemf::load_3mf(&path).unwrap());
+        assert_eq!(original.len(), saved.len());
+        for ((na, ta), (nb, tb)) in original.iter().zip(&saved) {
+            assert_eq!(na, nb);
+            for (ra, rb) in ta.iter().zip(tb) {
+                for (x, y) in ra.iter().zip(rb) {
+                    assert!((x - y).abs() < 1e-4, "{na}: {ta:?} became {tb:?}");
+                }
+            }
+        }
+        // And reopened, the scene is the same.
+        let b = reopen(&ctx, &path, None);
+        same_scene(&a, &b);
+    }
+
     /// Plate names and plate order (after a rename and a move) come back from a project in
     /// both flavours; an unnamed plate is stored without a name (Orca's empty `plater_name`)
     /// and is numbered by its position again.

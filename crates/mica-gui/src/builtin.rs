@@ -115,7 +115,7 @@ impl App {
         label: Option<&str>,
     ) -> Result<String, String> {
         if self.plates.current().locked {
-            return Err("this plate is locked; unlock it from its plate label".into());
+            return Err("this plate is locked; unlock it with the lock on its plate strip or from the plate menu".into());
         }
         let target = match add_as.part_kind() {
             Some(_) => Some(self.selected.ok_or(
