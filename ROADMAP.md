@@ -64,6 +64,10 @@ The command line (`mica slice`) and the app produce the same G-code byte for byt
 - PrusaSlicer- and OrcaSlicer-compatible post-processing scripts.
 - Paint-on ironing, a named color library, and opening Snapmaker's mixed colors.
 - Syncing settings between computers (printer secrets never sync).
+- Getting models from websites: drop a download link onto Mica, or open a model that just
+  arrived in Downloads from the Library. Later, as an opt-in setting that is off by default,
+  Mica can also open the "open in slicer" links of sites such as Printables, MakerWorld and
+  Thingiverse.
 
 ## Not supported yet
 
