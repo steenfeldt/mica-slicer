@@ -2,7 +2,7 @@
 // Provenance: original
 
 //! Preview's plate list: with two or more plates, a column at the 3D view's left edge with one
-//! row per plate (its number and name, its slice status as a mark and a few words,
+//! row per plate (its picture, its number and name, its slice status as a mark and a few words,
 //! a warning marker) under a header with how many are sliced and what the sliced plates add up
 //! to ("all 15 sliced", "72 h 10 min · 2.31 kg"). Clicking the header opens the project
 //! summary beside the list (`summary_panel`). The plate shown is highlighted; a click shows
@@ -12,6 +12,7 @@
 
 use super::{Action, Scene, Viewport};
 use crate::plate_batch::{PlateStatus, status_mark};
+use crate::plate_thumbs::Thumb;
 use crate::project_summary::ProjectSummary;
 use crate::scene::plates::Plate;
 use crate::theme;
@@ -28,7 +29,9 @@ pub struct PreviewPlatesProbe {
 }
 
 const EDGE: f32 = 14.;
-const ROW_H: f32 = 36.;
+const ROW_H: f32 = 44.;
+/// The plate picture's side.
+const THUMB: f32 = 38.;
 /// The column's widest; narrow views get less.
 const MAX_WIDTH: f32 = 216.;
 
@@ -179,7 +182,8 @@ impl Viewport {
                                         continue;
                                     }
                                     probe.rows.push((plate.index, row));
-                                    draw_row(ui, row, plate, r.hovered());
+                                    let thumb = scene.plate_thumbs.get(plate.index);
+                                    draw_row(ui, row, plate, thumb, r.hovered());
                                     if r.hovered() && !plate.current {
                                         ui.output_mut(|o| {
                                             o.cursor_icon = egui::CursorIcon::PointingHand
@@ -263,7 +267,7 @@ fn header(ui: &egui::Ui, head: Rect, s: &ProjectSummary, hovered: bool) {
 }
 
 /// One row: the status mark, `Plate 3 · Name` over the status words, a warning marker.
-fn draw_row(ui: &egui::Ui, row: Rect, plate: &Plate, hovered: bool) {
+fn draw_row(ui: &egui::Ui, row: Rect, plate: &Plate, thumb: Option<&Thumb>, hovered: bool) {
     let p = theme::of(ui);
     let painter = ui.painter();
     if plate.current {
@@ -284,7 +288,18 @@ fn draw_row(ui: &egui::Ui, row: Rect, plate: &Plate, hovered: bool) {
     } else {
         status_mark(painter, Pos2::new(row.left() + 14., y), &plate.status);
     }
-    let text_left = row.left() + 28.;
+    // The plate's picture (none for an empty plate).
+    let pic = Rect::from_min_size(
+        Pos2::new(row.left() + 26., y - THUMB / 2.),
+        EVec2::splat(THUMB),
+    );
+    let text_left = match thumb {
+        Some(t @ (Thumb::Pending | Thumb::Ready(_))) => {
+            crate::plate_thumbs::paint(painter, pic, t);
+            pic.right() + 6.
+        }
+        _ => row.left() + 28.,
+    };
     let (title, status) = row_text(plate);
     let warn = warns(plate);
     let text_right = row.right() - if warn { 22. } else { 8. };

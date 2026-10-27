@@ -349,6 +349,8 @@ pub struct App {
     pub(crate) finished_request: Option<u64>,
     /// Plates (ids) Slice all still has to do, last first.
     pub(crate) slice_queue: Vec<u64>,
+    /// The plates' small pictures for the plate lists.
+    pub(crate) plate_thumbs: crate::plate_thumbs::PlateThumbs,
     /// Slice all plates (or the slicing before Export all plates / sending all plates) while
     /// it runs (`plate_batch`).
     pub(crate) slice_batch: Option<crate::plate_batch::SliceBatch>,
@@ -717,6 +719,7 @@ impl App {
             slice_requests: 0,
             finished_request: None,
             slice_queue: vec![],
+            plate_thumbs: Default::default(),
             slice_batch: None,
             export_all: None,
             manual_slice: false,
@@ -1510,6 +1513,18 @@ impl App {
 
     /// [`Self::tool_colours`] with each filament's alpha (`#RRGGBBAA` colours of translucent
     /// filaments, from Bambu Studio / OrcaSlicer projects; 255 when the text has none).
+    /// Brings the plate lists' pictures up to date (drawn at once when headless).
+    pub(crate) fn update_plate_thumbs(&mut self, ctx: &egui::Context, colours: &[[u8; 4]]) {
+        let plates: Vec<(u64, &[Object])> = self
+            .plates
+            .plates
+            .iter()
+            .map(|p| (p.id, p.objects.as_slice()))
+            .collect();
+        self.plate_thumbs
+            .update(ctx, &plates, colours, self.headless);
+    }
+
     pub(crate) fn tool_colours_rgba(&self) -> Vec<[u8; 4]> {
         let mine: Vec<Option<[u8; 4]>> = (0..self.tool_count())
             .map(|t| {
@@ -3587,6 +3602,9 @@ impl App {
                 let tool_colors = self.scene_colours_f32();
                 let tool_alphas = self.scene_alphas();
                 let tool_rgba = self.tool_colours_rgba();
+                if !doc && self.plates.len() > 1 {
+                    self.update_plate_thumbs(ui.ctx(), &tool_rgba);
+                }
                 let project_name = self.document_name();
                 let tool_labels: Vec<String> =
                     self.tool_choices().into_iter().map(|c| c.label).collect();
@@ -3783,6 +3801,7 @@ impl App {
                         tool_alphas: &tool_alphas,
                         tool_labels: &tool_labels,
                         tool_rgba: &tool_rgba,
+                        plate_thumbs: if doc { &[] } else { &self.plate_thumbs.list },
                         project_name: &project_name,
                         overlays: &overlays,
                         paint: paint_view,

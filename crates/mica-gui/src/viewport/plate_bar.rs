@@ -489,8 +489,19 @@ fn plate_list(
             details.push("warnings".into());
         }
         let name = plate.name.clone().unwrap_or_else(|| default_name(i));
+        // The plate's picture between its number and its name.
+        let mut name_left = rect.left() + 42.;
+        if let Some(t) = scene.plate_thumbs.get(i)
+            && !matches!(t, crate::plate_thumbs::Thumb::Empty)
+        {
+            let pic = Rect::from_center_size(Pos2::new(rect.left() + 56., y), EVec2::splat(34.));
+            crate::plate_thumbs::paint(painter, pic, t);
+            name_left = pic.right() + 8.;
+        } else if !scene.plate_thumbs.is_empty() {
+            name_left = rect.left() + 81.;
+        }
         let name_rect = Rect::from_min_max(
-            Pos2::new(rect.left() + 42., rect.top()),
+            Pos2::new(name_left, rect.top()),
             Pos2::new(status_left - 8., rect.bottom()),
         );
         let clipped = painter.with_clip_rect(name_rect);

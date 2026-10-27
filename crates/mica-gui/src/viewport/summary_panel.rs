@@ -4,7 +4,7 @@
 //! The project summary card (`crate::project_summary`), opened from the header of Preview's
 //! plate list and drawn beside the list, over the 3D view: the totals of every sliced plate,
 //! the filaments to have on hand (hover a row for the plates using it), the plates as a
-//! timeline in print order (hover a plate for its time, weight and colors; click to
+//! timeline in print order (hover a plate for its time, weight, colors and picture; click to
 //! show it), where the time goes by feature, what is not sliced yet with "Slice the other N",
 //! and Copy summary. It sits beside the plate list because it is about the plates: the right
 //! sidebar stays the current plate's.
@@ -564,28 +564,34 @@ fn timeline(
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
         }
         let clicked = r.clicked();
+        let thumb = scene.plate_thumbs.get(plate.index).cloned();
         r.on_hover_ui(|ui| {
-            ui.vertical(|ui| {
-                ui.label(egui::RichText::new(&plate.title).font(theme::semibold(12.5)));
-                ui.label(format!(
-                    "{} · {} · {}",
-                    duration(plate.time_s),
-                    weight(plate.grams),
-                    tools_text(&plate.tools)
-                ));
-                ui.label(format!(
-                    "Starts after {}, done after {}",
-                    duration(plate.start_s),
-                    duration(plate.start_s + plate.time_s)
-                ));
-                ui.label(
-                    egui::RichText::new(if is_current {
-                        "Shown now"
-                    } else {
-                        "Click to show this plate"
-                    })
-                    .color(p.muted),
-                );
+            ui.horizontal(|ui| {
+                if let Some(t) = thumb.as_ref().and_then(|t| t.texture()) {
+                    ui.add(egui::Image::new(t).fit_to_exact_size(Vec2::splat(64.)));
+                }
+                ui.vertical(|ui| {
+                    ui.label(egui::RichText::new(&plate.title).font(theme::semibold(12.5)));
+                    ui.label(format!(
+                        "{} · {} · {}",
+                        duration(plate.time_s),
+                        weight(plate.grams),
+                        tools_text(&plate.tools)
+                    ));
+                    ui.label(format!(
+                        "Starts after {}, done after {}",
+                        duration(plate.start_s),
+                        duration(plate.start_s + plate.time_s)
+                    ));
+                    ui.label(
+                        egui::RichText::new(if is_current {
+                            "Shown now"
+                        } else {
+                            "Click to show this plate"
+                        })
+                        .color(p.muted),
+                    );
+                });
             });
         });
         if clicked && !is_current {

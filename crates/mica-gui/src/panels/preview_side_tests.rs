@@ -380,6 +380,15 @@ fn the_plate_list_totals_open_the_project_summary() {
         crate::project_summary::weight(one.grams)
     );
     assert!(w.text_at(&expected).is_some(), "the total {expected}");
+    // Every plate with objects has its picture.
+    assert_eq!(w.app.plate_thumbs.list.len(), 3);
+    assert!(
+        w.app
+            .plate_thumbs
+            .list
+            .iter()
+            .all(|t| t.texture().is_some())
+    );
     // The header opens the summary beside the list.
     assert!(!summary_panel::is_open(&w.ctx));
     w.click(header.center());

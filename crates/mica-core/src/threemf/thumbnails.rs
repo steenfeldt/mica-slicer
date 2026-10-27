@@ -12,6 +12,7 @@
 // Changes: extruder; Prusa's 256 px picture of the first bed. Model parts only, flat normals,
 // Changes: colour painting, mixed (virtual) tools, one translucent layer blended over the opaque
 // Changes: scene; no bed, top-view or ID-colour picking pictures. Plates render in parallel.
+// Changes: `plate_picture` draws the Orca plate picture of loose parts for the GUI's plate lists.
 // Upstream attribution (AGPLv3 or higher):
 // Copyright (c) Prusa Research 2018-2023 Enrico Turri, Oleksandra Iushchenko, Tomáš Mészáros,
 // Lukáš Matěna, Vojtěch Bubník, David Kocík, Filip Sykala, Lukáš Hejl, Vojtěch Král.
@@ -130,6 +131,38 @@ pub(super) fn pictures(
     Ok(out)
 }
 
+/// One model part of a plate for [`plate_picture`]: its mesh placed by `transform`, its colour
+/// painting, and its one-based tool.
+pub struct PicturePart<'a> {
+    pub mesh: &'a crate::mesh::TriangleMesh,
+    pub painting: &'a crate::painting::FacetPainting,
+    pub transform: Transform,
+    pub tool: usize,
+}
+
+/// A plate's picture as a saved Orca-flavour project carries it (`Metadata/plate_N.png`: iso
+/// camera, thumbnail-shader lighting, translucent filaments blended), `px` square, straight
+/// RGBA rows, top first; transparent where nothing is drawn. `colours` are the tools' filament
+/// colours in one-based tool order minus one (physical tools, then mixed colours).
+pub fn plate_picture(parts: &[PicturePart], colours: &[[u8; 4]], px: u16) -> Vec<u8> {
+    let palette = Palette {
+        physical: colours.to_vec(),
+        mixes: None,
+        flavour: Flavour::Orca,
+    };
+    let placed: Vec<Placed> = parts
+        .iter()
+        .map(|p| Placed {
+            transform: p.transform,
+            mesh: p.mesh,
+            painting: p.painting,
+            tool: p.tool.max(1),
+            grey: false,
+        })
+        .collect();
+    draw_or_blank(&placed, &palette, px, Camera::Orca, 0.1).0
+}
+
 fn all_instances(p: &Project) -> Vec<(usize, usize)> {
     p.objects
         .iter()
@@ -141,7 +174,8 @@ fn all_instances(p: &Project) -> Vec<(usize, usize)> {
 /// One model part placed by one instance.
 struct Placed<'a> {
     transform: Transform,
-    part: &'a Part,
+    mesh: &'a crate::mesh::TriangleMesh,
+    painting: &'a crate::painting::FacetPainting,
     /// One-based tool of the part (its own `extruder`, else the object's, else 1).
     tool: usize,
     /// PrusaSlicer draws non-printable instances grey.
@@ -166,7 +200,8 @@ fn scene<'a>(p: &'a Project, members: &[(usize, usize)], printable_only: bool) -
         for part in o.parts.iter().filter(|part| part.kind == PartKind::Model) {
             out.push(Placed {
                 transform: inst.transform,
-                part,
+                mesh: &part.mesh,
+                painting: &part.painting,
                 tool: tool(&part.settings).or(tool(&o.settings)).unwrap_or(1),
                 grey: !inst.printable,
             });
@@ -311,8 +346,8 @@ fn draw(
     let mut hi = [f32::NEG_INFINITY; 3];
     // The slicers frame the union of the volumes' `transformed_bounding_box`: each part's own
     // box, placed (so a turned part frames a little loose, as there).
-    for placed in parts.iter().filter(|p| !p.part.mesh.faces.is_empty()) {
-        let (a, b) = placed.part.mesh.bounds();
+    for placed in parts.iter().filter(|p| !p.mesh.faces.is_empty()) {
+        let (a, b) = placed.mesh.bounds();
         for corner in 0..8 {
             let v = std::array::from_fn(|i| if (corner >> i) & 1 == 1 { b[i] } else { a[i] });
             let w = placed.transform.apply(v);
@@ -322,7 +357,7 @@ fn draw(
             }
         }
     }
-    if parts.iter().all(|placed| placed.part.mesh.faces.is_empty()) || lo[0] > hi[0] {
+    if parts.iter().all(|placed| placed.mesh.faces.is_empty()) || lo[0] > hi[0] {
         return Ok((vec![0; n], vec![0; n]));
     }
     let frame = Frame::iso(lo, hi, px, px, camera).map_err(ThreeMfError::Io)?;
@@ -348,7 +383,7 @@ fn draw(
             pixels: vec![Sample::default(); opaque.pixels.len()],
         });
         for placed in parts {
-            let part = placed.part;
+            let part = placed;
             let paint = &part.painting.material;
             if paint.is_empty() {
                 let t = translucent(placed, placed.tool);
@@ -375,7 +410,7 @@ fn draw(
                         .map(|&f| if mirrored { [f[0], f[2], f[1]] } else { f }),
                 );
             } else {
-                paint.visit(&part.mesh, true, |state, t| {
+                paint.visit(part.mesh, true, |state, t| {
                     let base = vertices.len() as u32;
                     for p in t {
                         let v = placed.transform.apply(p.map(|v| v as f32));

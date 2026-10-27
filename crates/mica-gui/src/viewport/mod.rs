@@ -89,6 +89,8 @@ pub struct Scene<'a> {
     pub tool_labels: &'a [String],
     /// The tools' filament colours as swatches show them (with alpha; not lifted for shading).
     pub tool_rgba: &'a [[u8; 4]],
+    /// The plates' small pictures for the plate lists, `plates` order (empty: none).
+    pub plate_thumbs: &'a [crate::plate_thumbs::Thumb],
     /// The project's name, for the copied project summary.
     pub project_name: &'a str,
     /// Painted facets to draw over the objects.

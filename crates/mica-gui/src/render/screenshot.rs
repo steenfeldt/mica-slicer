@@ -512,6 +512,7 @@ async fn render(
                                 tool_alphas: &[],
                                 tool_labels: &[],
                                 tool_rgba: &[],
+                                plate_thumbs: &[],
                                 project_name: "",
                                 overlays: &[],
                                 paint: None,

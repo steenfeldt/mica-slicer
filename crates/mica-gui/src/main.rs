@@ -57,6 +57,7 @@ mod plate_batch;
 mod plate_batch_tests;
 mod plate_menu;
 mod plate_settings;
+mod plate_thumbs;
 mod plates;
 #[cfg(test)]
 mod plates_ui_tests;

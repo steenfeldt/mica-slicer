@@ -19,6 +19,7 @@ mod parse;
 mod ranges;
 mod source;
 mod thumbnails;
+pub use thumbnails::{PicturePart, plate_picture};
 mod tower;
 mod write;
 mod write_config;
