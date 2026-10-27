@@ -2291,7 +2291,8 @@ fn export(
         w.raw("; EXECUTABLE_BLOCK_END");
     }
     w.raw(crate::time_estimate::LAST_M73);
-    let stats = w.stats;
+    let mut stats = w.stats;
+    stats.tool_changes = multi.as_ref().map_or(0, |m| m.changes);
     if !klipper && config.string("gcode_label_objects") == Some("firmware") {
         if let Some(job) = obj.print_job() {
             w.raw(&format!(

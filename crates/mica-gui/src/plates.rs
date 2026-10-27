@@ -204,7 +204,7 @@ impl Plate {
         self.slice_error = None;
         self.epoch += 1;
         if let Some(f) = self.finished.take() {
-            self.previous = Some(f.summary);
+            self.previous = Some(std::sync::Arc::unwrap_or_clone(f.summary));
         }
     }
 

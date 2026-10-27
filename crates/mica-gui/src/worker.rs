@@ -57,7 +57,7 @@ pub struct Finished {
     pub preview: Arc<Preview>,
     pub stats: MoveStats,
     pub binary: bool,
-    pub summary: Summary,
+    pub summary: Arc<Summary>,
     /// The exact prime / wipe tower of the job, when it printed one.
     pub tower: Option<mica_core::wipe_tower::TowerShape>,
     /// Problems the slice reports without failing (PrusaSlicer's sequential collision notice).
@@ -72,6 +72,12 @@ pub struct ToolUsage {
     pub grams: f64,
     pub cost: f64,
     pub filament: String,
+    /// The filament's type (`filament_type`: PLA, PETG, …).
+    pub material: String,
+    /// Of `filament_mm` / `grams`: what the prime or wipe tower took (its purges included), from
+    /// the G-code footer's per-feature lines.
+    pub tower_mm: f64,
+    pub tower_grams: f64,
 }
 
 /// What the summary panel shows after a slice.
@@ -84,6 +90,13 @@ pub struct Summary {
     pub grams: f64,
     pub cost: f64,
     pub tools: Vec<ToolUsage>,
+    /// Tool changes the G-code makes.
+    pub tool_changes: usize,
+    /// The tower's feature name when the print has one ("Prime tower", "Wipe tower").
+    pub tower: Option<String>,
+    /// Seconds per feature, `(legend role slot, seconds)`, scaled to `time_s` as the Preview's
+    /// Color by Feature legend shows them (`legend::feature_time`); travel included.
+    pub features: Vec<(usize, f64)>,
 }
 
 impl Summary {
@@ -104,9 +117,7 @@ impl Summary {
             if mm <= 0. {
                 continue;
             }
-            let d = config.float_at("filament_diameter", tool).unwrap_or(1.75);
-            let cm3 = mm * std::f64::consts::PI * (d / 2.).powi(2) / 1000.;
-            let grams = cm3 * config.float_at("filament_density", tool).unwrap_or(0.);
+            let grams = grams_of(config, tool, mm);
             let cost = grams / 1000. * config.float_at("filament_cost", tool).unwrap_or(0.);
             tools.push(ToolUsage {
                 tool,
@@ -118,9 +129,15 @@ impl Summary {
                     .or_else(|| names.first())
                     .cloned()
                     .unwrap_or_default(),
+                material: config
+                    .string_at("filament_type", tool)
+                    .unwrap_or_default()
+                    .to_string(),
+                ..Default::default()
             });
         }
         Self {
+            tool_changes: stats.tool_changes,
             time_s: stats.time_s,
             silent_time_s: stats.silent_time_s,
             layers,
@@ -128,8 +145,72 @@ impl Summary {
             grams: tools.iter().map(|t| t.grams).sum(),
             cost: tools.iter().map(|t| t.cost).sum(),
             tools,
+            ..Default::default()
         }
     }
+
+    /// Adds what the tower took per tool (`tower_filament`), weighed like the tools' totals.
+    pub fn add_tower(&mut self, tower: &TowerFilament, config: &Config) {
+        if tower.per_tool.iter().all(|(_, mm)| *mm <= 0.) {
+            return;
+        }
+        self.tower = Some(tower.name.clone());
+        for &(tool, mm) in &tower.per_tool {
+            if let Some(t) = self.tools.iter_mut().find(|t| t.tool == tool) {
+                t.tower_mm += mm;
+                t.tower_grams += grams_of(config, tool, mm);
+            }
+        }
+    }
+}
+
+/// Grams of `mm` of tool `tool`'s filament (its diameter and density).
+fn grams_of(config: &Config, tool: usize, mm: f64) -> f64 {
+    let d = config.float_at("filament_diameter", tool).unwrap_or(1.75);
+    let cm3 = mm * std::f64::consts::PI * (d / 2.).powi(2) / 1000.;
+    cm3 * config.float_at("filament_density", tool).unwrap_or(0.)
+}
+
+/// The prime / wipe tower's filament per tool, from the footer's per-feature lines
+/// (`; filament used T1 [Prime tower] [mm] = …`).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TowerFilament {
+    pub name: String,
+    pub per_tool: Vec<(usize, f64)>,
+}
+
+pub fn tower_filament(gcode_tail: &str) -> TowerFilament {
+    let mut out = TowerFilament::default();
+    for line in gcode_tail.lines() {
+        let Some(rest) = line.strip_prefix("; filament used T") else {
+            continue;
+        };
+        let Some((tool, rest)) = rest.split_once(' ') else {
+            continue;
+        };
+        let Ok(tool) = tool.parse::<usize>() else {
+            continue;
+        };
+        let Some(role) = rest
+            .strip_prefix('[')
+            .and_then(|r| r.split_once("] [mm] = "))
+        else {
+            continue;
+        };
+        let (name, value) = role;
+        if !matches!(name, "Prime tower" | "Wipe tower") {
+            continue;
+        }
+        let Ok(mm) = value.trim().parse::<f64>() else {
+            continue;
+        };
+        out.name = name.to_string();
+        match out.per_tool.iter_mut().find(|(t, _)| *t == tool) {
+            Some((_, m)) => *m += mm,
+            None => out.per_tool.push((tool, mm)),
+        }
+    }
+    out
 }
 
 /// Per-tool filament from the G-code footer. Exact `T<n> [mm]` totals win; otherwise the
@@ -782,8 +863,14 @@ fn finish<S: LayerSource>(
         );
     }
     check(cancel)?;
-    let per_tool = per_tool_filament(&gcode_tail(&text_path), stats.filament_mm);
-    let summary = Summary::compute(stats, preview.layers.len(), &per_tool, config);
+    let tail = gcode_tail(&text_path);
+    let per_tool = per_tool_filament(&tail, stats.filament_mm);
+    let mut summary = Summary::compute(stats, preview.layers.len(), &per_tool, config);
+    summary.add_tower(&tower_filament(&tail), config);
+    summary.features = (0..preview.stats.roles.len())
+        .filter(|&r| preview.stats.roles[r].count > 0)
+        .map(|r| (r, crate::preview::legend::feature_time(&preview, r).0))
+        .collect();
     let tower = source
         .source
         .print_job()
@@ -794,7 +881,7 @@ fn finish<S: LayerSource>(
         preview: Arc::new(preview),
         stats,
         binary,
-        summary,
+        summary: Arc::new(summary),
         tower,
         warnings,
     })
@@ -1570,6 +1657,30 @@ mod tests {
         let exact = "; filament used T1 [Perimeter] [mm] = 5\n; filament used T1 [mm] = 42\n";
         assert_eq!(per_tool_filament(exact, 42.), vec![(1, 42.)]);
         assert_eq!(per_tool_filament("; nothing\n", 7.), vec![(0, 7.)]);
+        // The tower's share per tool from the per-feature lines, weighed per tool.
+        let tail = "; filament used T0 [Perimeter] [mm] = 900\n; filament used T0 [Prime tower] [mm] = 100\n; filament used T1 [Prime tower] [mm] = 50.5\n; filament used T1 [mm] = 1000\n";
+        let tower = tower_filament(tail);
+        assert_eq!(tower.name, "Prime tower");
+        assert_eq!(tower.per_tool, vec![(0, 100.), (1, 50.5)]);
+        let mut s = Summary::compute(
+            MoveStats {
+                tool_changes: 12,
+                ..stats
+            },
+            100,
+            &per_tool,
+            &c,
+        );
+        assert_eq!(s.tool_changes, 12);
+        assert_eq!(s.tools[0].material, "PLA");
+        s.add_tower(&tower, &c);
+        assert_eq!(s.tower.as_deref(), Some("Prime tower"));
+        assert!((s.tools[0].tower_grams - 5.965 / 20.).abs() < 0.001);
+        assert_eq!(s.tools[1].tower_mm, 50.5);
+        assert_eq!(
+            tower_filament("; filament used T0 [Perimeter] [mm] = 3\n").per_tool,
+            []
+        );
     }
     #[test]
     fn warnings_cover_bed_height_and_overlap() {

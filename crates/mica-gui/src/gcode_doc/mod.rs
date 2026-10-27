@@ -405,6 +405,7 @@ pub fn summary(scan: &Scan, parsed: &parse::Parsed, layers: usize, time_s: f64) 
                 grams: exact.or(listed).unwrap_or_else(estimated),
                 cost: 0.,
                 filament: names.get(tool).cloned().unwrap_or_default(),
+                ..Default::default()
             }
         })
         .collect();
@@ -426,6 +427,7 @@ pub fn summary(scan: &Scan, parsed: &parse::Parsed, layers: usize, time_s: f64) 
         grams,
         cost,
         tools,
+        ..Default::default()
     }
 }
 
@@ -623,7 +625,7 @@ impl Loaded {
                 preview: Arc::new(parsed_preview),
                 stats,
                 binary,
-                summary,
+                summary: Arc::new(summary),
                 tower: None,
                 warnings: Vec::new(),
             },

@@ -755,6 +755,7 @@ fn item_row(
             time_s: 0.,
             grams: 0.,
             filament_mm: 0.,
+            summary: Default::default(),
         },
         ItemState::Failed(_) => PlateStatus::Failed {
             short: String::new(),

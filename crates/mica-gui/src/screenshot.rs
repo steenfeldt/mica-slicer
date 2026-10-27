@@ -2368,7 +2368,13 @@ fn run_command(app: &mut App, cmd: &str, ctx: &egui::Context) -> Result<(), Stri
                 wait_batch(app, ctx);
                 app.preview = false;
             }
-            eprintln!("Plates: {:?}", app.plate_statuses());
+            eprintln!(
+                "Plates: {:?}",
+                app.plate_statuses()
+                    .iter()
+                    .map(|s| s.text())
+                    .collect::<Vec<_>>()
+            );
             return Ok(());
         }
         "slice-menu" | "export-menu" => {

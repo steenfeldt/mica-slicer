@@ -905,6 +905,7 @@ fn statuses_read_without_color() {
         time_s: 38. * 60.,
         grams: 11.62,
         filament_mm: 3900.,
+        summary: Default::default(),
     };
     assert_eq!(s.text(), "38 min · 11.6 g");
     let t = Totals::of(&[

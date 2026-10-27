@@ -113,6 +113,9 @@ pub struct MoveStats {
     pub silent_time_s: Option<f64>,
     pub first_layer_time_s: f64,
     pub silent_first_layer_time_s: Option<f64>,
+    /// Tool changes the print makes (Orca's `total filament change` footer line counts the
+    /// same); 0 for a single-tool print.
+    pub tool_changes: usize,
 }
 
 use crate::Flavor;

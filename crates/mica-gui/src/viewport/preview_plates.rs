@@ -285,6 +285,7 @@ mod tests {
                 time_s: 38. * 60.,
                 grams: 11.6,
                 filament_mm: 3850.,
+                summary: Default::default(),
             },
         );
         a.name = Some("Brackets".into());

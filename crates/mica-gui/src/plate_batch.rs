@@ -12,9 +12,10 @@
 
 use crate::app::App;
 use crate::slice_cache::Fit;
+use crate::worker::Summary;
 use eframe::egui;
 use std::path::PathBuf;
-use std::sync::mpsc;
+use std::sync::{Arc, mpsc};
 
 /// Where a plate's slice stands.
 #[derive(Clone, Debug, PartialEq)]
@@ -32,6 +33,9 @@ pub enum PlateStatus {
         time_s: f64,
         grams: f64,
         filament_mm: f64,
+        /// The whole slice summary (per tool, tool changes, tower, per feature): the project
+        /// summary adds these up.
+        summary: Arc<Summary>,
     },
     /// Sliced before, changed since.
     Outdated,
@@ -72,6 +76,7 @@ impl PlateStatus {
                 time_s,
                 grams,
                 filament_mm,
+                ..
             } => format!(
                 "Sliced and up to date: {} · {} · {:.2} m of filament",
                 crate::panels::duration(*time_s),
@@ -178,6 +183,7 @@ impl Totals {
                 time_s,
                 grams,
                 filament_mm,
+                ..
             } = s
             {
                 t.sliced += 1;
@@ -307,6 +313,7 @@ impl App {
                 time_s: f.summary.time_s,
                 grams: f.summary.grams,
                 filament_mm: f.summary.filament_mm,
+                summary: f.summary.clone(),
             };
         }
         if plate.previous.is_some() {
