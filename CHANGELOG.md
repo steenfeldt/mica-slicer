@@ -7,6 +7,44 @@ and used everywhere: the app shows it after an update (Help › What's new…), 
 A section starts with `## <version>`. Inside it: `###` headings, `-` bullets, `**bold**` and
 `[links](https://…)`.
 
+## 0.0.4
+
+Projects with many plates are easier to work with, and there are three new infill patterns.
+
+### Plates
+
+- **Plate strip:** in Prepare, each plate has a strip along its front edge with its number
+  and its tools: arrange, auto-orient, lock, plate settings and more. Below it is the plate's
+  name; click the pencil to rename it.
+- **Preview** shows only the plate you are looking at, with a list of all plates beside it:
+  a picture of each plate, its print time and weight, and whether it is sliced.
+- **Project summary:** the plate list's header shows the total time and weight of all
+  plates. Click Summary for the totals per filament (what to have on hand), a timeline of
+  the plates, where the time goes, and Copy summary. Plates that are not sliced yet are
+  named, with a button to slice them.
+- Warnings say whether they are about one plate or the whole project.
+- Objects only count as overlapping when their footprints overlap, not just their
+  bounding boxes.
+
+### Slicing
+
+- **New infill patterns** from OrcaSlicer: Zig Zag, Cross Zag and Locked Zag. Locked Zag
+  prints a dense skin near the walls and a lighter skeleton inside, each with its own density
+  and line width.
+- Bambu Studio and OrcaSlicer projects that use Locked Zag open with its settings instead of
+  skipping them.
+
+### Projects and colors
+
+- **Translucent filament colors** (as Bambu Studio saves them) show as translucent in
+  Prepare and in the color swatches, and are kept when you save.
+- Saved 3MF projects include preview pictures of the plates, so Finder, Printables and other
+  slicers can show them.
+- Cut groups from another slicer are mentioned in a quiet note instead of a warning: the cut
+  parts load as separate objects.
+
+Found a problem? [Report it on GitHub](https://github.com/steenfeldt/mica-slicer/issues).
+
 ## 0.0.3
 
 Fixes for Linux and Windows.
