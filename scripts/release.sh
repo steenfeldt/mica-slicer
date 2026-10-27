@@ -533,7 +533,7 @@ for label, file, kind in (("Windows", f"MicaSlicer_{version}_x64-setup.exe", "64
                           ("Linux", f"MicaSlicer_{version}_x86_64.AppImage", "AppImage, 64-bit")):
     if os.path.isfile(f"{dist}/{file}"):
         new = re.sub(rf"<li>{label}<span>.*?</span></li>",
-                     f'<li>{label}<span><a href="{base}/{file}">{kind}</a> · experimental</span></li>',
+                     f'<li>{label}<span><a href="{base}/{file}">{kind}</a></span></li>',
                      new)
 if new != text:
     open(path, "w", encoding="utf-8").write(new)
