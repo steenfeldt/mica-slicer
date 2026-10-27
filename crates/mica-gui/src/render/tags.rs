@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Provenance: original
 
-//! Plate tags on the GPU: each tag is a textured quad lying on the ground next to its plate
+//! Plate tags on the GPU: each tag is a textured quad lying on the ground in front of its plate
 //! (laid out by `viewport::plate_tags`), so it foreshortens with the plates. It is drawn after
 //! the objects, depth-tested without writing depth: an object between the camera and a tag
 //! hides it, a tag never covers an object. The texture holds coverage masks (`tag.wgsl`) and

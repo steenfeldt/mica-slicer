@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Provenance: original
-// A plate tag lying on the ground next to its plate (`render::tags`). The texture holds
-// coverage masks, not colours: r = the rounded chip, g = the text, b = the chip's rim. The
+// A plate tag lying on the ground in front of its plate (`render::tags`). The texture holds
+// coverage masks, not colours: r = the rounded chip, g = the text or icon, b = the rim. The
 // colours come from the uniform (color = chip fill, warning = text, extra = rim), so the
 // theme, hover and alert states never re-rasterise the tag.
 @group(0) @binding(1) var tag_texture: texture_2d<f32>;

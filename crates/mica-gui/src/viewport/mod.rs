@@ -1854,8 +1854,8 @@ impl Viewport {
             }),
             _ => vec![],
         };
-        // Plate tags on the ground next to each plate, hovered unless an object stands in
-        // front of the ground under the pointer.
+        // Plate strips and name lines on the ground in front of each plate, hovered unless
+        // an object stands in front of the ground under the pointer.
         {
             let gp_tags = gizmo::Painter {
                 painter: &probe,
@@ -1869,7 +1869,12 @@ impl Viewport {
                 &mut self.tag_cache,
                 scene.bed,
                 scene.plates,
-                dark,
+                &plate_tags::Options {
+                    dark,
+                    hovered_plate: self.hovered_plate,
+                    tools: scene.preview.is_none(),
+                    editable: scene.editable,
+                },
                 rect,
                 |w| gp_tags.project(w),
                 tag_pointer,
@@ -2807,10 +2812,11 @@ impl Viewport {
                     });
             });
     }
-    /// Plate tags (number and name lying on the ground next to each plate, laid out by
-    /// `plate_tags` and drawn by the renderer) as handles: a click shows the plate, a
-    /// right-click opens its plate menu; plus hover icons for the plate under the pointer.
-    /// The hover strip's ⋯ opens the plate bar's menu (`None` in the returned picks).
+    /// Plate strips and name lines (lying on the ground in front of each plate, laid out by
+    /// `plate_tags` and drawn by the renderer) as handles: a click on a tool does it for that
+    /// plate, the pencil renames it, a click elsewhere on them shows the plate and a
+    /// right-click opens its plate menu. The strip's ⋯ opens the plate bar's menu (`None` in
+    /// the returned picks).
     #[allow(clippy::type_complexity)]
     fn plate_labels(
         &self,
@@ -2822,6 +2828,7 @@ impl Viewport {
         Option<(usize, Rect)>,
         Vec<(usize, Option<crate::plate_menu::PlateCommand>, String)>,
     ) {
+        use plate_tags::{PlateTool, TagKind};
         let mut picks = vec![];
         if scene.plates.len() < 2 {
             // A single plate needs no tag; the plate bar names it.
@@ -2834,10 +2841,6 @@ impl Viewport {
                 .iter()
                 .filter(|t| t.plate == plate.index)
                 .collect();
-            // Too small to read (or out of view): no handle either.
-            let Some(number) = tags.iter().find(|t| t.kind == plate_tags::TagKind::Number) else {
-                continue;
-            };
             let full_name = plate
                 .name
                 .clone()
@@ -2850,32 +2853,68 @@ impl Viewport {
                 objects: plate.objects,
                 editable: scene.editable,
             };
-            let mut tip = format!("Plate {}", plate.index + 1);
+            let mut title = format!("Plate {}", plate.index + 1);
             if let Some(name) = &plate.name {
-                tip = format!("{tip} · {name}");
+                title = format!("{title} · {name}");
             }
             if plate.locked {
-                tip.push_str(" · locked");
+                title.push_str(" · locked");
             }
-            tip.push_str("\nClick to show this plate, right-click for the plate menu");
+            let tip = format!("{title}\nClick to show this plate, right-click for the plate menu");
             for tag in &tags {
-                // Only the quad itself is a handle (the pointer test is done on the projected
-                // quad, objects in front win); elsewhere the viewport keeps the pointer.
+                // Only the hovered quad is a handle (the pointer test is done on the projected
+                // quads, objects in front win); elsewhere the viewport keeps the pointer.
                 let bounds = tag.bounds();
                 let r = if tag.hovered {
                     bounds
                 } else {
                     Rect::from_min_size(bounds.min, EVec2::ZERO)
                 };
-                let label = ui
-                    .interact(
-                        r,
-                        ui.scope_id().with(("plate tag", plate.index, tag.kind)),
-                        egui::Sense::click(),
-                    )
-                    .on_hover_text(&tip);
-                if label.clicked() && !plate.current {
-                    actions.push(Action::SelectPlate(plate.index));
+                let sense = if tag.enabled {
+                    egui::Sense::click()
+                } else {
+                    egui::Sense::hover()
+                };
+                let label = ui.interact(
+                    r,
+                    ui.scope_id().with(("plate tag", plate.index, tag.kind)),
+                    sense,
+                );
+                let button = matches!(tag.kind, TagKind::Tool(_) | TagKind::Rename);
+                if tag.hovered && tag.enabled && button {
+                    ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+                }
+                let label = match tag.kind {
+                    TagKind::Tool(t) => label.on_hover_text(t.tip(plate.locked)),
+                    TagKind::Rename => label.on_hover_text("Rename plate"),
+                    _ => label.on_hover_text(&tip),
+                };
+                if label.clicked() {
+                    match tag.kind {
+                        TagKind::Tool(PlateTool::Arrange) => {
+                            actions.push(Action::PlateArrange(plate.index))
+                        }
+                        TagKind::Tool(PlateTool::Orient) => {
+                            actions.push(Action::PlateOrient(plate.index))
+                        }
+                        TagKind::Tool(PlateTool::Lock) => {
+                            actions.push(Action::PlateLock(plate.index))
+                        }
+                        TagKind::Tool(PlateTool::Settings) => actions.push(Action::Plate(
+                            plate.index,
+                            crate::plate_menu::PlateCommand::Settings,
+                        )),
+                        TagKind::Tool(PlateTool::More) => {
+                            picks.push((plate.index, None, full_name.clone()))
+                        }
+                        TagKind::Rename => picks.push((
+                            plate.index,
+                            Some(crate::plate_menu::PlateCommand::Rename),
+                            full_name.clone(),
+                        )),
+                        _ if !plate.current => actions.push(Action::SelectPlate(plate.index)),
+                        _ => {}
+                    }
                 }
                 label.context_menu(|ui| {
                     if let Some(c) = crate::plate_menu::plate_menu(ui, &info) {
@@ -2883,73 +2922,23 @@ impl Viewport {
                     }
                 });
             }
-            let r = number.bounds();
-            let hovered = self.hovered_plate == Some(plate.index) && scene.preview.is_none();
-            if hovered {
-                let id = ui.scope_id().with(("plate icons", plate.index));
-                let icons = egui::Area::new(id)
-                    .order(egui::Order::Middle)
-                    .fixed_pos(Pos2::new(r.right() + 6., r.top() - 4.))
-                    .show(ui.ctx(), |ui| {
-                        theme::overlay_frame(ui)
-                            .inner_margin(egui::Margin::same(2))
-                            .show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    ui.spacing_mut().item_spacing.x = 0.;
-                                    if icons::button_tip(
-                                        ui,
-                                        Icon::Arrange,
-                                        "Arrange this plate",
-                                        false,
-                                        scene.editable,
-                                    ) {
-                                        actions.push(Action::PlateArrange(plate.index));
-                                    }
-                                    if icons::button_tip(
-                                        ui,
-                                        Icon::Orient,
-                                        "Auto-orient every object on this plate",
-                                        false,
-                                        scene.editable,
-                                    ) {
-                                        actions.push(Action::PlateOrient(plate.index));
-                                    }
-                                    let icon = if plate.locked {
-                                        Icon::Lock
-                                    } else {
-                                        Icon::Unlock
-                                    };
-                                    if icons::button(ui, icon, plate.locked, scene.editable) {
-                                        actions.push(Action::PlateLock(plate.index));
-                                    }
-                                    if icons::button(ui, Icon::Settings, false, true) {
-                                        actions.push(Action::Plate(
-                                            plate.index,
-                                            crate::plate_menu::PlateCommand::Settings,
-                                        ));
-                                    }
-                                    if icons::button_tip(
-                                        ui,
-                                        Icon::More,
-                                        "Plate menu: rename, duplicate, move, delete…",
-                                        false,
-                                        true,
-                                    ) {
-                                        picks.push((plate.index, None, full_name.clone()));
-                                    }
-                                });
-                            });
-                    });
-                // The number, gap and icons (and a hovered name), with a small margin, keep
-                // this plate hovered.
-                let mut z = r.union(icons.response.rect);
-                for t in tags.iter().filter(|t| t.hovered) {
-                    z = z.union(t.bounds());
-                }
-                zone = Some((plate.index, z.expand(8.)));
-            } else if let Some(t) = tags.iter().find(|t| t.hovered) {
-                // On a tag in the gap the plate counts as hovered from the next frame on.
-                zone = Some((plate.index, t.bounds()));
+            // On its strip or name line the plate counts as hovered (from the next frame on),
+            // with a small margin so moving between them keeps it.
+            if tags.iter().any(|t| t.hovered) {
+                let z = tags
+                    .iter()
+                    .map(|t| t.bounds())
+                    .reduce(|a, b| a.union(b))
+                    .unwrap_or(Rect::NOTHING);
+                zone = Some((plate.index, z.expand(6.)));
+            } else if self.hovered_plate == Some(plate.index)
+                && let Some(z) = tags.iter().map(|t| t.bounds()).reduce(|a, b| a.union(b))
+                && ui
+                    .ctx()
+                    .pointer_hover_pos()
+                    .is_some_and(|p| z.expand(6.).contains(p))
+            {
+                zone = Some((plate.index, z.expand(6.)));
             }
         }
         (zone, picks)
@@ -3018,6 +3007,14 @@ impl Viewport {
                     .galley(r.min + EVec2::new(6., 2.), galley, pal.dark_box_text);
             }
         }
+    }
+    /// Tests: where plate `plate`'s strip part `kind` lies on screen this frame.
+    #[cfg(test)]
+    pub fn plate_tag_bounds(&self, plate: usize, kind: plate_tags::TagKind) -> Option<Rect> {
+        self.plate_tags
+            .iter()
+            .find(|t| t.plate == plate && t.kind == kind)
+            .map(|t| t.bounds())
     }
     /// Benchmarks: whether the hover pick has answered the current pointer position, and
     /// whether it found a move there.

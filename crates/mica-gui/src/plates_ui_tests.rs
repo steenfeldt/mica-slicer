@@ -295,3 +295,36 @@ fn the_export_and_print_file_name_carries_the_plate_name() {
     a.rename_plate(0, "Gift / Tom");
     assert_eq!(a.export_stem(), "cube20_gift___tom");
 }
+
+/// The plate strip's tools work on their own plate: the lock toggles it, the pencil starts
+/// the plate bar's rename of that plate.
+#[test]
+fn the_plate_strip_tools_act_on_their_plate() {
+    use crate::viewport::plate_tags::{PlateTool, TagKind};
+    let (ctx, mut a) = app();
+    // Looking at plate 1's front edge, close enough that its strip shows the tools.
+    a.viewport.camera.target = glam::Vec3::new(125., 0., 0.);
+    a.viewport.camera.span /= 1.6;
+    a.viewport.camera.span_goal = a.viewport.camera.span;
+    frame(&ctx, &mut a, vec![]);
+    frame(&ctx, &mut a, vec![]);
+    let at = |a: &App, kind| {
+        a.viewport
+            .plate_tag_bounds(0, kind)
+            .unwrap_or_else(|| panic!("plate 1 has no {kind:?} on screen"))
+            .center()
+    };
+    assert!(!a.plates.plates[0].locked);
+    let lock = at(&a, TagKind::Tool(PlateTool::Lock));
+    click(&ctx, &mut a, lock);
+    assert!(
+        a.plates.plates[0].locked,
+        "the lock at {lock:?} locks plate 1"
+    );
+    assert!(!a.plates.plates[1].locked);
+    click(&ctx, &mut a, lock);
+    assert!(!a.plates.plates[0].locked, "and unlocks it");
+    let pencil = at(&a, TagKind::Rename);
+    click(&ctx, &mut a, pencil);
+    assert_eq!(a.viewport.plate_rename.as_ref().map(|r| r.index), Some(0));
+}

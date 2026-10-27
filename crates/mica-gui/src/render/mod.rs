@@ -292,7 +292,7 @@ pub struct Frame {
     pub moving: bool,
     /// Preview: the hover pick shared with the viewport (not part of the redraw check).
     pub pick: Option<toolpaths::SharedPick>,
-    /// Plate tags lying on the ground next to their plates (`viewport::plate_tags`).
+    /// Plate tags lying on the ground in front of their plates (`viewport::plate_tags`).
     pub tags: Vec<TagDraw>,
 }
 /// The model matrix of the preview's toolpaths: their records are in bed (G-code)

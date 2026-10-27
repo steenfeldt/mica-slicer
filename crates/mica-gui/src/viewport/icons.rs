@@ -9,7 +9,7 @@ use crate::theme;
 use eframe::egui::{self, Color32, Pos2, Rect, Response, Sense, Shape, Stroke, Vec2};
 use mica_core::painting::PaintKind;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Icon {
     Add,
     Arrange,
@@ -52,6 +52,8 @@ pub enum Icon {
     Left,
     Right,
     AddPlate,
+    /// Rename: a pencil.
+    Rename,
 }
 impl Icon {
     /// The tool's name (menus) and what it does (tooltips; may be empty).
@@ -105,6 +107,7 @@ impl Icon {
             Self::Left => ("Previous plate", ""),
             Self::Right => ("Next plate", ""),
             Self::AddPlate => ("Add plate", ""),
+            Self::Rename => ("Rename plate", ""),
         }
     }
     /// The keyboard shortcut that does what the button does (see `keymap::BINDINGS`).
@@ -474,6 +477,42 @@ fn glyph(p: &egui::Painter, r: Rect, icon: Icon, c: Color32) {
 
 /// Draws `icon` in `r` with the given stroke widths (they grow with the toolbar size).
 fn glyph_sized(p: &egui::Painter, r: Rect, icon: Icon, c: Color32, stroke: f32, thin: f32) {
+    p.extend(shapes(r, icon, c, stroke, thin));
+}
+
+/// `icon` in `r` as egui shapes (for drawing elsewhere than a painter, such as the plate
+/// strips' textures on the ground).
+pub fn shapes(r: Rect, icon: Icon, c: Color32, stroke: f32, thin: f32) -> Vec<Shape> {
+    let shapes = Shapes::default();
+    glyph_shapes(&shapes, r, icon, c, stroke, thin);
+    shapes.0.into_inner()
+}
+
+/// Collects the shapes of a glyph, with the painter calls the glyphs use.
+#[derive(Default)]
+struct Shapes(std::cell::RefCell<Vec<Shape>>);
+impl Shapes {
+    fn add(&self, s: impl Into<Shape>) {
+        self.0.borrow_mut().push(s.into());
+    }
+    fn line_segment(&self, points: [Pos2; 2], stroke: Stroke) {
+        self.add(Shape::line_segment(points, stroke));
+    }
+    fn circle_filled(&self, center: Pos2, radius: f32, color: Color32) {
+        self.add(Shape::circle_filled(center, radius, color));
+    }
+    fn circle_stroke(&self, center: Pos2, radius: f32, stroke: Stroke) {
+        self.add(Shape::circle_stroke(center, radius, stroke));
+    }
+    fn rect_filled(&self, rect: Rect, radius: f32, color: Color32) {
+        self.add(Shape::rect_filled(rect, radius, color));
+    }
+    fn rect_stroke(&self, rect: Rect, radius: f32, stroke: Stroke, kind: egui::StrokeKind) {
+        self.add(Shape::rect_stroke(rect, radius, stroke, kind));
+    }
+}
+
+fn glyph_shapes(p: &Shapes, r: Rect, icon: Icon, c: Color32, stroke: f32, thin: f32) {
     let s = Stroke::new(stroke, c);
     let thin = Stroke::new(thin, c);
     let cx = r.center();
@@ -772,6 +811,20 @@ fn glyph_sized(p: &egui::Painter, r: Rect, icon: Icon, c: Color32, stroke: f32, 
             );
             p.line_segment([at(18., 3.), at(18., 10.)], s);
             p.line_segment([at(14.5, 6.5), at(21.5, 6.5)], s);
+        }
+        Icon::Rename => {
+            // The pencil of the panels' rename buttons (`widgets::Glyph::Pencil`).
+            p.add(Shape::closed_line(
+                vec![
+                    at(4., 20.),
+                    at(8., 20.),
+                    at(19., 9.),
+                    at(15., 5.),
+                    at(4., 16.),
+                ],
+                s,
+            ));
+            p.line_segment([at(13., 7.), at(17., 11.)], thin);
         }
     }
 }
