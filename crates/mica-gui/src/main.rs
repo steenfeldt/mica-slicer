@@ -68,6 +68,7 @@ mod printhost;
 mod project;
 #[cfg(test)]
 mod project_state_tests;
+mod project_summary;
 mod prusa_download;
 #[cfg(test)]
 mod regressions;

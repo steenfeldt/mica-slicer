@@ -15,6 +15,7 @@ mod plate_bar;
 pub mod plate_tags;
 mod preview_plates;
 pub mod section;
+pub mod summary_panel;
 mod toolbar;
 use crate::{
     commands::{self, Command, MenuInfo},
@@ -86,6 +87,10 @@ pub struct Scene<'a> {
     pub textures: bool,
     /// The tools' names for menus, `tool_colors` order (physical tools, then mixed colors).
     pub tool_labels: &'a [String],
+    /// The tools' filament colours as swatches show them (with alpha; not lifted for shading).
+    pub tool_rgba: &'a [[u8; 4]],
+    /// The project's name, for the copied project summary.
+    pub project_name: &'a str,
     /// Painted facets to draw over the objects.
     pub overlays: &'a [crate::scene::paint::PaintOverlay],
     /// The active painting tool's brush, for the cursor on the surface.

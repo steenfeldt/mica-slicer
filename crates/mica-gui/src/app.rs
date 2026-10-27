@@ -3586,6 +3586,8 @@ impl App {
                 }
                 let tool_colors = self.scene_colours_f32();
                 let tool_alphas = self.scene_alphas();
+                let tool_rgba = self.tool_colours_rgba();
+                let project_name = self.document_name();
                 let tool_labels: Vec<String> =
                     self.tool_choices().into_iter().map(|c| c.label).collect();
                 // A Preview waiting for its new slice shows the models, not for editing.
@@ -3780,6 +3782,8 @@ impl App {
                         tool_colors: &tool_colors,
                         tool_alphas: &tool_alphas,
                         tool_labels: &tool_labels,
+                        tool_rgba: &tool_rgba,
+                        project_name: &project_name,
                         overlays: &overlays,
                         paint: paint_view,
                         object_tool,

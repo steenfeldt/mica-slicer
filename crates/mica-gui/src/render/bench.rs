@@ -124,6 +124,8 @@ fn frame(
                         tool_colors: &shot.tool_colors,
                         tool_alphas: &[],
                         tool_labels: &[],
+                        tool_rgba: &[],
+                        project_name: "",
                         overlays: &[],
                         paint: None,
                         object_tool: None,

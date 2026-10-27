@@ -5,7 +5,7 @@
 //! layer in the sidebar's Preview page (nothing of it over the 3D view), the rail with the
 //! Preview item on top (Prepare's without it), a settings topic opened and edited in Preview
 //! (the slice goes out of date, the window stays in Preview), entering Preview reopening the
-//! Preview page, and the collapsed sidebar's chip.
+//! Preview page, the collapsed sidebar's chip, and the plate list's project summary.
 
 use crate::app::{App, Options};
 use eframe::egui::{self, Pos2, Rect};
@@ -23,6 +23,8 @@ struct Window {
     time: f64,
     /// Every text drawn in the last frame, with its position.
     texts: Vec<(String, Pos2)>,
+    /// What the last frames copied to the clipboard.
+    copied: Option<String>,
 }
 
 fn collect(shape: &egui::Shape, out: &mut Vec<(String, Pos2)>) {
@@ -70,6 +72,7 @@ impl Window {
             app,
             time: 0.,
             texts: Vec::new(),
+            copied: None,
         };
         w.slice();
         w.app.preview = true;
@@ -100,6 +103,11 @@ impl Window {
         let app = &mut self.app;
         let mut output = self.ctx.run_ui(input, |ui| app.show(ui));
         output.textures_delta.clear();
+        for c in &output.platform_output.commands {
+            if let egui::OutputCommand::CopyText(text) = c {
+                self.copied = Some(text.clone());
+            }
+        }
         self.texts.clear();
         for s in &output.shapes {
             collect(&s.shape, &mut self.texts);
@@ -348,4 +356,112 @@ fn preview_lists_the_plates_and_switches_between_them() {
     w.frames(2);
     assert!(w.app.viewport.preview_plates_probe.list.is_none());
     assert!(w.app.viewport.plate_probe.list.is_some());
+}
+
+#[test]
+fn the_plate_list_totals_open_the_project_summary() {
+    use crate::plate_batch::PlateStatus;
+    use crate::viewport::summary_panel;
+    let mut w = Window::sliced();
+    // Three plates, only the first sliced.
+    for _ in 0..2 {
+        w.app
+            .plate_command(0, crate::plate_menu::PlateCommand::Duplicate);
+    }
+    w.app.select_plate(0);
+    w.app.preview = true;
+    w.frames(3);
+    let one = w.app.finished().unwrap().summary.clone();
+    assert!(w.text_at("1 of 3 sliced").is_some());
+    let header = w.app.viewport.preview_plates_probe.header.expect("header");
+    let expected = format!(
+        "{} · {}",
+        crate::project_summary::duration(one.time_s),
+        crate::project_summary::weight(one.grams)
+    );
+    assert!(w.text_at(&expected).is_some(), "the total {expected}");
+    // The header opens the summary beside the list.
+    assert!(!summary_panel::is_open(&w.ctx));
+    w.click(header.center());
+    assert!(summary_panel::is_open(&w.ctx));
+    let probe = summary_panel::probe(&w.ctx);
+    let card = probe.card.expect("the summary card");
+    let list = w.app.viewport.preview_plates_probe.list.unwrap();
+    assert!(
+        card.left() >= list.right(),
+        "beside the list: {card:?} {list:?}"
+    );
+    assert!(w.text_at("Project summary").is_some());
+    assert!(
+        w.text_at("Plates 2 and 3 not sliced; the totals leave them out.")
+            .is_some()
+            || w.texts
+                .iter()
+                .any(|(t, _)| t.starts_with("Plates 2 and 3 not sliced")),
+        "{:?}",
+        w.texts
+    );
+    // Copy summary.
+    w.click(probe.copy.unwrap().center());
+    let text = w.copied.clone().expect("copied");
+    assert!(
+        text.contains("1 of 3 plates sliced; plates 2 and 3 not sliced"),
+        "{text}"
+    );
+    assert!(text.contains(&format!(
+        "Print time: {}",
+        crate::project_summary::duration(one.time_s)
+    )));
+    assert!(text.contains("Plate 2: not sliced"), "{text}");
+    // Slice the other 2: then all three count, three times the one plate.
+    let slice_rest = summary_panel::probe(&w.ctx)
+        .slice_rest
+        .expect("Slice the other 2");
+    w.click(slice_rest.center());
+    let deadline = Instant::now() + Duration::from_secs(600);
+    while (w.app.busy() || w.app.slice_batch.is_some()) && Instant::now() < deadline {
+        w.frames(1);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    w.frames(3);
+    assert!(
+        w.app
+            .plate_statuses()
+            .iter()
+            .all(|s| matches!(s, PlateStatus::Sliced { .. })),
+        "{:?}",
+        w.app
+            .plate_statuses()
+            .iter()
+            .map(|s| s.text())
+            .collect::<Vec<_>>()
+    );
+    assert!(w.text_at("all 3 sliced").is_some());
+    let mut plates = crate::scene::plates::snapshot(&w.app.plates);
+    for p in &mut plates {
+        p.status = w.app.plate_status(p.index);
+    }
+    let s = crate::project_summary::ProjectSummary::of(&plates);
+    assert!((s.time_s - 3. * one.time_s).abs() < 1e-6);
+    assert!((s.grams - 3. * one.grams).abs() < 1e-6);
+    assert_eq!(s.filaments.len(), 1);
+    assert!((s.filaments[0].grams - s.grams).abs() < 1e-6);
+    // A plate of the timeline shows that plate.
+    let probe = summary_panel::probe(&w.ctx);
+    assert_eq!(
+        probe.segments.iter().map(|(i, _)| *i).collect::<Vec<_>>(),
+        [0, 1, 2]
+    );
+    w.click(probe.segments[2].1.center());
+    assert_eq!(w.app.plates.current, 2);
+    // A plate changed since its slice leaves the totals.
+    w.app.plates.plates[1].objects[0].position.x += 5.;
+    w.app.plates.plates[1].invalidate();
+    w.frames(2);
+    assert!(w.text_at("2 of 3 sliced").is_some());
+    // Close.
+    let close = summary_panel::probe(&w.ctx).close.unwrap();
+    w.click(close.center());
+    assert!(!summary_panel::is_open(&w.ctx));
+    assert!(summary_panel::probe(&w.ctx).card.is_none());
 }

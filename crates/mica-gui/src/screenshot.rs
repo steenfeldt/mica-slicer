@@ -2381,6 +2381,39 @@ fn run_command(app: &mut App, cmd: &str, ctx: &egui::Context) -> Result<(), Stri
             crate::panels::topbar::request_menu(ctx, &name.replace('-', " "));
             return Ok(());
         }
+        // `slice-plates:1,2,4` slices only those plates (one-based), waiting for them;
+        // `project-summary` shows Preview with the project summary open (`project-summary:closed`:
+        // Preview, the summary closed).
+        "slice-plates" => {
+            let ids = arg
+                .split(',')
+                .map(|n| {
+                    n.trim()
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|n| (1..=app.plates.len()).contains(n))
+                        .map(|n| app.plates.plate(n - 1).id)
+                })
+                .collect::<Option<Vec<u64>>>()
+                .filter(|ids| !ids.is_empty())
+                .ok_or("--command slice-plates:N,N,… (one-based)")?;
+            app.slice_queue = ids.iter().rev().copied().collect();
+            app.slice_batch = Some(crate::plate_batch::SliceBatch {
+                ids,
+                failed: vec![],
+                then: crate::plate_batch::Then::Nothing,
+                manual: false,
+            });
+            app.advance_batch(ctx);
+            wait_batch(app, ctx);
+            app.preview = false;
+            return Ok(());
+        }
+        "project-summary" => {
+            app.preview = true;
+            crate::viewport::summary_panel::set_open(ctx, arg != "closed");
+            return Ok(());
+        }
         "export-all" => {
             if arg.is_empty() {
                 return Err("--command export-all:DIR".into());
