@@ -321,6 +321,26 @@ fn orca_component_parts_and_per_instance_plates() {
 }
 
 #[test]
+fn bambu_other_type_sub_objects_take_their_kind_from_the_settings() {
+    // Bambu Studio stores a negative part's mesh as an object of type "other".
+    let objects = format!(
+        r#"<object id="1">{}</object><object id="3" type="other">{}</object><object id="2"><components><component objectid="1"/><component objectid="3" transform="1 0 0 0 1 0 0 0 1 0.2 0.2 0"/></components></object>"#,
+        tetrahedra(1),
+        tetrahedra(1)
+    );
+    let config = r#"<config><object id="2"><metadata key="name" value="Bambu"/><part id="1" subtype="normal_part"/><part id="3" subtype="negative_part"/></object></config>"#;
+    let p = load(
+        &model("millimeter", &objects, r#"<item objectid="2"/>"#),
+        Some(("Metadata/model_settings.config", config)),
+    );
+    let o = &p.objects[0];
+    assert_eq!(
+        o.parts.iter().map(|p| p.kind.clone()).collect::<Vec<_>>(),
+        vec![PartKind::Model, PartKind::NegativeVolume]
+    );
+}
+
+#[test]
 fn retained_config_and_reported_skipped_features() {
     let root = simple("millimeter").replace("v1=\"0\"", "paint_color=\"8\" v1=\"0\"");
     let text = "; layer_height = 0.1\n; custom_gcode = stuff\n";

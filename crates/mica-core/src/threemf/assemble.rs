@@ -215,7 +215,9 @@ impl Assembly<'_> {
                 .get("name")
                 .cloned()
                 .unwrap_or_else(|| r.name.clone()),
-            kind: if r.core_type == "model" {
+            // Bambu Studio writes the meshes of negative parts and modifiers as objects of
+            // type "other"; like Orca, their kind comes from the part's settings.
+            kind: if r.core_type == "model" || r.core_type == "other" {
                 kind(values)
             } else {
                 PartKind::Unknown(r.core_type.clone())
