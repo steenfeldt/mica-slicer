@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Provenance: adapted
 // Source: prusaslicer@b028299c77 resources/shaders/110/gouraud_light.vs :: main
-// Changes: Only the two-light diffuse/specular weights (as in Mica's thumbnail renderer, mica-gcode thumbnails/render.rs); the rest is original: a CPU z-buffer rasterizer for `mica mcp` with an orbit/orthographic camera, painted leaves coloured by filament, a facet-ID buffer for picking, 2x supersampling, silhouette/crease/paint-boundary lines and a labelled pixel grid.
+// Changes: Only the two-light diffuse/specular weights (as in Mica's thumbnail renderer, mica-core thumbnail.rs); the rest is original: a CPU z-buffer rasterizer for `mica mcp` with an orbit/orthographic camera, painted leaves coloured by filament, a facet-ID buffer for picking, 2x supersampling, silhouette/crease/paint-boundary lines and a labelled pixel grid.
 
 //! Offscreen views of the scene for `mica mcp`: what the AI looks at before it paints. The
 //! renderer runs on the CPU (no GPU, window or display needed, so it works over SSH and in

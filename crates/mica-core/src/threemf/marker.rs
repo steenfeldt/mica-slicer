@@ -385,6 +385,8 @@ pub(super) fn restore<R: Read + Seek>(
         .iter()
         .map(|j| j.text().map(str::to_owned))
         .collect::<Result<_, _>>()?;
+    // Older saves carried the source project's pictures as skipped; Mica now draws its own.
+    p.ignored_features.remove("thumbnails/images");
     if let Ok(settings) = j.get("mica_settings") {
         p.mica_settings = read_settings(settings)?;
     }

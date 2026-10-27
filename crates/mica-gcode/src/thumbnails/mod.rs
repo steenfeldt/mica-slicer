@@ -13,11 +13,12 @@
 
 mod png;
 mod qoi;
-mod render;
 
+pub use mica_core::thumbnail::{
+    Camera, Fit, Image, Orbit, render, render_orbit, render_orbit_colored,
+};
 pub use png::{encode_png, encode_png_rgb};
 pub use qoi::encode_qoi;
-pub use render::{Camera, Fit, Image, Orbit, render, render_orbit, render_orbit_colored};
 
 use std::io::{self, Write};
 

@@ -48,6 +48,7 @@ pub mod small_features;
 pub mod spiral_vase;
 pub mod support;
 pub mod threemf;
+pub mod thumbnail;
 pub mod tool_ordering;
 pub mod toolpath;
 pub mod user_data;

@@ -65,14 +65,15 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
             // Mica's custom texture images, read below.
             None
         } else if lower.ends_with(".png") || lower.ends_with(".jpg") || lower.ends_with(".jpeg") {
-            Some("thumbnails/images")
+            // Thumbnails and plate pictures: Mica draws its own when it saves.
+            None
         } else if lower.contains("layer_height")
             && lower != "metadata/slic3r_pe_layer_heights_profile.txt"
             && lower != "metadata/layer_heights_profile.txt"
         {
             Some("variable layer height")
         } else if lower.contains("cut") {
-            Some("cut information")
+            Some(super::CUT_INFORMATION)
         } else if name == super::custom_gcode::PRUSA_FILE || name == super::custom_gcode::ORCA_FILE
         {
             None

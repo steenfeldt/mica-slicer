@@ -339,9 +339,12 @@ fn retained_config_and_reported_skipped_features() {
         p.objects[0].parts[0].painting.material.painted_triangles(),
         3
     );
-    for feature in ["thumbnails/images", "cut information"] {
-        assert!(p.ignored_features.contains(feature));
-    }
+    // Pictures are not a loss (Mica draws its own on save); cut groups are only noted.
+    assert!(!p.ignored_features.iter().any(|f| f.contains("thumbnail")));
+    assert!(
+        p.ignored_features
+            .contains(mica_core::threemf::CUT_INFORMATION)
+    );
     // Per-layer custom G-code and the layer height profile are read now (this file has neither).
     assert!(!p.ignored_features.contains("custom G-code"));
     assert!(p.custom_gcodes.is_empty());

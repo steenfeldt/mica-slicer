@@ -693,6 +693,9 @@ fn slice_job(a: SliceArgs, job: &mica_core::job::Boundary) -> Result<Option<Slic
     for w in &loaded.warnings {
         eprintln!("{w}");
     }
+    for n in &loaded.notes {
+        eprintln!("note: {n}");
+    }
     let first_object = loaded.objects.first().map(|o| o.name.clone());
     if !a.features.textures {
         if config_textures || mica_core::features::uses_textures(&config, &loaded.objects) {

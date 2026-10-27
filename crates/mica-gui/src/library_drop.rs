@@ -502,6 +502,9 @@ impl App {
         for w in &scene.warnings {
             self.notify_warning(w.clone());
         }
+        for n in &scene.notes {
+            self.notify_info(n.clone());
+        }
         let objects: Vec<Object> = scene
             .objects
             .into_iter()

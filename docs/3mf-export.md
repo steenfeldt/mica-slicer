@@ -120,7 +120,24 @@ languages may have no identical native equivalent. Their original values survive
 review a cross-flavour project's settings before printing in the other application. Prusa's native
 single-bed view cannot reproduce Orca's plate grid; Mica restores that grid and every instance.
 
-Thumbnails and `plate_N.json` previews are optional and are omitted. Embossed text / SVG parts
+Mica draws the project's pictures with its CPU thumbnail renderer (no GPU, so the CLI and MCP
+saves get them too), on another thread while the geometry streams out. Both flavours carry the
+standard package thumbnail `Metadata/thumbnail.png` with the OPC
+`…/relationships/metadata/thumbnail` relationship (Finder, Quick Look, Printables) and the `png`
+content type. The Orca flavour adds, for every plate, OrcaSlicer's `Metadata/plate_N.png`
+(512 px, the plate's printable model parts in their filament colours, colour painting included,
+from Orca's iso camera and thumbnail lighting), `plate_N_small.png` (128 px) and
+`plate_no_light_N.png` (unlit, the alpha coding the extruder as Bambu's send dialog reads it),
+names them in the plate's `thumbnail_file` / `thumbnail_no_light_file`, and points Bambu's
+cover-middle / cover-small relationships at plate 1. An empty plate gets a transparent picture,
+as in Orca. Orca's `top_N.png` / `pick_N.png` (a top view and an object-ID picking image for Bambu
+printers' skip-object feature) are not written: Orca and Bambu Studio draw them again when they
+slice. The Prusa flavour writes PrusaSlicer's 256 px picture of the first bed (non-printable
+instances grey; PrusaSlicer's bed is not drawn). A translucent `#RRGGBBAA` filament is blended over
+the opaque scene. Saving the 15-plate, 10.8 M-triangle reference project draws all 45 Orca
+pictures in about 50 ms, hidden behind the 15 s of geometry writing.
+
+`plate_N.json` previews are optional and are omitted. Embossed text / SVG parts
 write their source back as PrusaSlicer's `<slic3rpe:text …/>` / `<slic3rpe:shape …/>` elements in
 the part's config entry (both dialects; Orca uses the same elements) and the SVG file at its
 `filepath3mf`. Cached G-code, editable CAD

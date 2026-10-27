@@ -268,7 +268,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         &config,
         &mica_profiles::project::Mapper::default(),
     )?;
-    for w in loaded.warnings {
+    for w in loaded.warnings.iter().chain(&loaded.notes) {
         eprintln!("{w}");
     }
     let mut objects: Vec<_> = loaded.objects.into_iter().map(Object::new).collect();

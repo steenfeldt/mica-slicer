@@ -3,7 +3,14 @@
 // Source: orca@8500fcdcca src/libslic3r/Format/bbs_3mf.cpp :: _BBS_3MF_Exporter
 // Source: prusaslicer@b028299c77 src/libslic3r/Format/3mf.cpp :: _3MF_Exporter
 // Source: snapmaker-orca@b1831e5dcb src/libslic3r/Format/bbs_3mf.cpp :: _BBS_3MF_Importer::_handle_end_metadata
-// Changes: Bounded buffered XML into zip; retained f64 Orca source meshes/components and merged Prusa object-coordinate parts, native painting and ranges, atomic replacement and geometry-free Mica sidecar; embossed text/SVG sources as `<slic3rpe:text>` / `<slic3rpe:shape>` part elements with the SVG file in the archive (TextConfigurationSerialization::to_xml, to_xml(EmbossShape)); no thumbnails or cached slices.
+// Changes: Bounded buffered XML into zip; retained f64 Orca source meshes/components and merged Prusa object-coordinate parts, native painting and ranges, atomic replacement and geometry-free Mica sidecar; embossed text/SVG sources as `<slic3rpe:text>` / `<slic3rpe:shape>` part elements with the SVG file in the archive (TextConfigurationSerialization::to_xml, to_xml(EmbossShape)); no cached slices.
+// Source: orca@8500fcdcca src/libslic3r/Format/bbs_3mf.cpp :: _BBS_3MF_Exporter::_add_relationships_file_to_archive, _BBS_3MF_Exporter::_add_content_types_file_to_archive, _BBS_3MF_Exporter::_add_model_config_file_to_archive
+// Source: prusaslicer@b028299c77 src/libslic3r/Format/3mf.cpp :: _3MF_Exporter::_add_relationships_file_to_archive, _3MF_Exporter::_add_thumbnail_file_to_archive
+// Changes: Project pictures (`thumbnails.rs`): the package thumbnail `Metadata/thumbnail.png` and its
+// Changes: OPC relationship in both flavours (Orca points it at plate 1's picture; Mica writes that
+// Changes: picture under the standard name too), Bambu's cover-middle/-small relationships, the `png`
+// Changes: content type, per-plate `thumbnail_file` / `thumbnail_no_light_file`; PNGs stored
+// Changes: uncompressed as Orca adds them, drawn on another thread while the geometry streams.
 // Upstream attribution (3mf.cpp): Copyright (c) Prusa Research 2018 - 2023
 // Oleksandra Iushchenko, David Kocík, Enrico Turri, Lukáš Matěna, Lukáš Hejl,
 // Filip Sykala, Vojtěch Bubník, Tomáš Mészáros; Copyright (c) 2020 Henner Zeller.
@@ -93,14 +100,57 @@ fn entry<W: Write + Seek>(
     w.flush()?;
     Ok(())
 }
+/// The OPC package thumbnail relationship (Finder, Quick Look, Printables, both slicers).
+const THUMBNAIL_REL: &str =
+    "http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail";
+const MODEL_REL: &str = "http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel";
+
+/// Writes the archive. The pictures (`thumbnails::pictures`) are drawn on another thread
+/// while the geometry streams out, and are added once both are done.
 fn archive(file: std::fs::File, p: &Project, flavour: Flavour) -> Result<(), ThreeMfError> {
+    let config = super::write_config::config(p, flavour)?;
+    std::thread::scope(|s| {
+        let pictures = s.spawn(|| super::thumbnails::pictures(p, flavour, &config));
+        let pictures = || {
+            pictures.join().unwrap_or_else(|_| {
+                Err(invalid(
+                    "drawing the project thumbnails failed unexpectedly",
+                ))
+            })
+        };
+        archive_with(file, p, flavour, &config, pictures)
+    })
+}
+fn archive_with(
+    file: std::fs::File,
+    p: &Project,
+    flavour: Flavour,
+    config: &str,
+    pictures: impl FnOnce() -> Result<Vec<(String, Vec<u8>)>, ThreeMfError>,
+) -> Result<(), ThreeMfError> {
     let mut zip = ZipWriter::new(file);
     entry(&mut zip, "[Content_Types].xml", |w| {
-        w.write_all(br#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/><Default Extension="config" ContentType="text/plain"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="json" ContentType="application/json"/><Default Extension="bin" ContentType="application/octet-stream"/></Types>"#)?;
+        w.write_all(br#"<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/><Default Extension="png" ContentType="image/png"/><Default Extension="config" ContentType="text/plain"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="json" ContentType="application/json"/><Default Extension="bin" ContentType="application/octet-stream"/></Types>"#)?;
         Ok(())
     })?;
     entry(&mut zip, "_rels/.rels", |w| {
-        relationships(w, &["/3D/3dmodel.model".into()])
+        // As `_add_relationships_file_to_archive`: the model, the package thumbnail and, for
+        // Orca, Bambu's cover pictures (plate 1's, middle and small).
+        let mut rels = vec![
+            ("/3D/3dmodel.model".to_string(), MODEL_REL),
+            (format!("/{}", super::thumbnails::PACKAGE), THUMBNAIL_REL),
+        ];
+        if flavour == Flavour::Orca {
+            rels.push((
+                format!("/{}", super::thumbnails::orca_plate(1)),
+                "http://schemas.bambulab.com/package/2021/cover-thumbnail-middle",
+            ));
+            rels.push((
+                format!("/{}", super::thumbnails::orca_small(1)),
+                "http://schemas.bambulab.com/package/2021/cover-thumbnail-small",
+            ));
+        }
+        relationships(w, &rels)
     })?;
     if let Some(text) = &p.full_spectrum_json {
         entry(&mut zip, crate::full_spectrum::ARCHIVE_PATH, |w| {
@@ -200,7 +250,7 @@ fn archive(file: std::fs::File, p: &Project, flavour: Flavour) -> Result<(), Thr
     })?;
     if flavour == Flavour::Orca {
         let paths: Vec<_> = (1..=p.objects.len())
-            .map(|i| format!("/3D/Objects/object_{i}.model"))
+            .map(|i| (format!("/3D/Objects/object_{i}.model"), MODEL_REL))
             .collect();
         entry(&mut zip, "3D/_rels/3dmodel.model.rels", |w| {
             relationships(w, &paths)
@@ -244,7 +294,7 @@ fn archive(file: std::fs::File, p: &Project, flavour: Flavour) -> Result<(), Thr
             "Metadata/Slic3r_PE.config"
         },
         |w| {
-            w.write_all(super::write_config::config(p, flavour)?.as_bytes())?;
+            w.write_all(config.as_bytes())?;
             Ok(())
         },
     )?;
@@ -370,6 +420,14 @@ fn archive(file: std::fs::File, p: &Project, flavour: Flavour) -> Result<(), Thr
             super::paint::backup(w, p, flavour)
         })?;
     }
+    // PNGs are compressed already: stored, as Orca adds them (MZ_NO_COMPRESSION).
+    for (path, png) in pictures()? {
+        zip.start_file(
+            path,
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored),
+        )?;
+        zip.write_all(&png)?;
+    }
     let mut readable = zip::ZipArchive::new(zip.finish()?)?;
     let manifest = super::marker::manifest(&mut readable)?;
     let mut zip = ZipWriter::new_append(readable.into_inner())?;
@@ -425,16 +483,16 @@ fn header(w: &mut impl Write, f: Flavour) -> Result<(), ThreeMfError> {
     )?;
     Ok(())
 }
-fn relationships(w: &mut impl Write, paths: &[String]) -> Result<(), ThreeMfError> {
+fn relationships(w: &mut impl Write, rels: &[(String, &str)]) -> Result<(), ThreeMfError> {
     writeln!(
         w,
         "<?xml version=\"1.0\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\">"
     )?;
-    for (i, p) in paths.iter().enumerate() {
+    for (i, (target, kind)) in rels.iter().enumerate() {
         writeln!(
             w,
-            "<Relationship Target=\"{}\" Id=\"rel{i}\" Type=\"http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel\"/>",
-            xml(p)
+            "<Relationship Target=\"{}\" Id=\"rel{i}\" Type=\"{kind}\"/>",
+            xml(target)
         )?;
     }
     writeln!(w, "</Relationships>")?;
@@ -613,6 +671,20 @@ fn model_config(
                     metadata(w, "plate", k, v)?;
                 }
             }
+            // The plate's pictures (`_add_model_config_file_to_archive`).
+            let n = plate_index + 1;
+            metadata(
+                w,
+                "plate",
+                "thumbnail_file",
+                &super::thumbnails::orca_plate(n),
+            )?;
+            metadata(
+                w,
+                "plate",
+                "thumbnail_no_light_file",
+                &super::thumbnails::orca_no_light(n),
+            )?;
             for i in &plate.instances {
                 writeln!(w, "<model_instance>")?;
                 metadata(w, "instance", "object_id", &ids[i.object].to_string())?;

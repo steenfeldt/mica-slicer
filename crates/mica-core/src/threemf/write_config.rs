@@ -287,7 +287,7 @@ fn vocabulary(orca: &str, to: Flavour, value: &str, s: &Settings) -> Option<&'st
     })
 }
 
-fn ini(text: &str) -> Settings {
+pub(super) fn ini(text: &str) -> Settings {
     text.lines()
         .filter_map(|l| {
             let l = l.trim().trim_start_matches(';').trim();

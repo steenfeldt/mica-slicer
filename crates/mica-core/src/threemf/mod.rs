@@ -18,6 +18,7 @@ mod paint;
 mod parse;
 mod ranges;
 mod source;
+mod thumbnails;
 mod tower;
 mod write;
 mod write_config;
@@ -37,6 +38,11 @@ use std::path::Path;
 use crate::mesh::TriangleMesh;
 
 pub type Settings = BTreeMap<String, String>;
+
+/// The [`Project::ignored_features`] entry for a project's cut groups (PrusaSlicer's
+/// `Prusa_Slicer_cut_information.xml`, Bambu Studio's and OrcaSlicer's `cut_information.xml`).
+/// Import reports it as a note, not a warning: the cut parts load as separate objects.
+pub const CUT_INFORMATION: &str = "cut information";
 
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct ResourceId {

@@ -97,9 +97,16 @@ pub fn prusa_patch(raw: &Settings, ignored: &mut BTreeSet<String>) -> Result<Con
     Ok(config)
 }
 
+/// The note a project with cut groups (PrusaSlicer's, Bambu Studio's or OrcaSlicer's cut
+/// information) gets on import.
+pub const CUT_NOTE: &str =
+    "Cut groups from another slicer aren't kept: the cut parts load as separate objects.";
+
 pub struct Loaded {
     pub objects: Vec<InputObject>,
     pub warnings: Vec<String>,
+    /// Informational notes about the import: nothing the print depends on was lost.
+    pub notes: Vec<String>,
     pub tower_placement: Option<[f64; 3]>,
     /// The archives' explicit plates, in archive order (several projects concatenate);
     /// `InputObject::plate` indexes this. Empty without plate metadata.
@@ -410,6 +417,7 @@ pub fn load_with_plate(
 ) -> Result<Loaded, String> {
     let _timing = crate::timing::Span::new(crate::timing::Stage::Load);
     let mut warnings = Vec::new();
+    let mut notes: Vec<String> = Vec::new();
     let mut tower_placement = None;
     let mut loaded_plates: Vec<LoadedPlate> = Vec::new();
     let mut project_config = None;
@@ -725,6 +733,11 @@ pub fn load_with_plate(
             }
             object_id += 1;
         }
+        // Cut groups only tie the cut parts together for re-cutting; the parts themselves
+        // load as separate objects, so this is a note rather than a warning.
+        if ignored.remove(crate::threemf::CUT_INFORMATION) && !notes.iter().any(|n| n == CUT_NOTE) {
+            notes.push(CUT_NOTE.into());
+        }
         if !ignored.is_empty() {
             warnings.push(format!(
                 "Parts of this project Mica doesn't use yet were skipped: {}",
@@ -774,6 +787,7 @@ pub fn load_with_plate(
     Ok(Loaded {
         objects: inputs,
         warnings,
+        notes,
         tower_placement,
         plates: loaded_plates,
         config: project_config,
@@ -1039,6 +1053,73 @@ mod tests {
 
     /// Three separate objects with the same mesh in a project (not instances of one object, so
     /// each is prepared on its own) print the same paths, moved, as PrusaSlicer prints them.
+    #[test]
+    fn cut_groups_are_a_note_and_real_losses_stay_warnings() {
+        use crate::threemf::{Flavour, Instance, Object, Part, Project, ResourceId};
+        let models = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/models");
+        let source = ResourceId {
+            path: "3D/3dmodel.model".into(),
+            id: 1,
+        };
+        let mut project = Project {
+            objects: vec![Object {
+                name: "cube".into(),
+                source: source.clone(),
+                parts: vec![Part {
+                    name: "cube".into(),
+                    kind: PartKind::Model,
+                    source,
+                    mesh: TriangleMesh::load_stl(models.join("cube20.stl")).unwrap(),
+                    source_mesh: None,
+                    painting: Default::default(),
+                    transform: Transform::IDENTITY,
+                    settings: Settings::new(),
+                    metadata: Settings::new(),
+                }],
+                instances: vec![Instance {
+                    transform: Transform::IDENTITY,
+                    printable: true,
+                    plate: None,
+                }],
+                settings: Settings::new(),
+                metadata: Settings::new(),
+                height_ranges: vec![],
+                layer_height_profile: vec![],
+                brim_points: vec![],
+            }],
+            ..Default::default()
+        };
+        let dir = std::env::temp_dir().join(format!("mica-cut-note-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("cut.3mf");
+        let config = Config::defaults();
+        let mut open = |ignored: &[&str]| {
+            project.ignored_features = ignored.iter().map(|s| s.to_string()).collect();
+            crate::threemf::write(&path, &project, Flavour::Prusa).unwrap();
+            load(
+                std::slice::from_ref(&path),
+                (125., 110.),
+                false,
+                true,
+                0,
+                &BTreeMap::new(),
+                &config,
+                &PrusaMapper,
+            )
+            .unwrap()
+        };
+        let cut = open(&[crate::threemf::CUT_INFORMATION]);
+        assert_eq!(cut.notes, [CUT_NOTE]);
+        assert!(cut.warnings.is_empty(), "{:?}", cut.warnings);
+        let both = open(&[crate::threemf::CUT_INFORMATION, "custom G-code"]);
+        assert_eq!(both.notes, [CUT_NOTE]);
+        assert_eq!(
+            both.warnings,
+            ["Parts of this project Mica doesn't use yet were skipped: custom G-code"]
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn identical_project_objects_print_the_same_moved() {
         use crate::print::LayerSource;

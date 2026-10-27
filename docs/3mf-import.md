@@ -192,7 +192,9 @@ registers all three adapted modules; `THIRD_PARTY.md` records ZIP/XML dependenci
 A part's editable emboss source (`<slic3rpe:text>` / `<slic3rpe:shape>`, PrusaSlicer's and Orca's
 text and SVG tool) is kept as `slic3rpe:text:*` / `slic3rpe:shape:*` part metadata, the SVG file
 named by `filepath3mf` included, so the GUI's Text tool re-opens it.
-Cut relationships, thumbnails, adaptive layer-height profiles,
+Thumbnails and plate pictures are not read (Mica draws its own when it saves, so they are not
+reported). Cut relationships are not kept: the cut parts load as separate objects, and the import
+says so in an informational note rather than a project warning. Adaptive layer-height profiles,
 core color/material assignments and custom G-code are not interpreted. Explicit height-range settings
 and their piecewise constant layer heights are applied. Detected
 features are reported. Embedded project config remains raw, including custom G-code contained there.

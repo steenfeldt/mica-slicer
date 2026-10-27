@@ -49,6 +49,8 @@ pub struct LoadedScene {
     pub plates: Vec<crate::plates::Plate>,
     pub objects: Vec<(Option<usize>, Object)>,
     pub warnings: Vec<String>,
+    /// Informational import notes (shown as fading information, not warnings).
+    pub notes: Vec<String>,
     pub tower: Option<[f64; 3]>,
     pub paths: Vec<PathBuf>,
     pub settings: Option<mica_profiles::project::ProjectSettings>,
@@ -2360,6 +2362,7 @@ impl App {
                     plates,
                     objects,
                     warnings,
+                    notes,
                     tower,
                     paths,
                     settings,
@@ -2461,6 +2464,10 @@ impl App {
                     }
                     self.notices
                         .extend(warnings.into_iter().filter(|w| !w.starts_with("Exported ")));
+                }
+                for n in notes {
+                    self.notify_info(n.clone());
+                    self.notices.push(n);
                 }
             }
             Err(e) if e.starts_with("Export failed") => self.notify_error("Export failed", e),
@@ -3279,6 +3286,7 @@ impl App {
                         plates: vec![],
                         objects: vec![],
                         warnings: vec![format!("Exported {}", path.display())],
+                        notes: vec![],
                         tower: None,
                         paths: vec![],
                         settings: None,
@@ -4588,6 +4596,7 @@ pub fn load_files(
                 .collect(),
             objects,
             warnings,
+            notes: loaded.notes,
             tower: loaded.tower_placement,
             project: crate::save::is_project(&paths),
             paths,

@@ -357,6 +357,7 @@ impl App {
                     plates: vec![],
                     objects: vec![],
                     warnings: vec![format!("Saved a copy as {}", target.display())],
+                    notes: vec![],
                     tower: None,
                     paths: vec![],
                     settings: None,

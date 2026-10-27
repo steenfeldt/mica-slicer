@@ -1461,6 +1461,53 @@ mod tests {
     }
 
     #[test]
+    fn cut_groups_note_and_saved_pictures() {
+        use crate::notifications::Level;
+        let ctx = egui::Context::default();
+        // A project from another slicer with cut groups and its own pictures.
+        let mut project = mica_core::threemf::load_3mf(models().join("plates-orca.3mf")).unwrap();
+        project
+            .ignored_features
+            .insert(mica_core::threemf::CUT_INFORMATION.into());
+        let source = temp("groups-source.3mf");
+        threemf::write(&source, &project, Flavour::Orca).unwrap();
+        let mut a = reopen(&ctx, &source, None);
+        let shown = a.notifications.visible(None);
+        let cut: Vec<_> = shown
+            .iter()
+            .filter(|n| n.text == mica_core::input::CUT_NOTE)
+            .collect();
+        assert_eq!(cut.len(), 1, "{shown:?}");
+        assert_eq!(cut[0].level, Level::Info, "a note, not a project warning");
+        assert!(
+            !shown.iter().any(|n| n.level != Level::Info
+                && (n.text.contains("cut") || n.text.contains("thumbnail"))),
+            "{shown:?}"
+        );
+        // Saving from the window writes each plate's pictures; the save reopens quietly.
+        let saved = temp("groups-saved.3mf");
+        a.save_project_to(&saved, Flavour::Orca).unwrap();
+        // Entry names are plain text in the archive's directory.
+        let bytes = std::fs::read(&saved).unwrap();
+        let has = |name: &str| bytes.windows(name.len()).any(|w| w == name.as_bytes());
+        for name in [
+            "Metadata/thumbnail.png",
+            "Metadata/plate_1.png",
+            "Metadata/plate_2.png",
+            "Metadata/plate_2_small.png",
+            "Metadata/plate_no_light_2.png",
+        ] {
+            assert!(has(name), "{name}");
+        }
+        let b = reopen(&ctx, &saved, None);
+        let shown = b.notifications.visible(None);
+        assert!(
+            !shown.iter().any(|n| n.text.contains("skipped")),
+            "{shown:?}"
+        );
+    }
+
+    #[test]
     fn modified_flag_follows_edits_and_saves() {
         let ctx = egui::Context::default();
         let mut a = app(&ctx);
