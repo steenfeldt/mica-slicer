@@ -269,6 +269,9 @@ pub struct PrintSettings {
 
     // Extrusion widths, mm
     pub nozzle_diameter: f64,
+    /// Thickest combined sparse infill (`infill_every_layers`): the smaller nozzle of the sparse
+    /// and solid infill tools (`PrintObject::combine_infill`).
+    pub infill_combine_nozzle: f64,
     pub first_layer_extrusion_width: f64,
     pub external_perimeter_extrusion_width: f64,
     pub perimeter_extrusion_width: f64,
@@ -452,6 +455,7 @@ impl PrintSettings {
             infill_anchor: FloatOrPercent::Mm(2.0),
             infill_anchor_max: FloatOrPercent::Mm(12.0),
             nozzle_diameter: 0.4,
+            infill_combine_nozzle: 0.4,
             first_layer_extrusion_width: 0.5,
             external_perimeter_extrusion_width: 0.45,
             perimeter_extrusion_width: 0.45,

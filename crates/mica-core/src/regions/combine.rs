@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Provenance: adapted
 // Source: prusaslicer@b028299c77 src/libslic3r/PrintObject.cpp :: PrintObject::combine_infill
-// Changes: Compact thickness-tagged areas; fixed interval combination only, bounded by nozzle diameter.
+// Changes: Compact thickness-tagged areas; fixed interval combination only, bounded by the smaller nozzle of the
+// Changes: region's sparse and solid infill tools (resolved with the region settings, print_job::region_settings).
 // Upstream attribution (PrintObject.cpp):
 // Copyright (c) Prusa Research 2016 - 2023 Lukáš Hejl @hejllukas, Pavel Mikuš @Godrak, Lukáš Matěna @lukasmatena, Vojtěch Bubník @bubnikv, Enrico Turri @enricoturri1966, Oleksandra Iushchenko @YuSanka, David Kocík @kocikdav, Roman Beránek @zavorka
 // Copyright (c) 2021 Justin Schuh @jschuh
@@ -34,7 +35,7 @@ pub(crate) fn combine_infill(surfaces: &mut [FillSurfaces], heights: &[f64], s: 
         let mut height = heights[first];
         while end < surfaces.len()
             && end - first < s.infill_every_layers
-            && height + heights[end] < s.nozzle_diameter + 1e-4
+            && height + heights[end] < s.infill_combine_nozzle + 1e-4
         {
             height += heights[end];
             end += 1;

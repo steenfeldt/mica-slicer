@@ -43,6 +43,11 @@
 
 // Source: prusaslicer@b028299c77 src/libslic3r/Feature/FullSpectrum/VirtualExtruder.cpp :: expand_virtual_extruders_0based
 // Changes: Project-aware virtual model assignments; object tool discovery expands recipes into physical tools.
+// Source: prusaslicer@b028299c77 src/libslic3r/PrintRegion.cpp :: PrintRegion::flow
+// Source: prusaslicer@b028299c77 src/libslic3r/PrintObject.cpp :: PrintObject::combine_infill
+// Source: orca@8500fcdcca src/libslic3r/PrintObject.cpp :: PrintObject::combine_infill
+// Changes: Region settings resolve automatic infill widths for the infill tools' nozzles and bound combined infill by
+// Changes: the smaller infill nozzle; a mixed color counts the smallest nozzle it alternates through.
 
 //! Print-level scheduling. Geometry remains in independently prepared objects; only a requested
 //! batch of finished paths is merged. Parts with different assignments share their instance label.
@@ -176,6 +181,52 @@ pub fn tool_config(c: &Config, tool: usize) -> Config {
     out
 }
 
+/// Settings of a region whose walls print with `tools.0[0]` (zero-based physical tools), with
+/// the infill roles resolved for their own tools' nozzles as upstream `PrintRegion::flow` does:
+/// automatic sparse infill widths from the sparse infill tool, solid and top ones from the solid
+/// infill tool. Combined infill stays within the smaller nozzle of the two infill tools
+/// (`PrintObject::combine_infill`); `logical` are the same roles before mixed colors resolve
+/// to physical tools, so a mix bounds it by the smallest nozzle it alternates through.
+pub(crate) fn region_settings(
+    c: &Config,
+    tools: &ToolAssignments,
+    logical: &ToolAssignments,
+    spectrum: &crate::full_spectrum::FullSpectrum,
+) -> Result<PrintSettings, String> {
+    let resolve =
+        |tool: usize| PrintSettings::from_config(&tool_config(c, tool)).map_err(|e| e.to_string());
+    let wall = tools.0[0].unwrap_or(0);
+    let mut s = resolve(wall)?;
+    let nozzle = |tool: usize| c.float_at("nozzle_diameter", tool);
+    let other = |tool: Option<usize>| {
+        tool.filter(|t| *t != wall && nozzle(*t) != nozzle(wall))
+            .map(resolve)
+            .transpose()
+    };
+    if let Some(r) = other(tools.0[1])? {
+        s.infill_extrusion_width = r.infill_extrusion_width;
+    }
+    if let Some(r) = other(tools.0[2])? {
+        s.solid_infill_extrusion_width = r.solid_infill_extrusion_width;
+        s.top_infill_extrusion_width = r.top_infill_extrusion_width;
+    }
+    // Upstream identifies a mixed region by its wall tool and prints every role with the mix.
+    let mix = logical.0[0]
+        .map(|t| t + 1)
+        .filter(|id| spectrum.contains(*id));
+    s.infill_combine_nozzle = logical.0[1..3]
+        .iter()
+        .flatten()
+        .flat_map(|t| spectrum.expand(mix.unwrap_or(t + 1)))
+        .chain(tools.0[1..3].iter().flatten().map(|t| t + 1))
+        .filter_map(|id| nozzle(id - 1))
+        .fold(f64::INFINITY, f64::min);
+    if !s.infill_combine_nozzle.is_finite() {
+        s.infill_combine_nozzle = s.nozzle_diameter;
+    }
+    Ok(s)
+}
+
 /// Whether each layer starts with the extruder that ended the layer below
 /// (`ToolOrdering::reorder_extruders`). PrusaSlicer's Cyclic ordering keeps the sorted tool order
 /// (1, 2, 3, ...) on every layer, but only for a print-wide ordering: a sequential print orders
@@ -269,8 +320,7 @@ impl PrintObject {
         frame: Option<&crate::input::Frame>,
         observer: &dyn crate::progress::Observer,
     ) -> Result<Self, String> {
-        let mut s = PrintSettings::from_config(&tool_config(c, tools.0[0].unwrap_or(0)))
-            .map_err(|e| e.to_string())?;
+        let mut s = region_settings(c, &tools, &tools, &Default::default())?;
         if let Some(tree) = s.tree3d.as_mut() {
             tree.set_object_extruders(&object_extruders(&tools, None, c));
         }
@@ -331,13 +381,13 @@ impl PrintObject {
         observer: &dyn crate::progress::Observer,
     ) -> Result<Self, String> {
         model.validate()?;
+        let logical = tools;
         let tools = ToolAssignments(
-            tools
+            logical
                 .0
                 .map(|t| t.map(|t| model.full_spectrum.resolve(t + 1, 0) - 1)),
         );
-        let mut s = PrintSettings::from_config(&tool_config(c, tools.0[0].unwrap_or(0)))
-            .map_err(|e| e.to_string())?;
+        let mut s = region_settings(c, &tools, &logical, &model.full_spectrum)?;
         if let Some(tree) = s.tree3d.as_mut() {
             tree.set_object_extruders(&object_extruders(&tools, Some(model), c));
         }

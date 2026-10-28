@@ -578,6 +578,7 @@ impl PrintSettings {
             infill_anchor: float_or_percent(c, "infill_anchor")?,
             infill_anchor_max: float_or_percent(c, "infill_anchor_max")?,
             nozzle_diameter: float(c, "nozzle_diameter")?,
+            infill_combine_nozzle: float(c, "nozzle_diameter")?,
             first_layer_extrusion_width: width("first_layer_extrusion_width")?,
             external_perimeter_extrusion_width: width("external_perimeter_extrusion_width")?,
             perimeter_extrusion_width: width("perimeter_extrusion_width")?,

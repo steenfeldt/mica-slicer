@@ -342,6 +342,44 @@ fn object_layer_height_and_combined_infill() {
     }));
     assert!(layers.iter().any(|l| amount(l, Role::InternalInfill) == 0.));
 }
+/// PrusaSlicer `PrintObject::combine_infill` bounds combined infill by the smaller nozzle of the
+/// region's sparse and solid infill tools, and `PrintRegion::flow` sizes automatic infill widths
+/// by the infill tool's nozzle, also for a modifier's own tools.
+#[test]
+fn combined_infill_follows_the_infill_tools_nozzles() {
+    let mut c = config();
+    c.set_raw("nozzle_diameter", "0.4,0.6").unwrap();
+    c.set_raw("infill_every_layers", "3").unwrap();
+    c.set_raw("infill_extrusion_width", "0").unwrap();
+    c.set_raw("extrusion_width", "0").unwrap();
+    let infill = |m: &RegionModel, c: &Config| {
+        let o = prepare(m, c);
+        let mut out = vec![];
+        for l in o.prepared.toolpaths(10..30) {
+            for p in l.paths.iter().filter(|p| p.role == Role::InternalInfill) {
+                out.push((p.flow.height, p.flow.width));
+            }
+        }
+        out
+    };
+    let max_height = |v: &[(f64, f64)]| v.iter().map(|p| p.0).fold(0., f64::max);
+    // Sparse infill on the 0.6 nozzle, solid infill on the 0.4: two layers at most.
+    c.set_raw("infill_extruder", "2").unwrap();
+    let v = infill(&model(), &c);
+    assert!((max_height(&v) - 0.4).abs() < 1e-6, "{v:?}");
+    assert!(v.iter().all(|p| (p.1 - 1.125 * 0.6).abs() < 1e-6), "{v:?}");
+    // Both infill roles on the 0.6 nozzle through the part's own settings: three layers.
+    c.set_raw("infill_extruder", "1").unwrap();
+    let mut m = model();
+    m.volumes[0].config = patch(&[("infill_extruder", "2"), ("solid_infill_extruder", "2")]);
+    let v = infill(&m, &c);
+    assert!((max_height(&v) - 0.6).abs() < 1e-6, "{v:?}");
+    assert!(v.iter().all(|p| (p.1 - 1.125 * 0.6).abs() < 1e-6), "{v:?}");
+    // Tool 1's 0.4 nozzle for everything: two layers, 0.4 nozzle widths.
+    let v = infill(&model(), &c);
+    assert!((max_height(&v) - 0.4).abs() < 1e-6, "{v:?}");
+    assert!(v.iter().all(|p| (p.1 - 1.125 * 0.4).abs() < 1e-6), "{v:?}");
+}
 #[test]
 fn blocker_and_manual_enforcer_control_normal_and_tree_contacts() {
     for style in ["snug", "organic"] {

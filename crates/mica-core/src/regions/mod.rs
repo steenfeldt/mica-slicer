@@ -41,7 +41,7 @@ use crate::config::Config;
 use crate::geometry::ExPolygon;
 use crate::geometry::clip::{Join, diff_ex, intersection_ex, offset_ex, union_ex};
 use crate::mesh::TriangleMesh;
-use crate::print_job::{ToolAssignments, tool_config};
+use crate::print_job::ToolAssignments;
 use crate::settings::PrintSettings;
 use crate::threemf::PartKind;
 use rayon::prelude::*;
@@ -662,7 +662,7 @@ fn intern(
     if let Some(i) = table.iter().position(|r| r.config == config) {
         return Ok(i);
     }
-    ToolAssignments::resolve_with_virtuals(
+    let logical = ToolAssignments::resolve_with_virtuals(
         &config,
         &Default::default(),
         &Default::default(),
@@ -680,8 +680,7 @@ fn intern(
         0,
         config.vector_len("nozzle_diameter").max(1),
     )?;
-    let settings = PrintSettings::from_config(&tool_config(&physical, tools.0[0].unwrap_or(0)))
-        .map_err(|e| e.to_string())?;
+    let settings = crate::print_job::region_settings(&physical, &tools, &logical, spectrum)?;
     let by_tool = crate::print_job::resolved_tools(&physical)?;
     table.push(PrintRegion {
         settings,
