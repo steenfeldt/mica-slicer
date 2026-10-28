@@ -659,13 +659,60 @@ The remaining surplus is in model infill (painted cube: 275 against 183 infill-t
 retractions), not in the tower. The remaining `M204` gap is model role order (Benchys: Mica ends a
 tool's block with solid infill more often). Single-tool CORE One/XL and U1 output is byte-identical.
 
+## Purge into infill and objects
+
+`wipe_into_infill` (per region: print settings, objects and modifiers) and `wipe_into_objects`
+(per object only) are PrusaSlicer's options; OrcaSlicer's `flush_into_infill` /
+`flush_into_objects` map onto them in profiles and 3MF files (`mapping.tsv`). Off by default.
+Ported from `ToolOrdering.cpp` (`is_overriddable`, `collect_extruders`,
+`WipingExtrusions::ensure_perimeters_infills_order`) and `ExtrusionOrder.cpp`
+(`get_extruder_id`, overridden extrusions first) into `mica_core::tool_ordering` and
+`PreparedPrint`.
+
+What upstream actually does on a toolchanger (XL, CORE One with tools, U1):
+
+- An overridable entity (sparse infill with `wipe_into_infill`; every wall and fill with
+  `wipe_into_objects`; never soluble filament, supports, skirt or brim) does **not** ask for its
+  own tool in `collect_extruders`. A region whose layer also has non-overridable fill (solid
+  infill) still asks for both its solid and its sparse infill tool.
+- `mark_wiping_extrusions` (the part that would let an extrusion absorb purge volume) marks
+  nothing: PrusaSlicer calls it with the purge left after `filament_minimal_purge_on_wipe_tower`,
+  which is zero without single-extruder multi-material (`extract_wipe_volumes`); Orca's
+  WipeTower2 calls it only for SEMM `purge_in_prime_tower`. Mica refuses SEMM towers, so it is
+  not ported and the tower volume per tool change is unchanged.
+- On the layers the tower plans (up to the last tool change), `ensure_perimeters_infills_order`
+  forces each overridable entity to the layer's last (walls: first) non-soluble tool, unless its
+  walls print last and its own tool is on the layer; such forced paths print first with their
+  tool. Elsewhere (no tower, layers above the last change) a path whose tool left the layer
+  prints with the layer's last tool. Orca's version passes `last || !has_extruder(sparse)` as a
+  tool index to `is_extruder_order` and skips support filaments; Mica keeps both.
+- Objects printed one after another get no wiping (upstream's per-object ordering has no print
+  config). `flush_into_support` (Orca, default on) has no effect without SEMM and stays unmapped.
+
+So with walls on tool 1 and infill on tool 2, purging into infill saves the tool changes of every
+layer without solid infill by printing that sparse infill with tool 1. PrusaSlicer 2.9.6 against
+Mica, XL 5T 0.4 (`0.20mm SPEED @XL 0.4`, Prusament PLA, infill on T2, centered at 180,180):
+
+| Job | PrusaSlicer T1 / T2 mm | Mica T1 / T2 mm | Tool changes (both) | Time PS / Mica |
+| --- | ---: | ---: | ---: | ---: |
+| cube20 | 1659.95 / 1263.30 | 1659.94 / 1263.23 | 92 | 30m51s / 31m30s |
+| cube20, into infill | 2384.68 / 59.61 | 2384.68 / 59.55 | 2 | 25m03s / 26m25s |
+| 3DBenchy | 5420.50 / 1529.99 | 5420.34 / 1530.36 | 116 | 1h25m43s / 1h29m06s |
+| 3DBenchy, into infill | unchanged (each sparse layer also has solid infill) | unchanged | 116 | unchanged |
+| 3DBenchy, into object | 4081.13 / 0 | 4081.40 / 0 | 0 | 58m24s / 59m50s |
+
+Layer tool sequences are equal in all five (`scripts/compare-multitool.py`). Mica's extra
+initial toolchange template call with a single used tool on the XL ("Change Tool-1 -> Tool0")
+predates this change and also shows in a plain one-tool XL slice.
+
 ## Scope and review
 
 The sources are pinned Prusa `WipeTower`, `WipeTowerIntegration`, wiping-layer scheduling and
 `Print::_make_wipe_tower`, Orca `WipeTower2`, and Snapmaker-Orca's U1 speed/pressure handling.
 See the per-file register in [PROVENANCE.md](../PROVENANCE.md).
 
-Wipe-into-infill/objects is omitted; all required purge stays on the tower. MMU loading/cooling,
+Purging into infill and objects follows upstream (see [below](#purge-into-infill-and-objects)):
+for independent tools it changes which tool prints a path, never the tower volume. MMU loading/cooling,
 Bambu/type1 towers, tower ironing/interface specialization, sequential printing and mixed-nozzle
 towers are outside this port. MMU, type1 and unequal nozzles are rejected. Front-edge priming and
 bed containment use a rectangular bed extent; circular/concave beds need further work.

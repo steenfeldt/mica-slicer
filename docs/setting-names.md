@@ -246,6 +246,7 @@ OrcaSlicer's where Orca has the option (the GUI follows Orca's layout), else Pru
 | Multimaterial › Filament for Features | Wipe tower | `wipe_tower_extruder` | `wipe_tower_extruder` | Wipe tower extruder | `wipe_tower_filament` | Wipe tower | both |  |
 | Multimaterial › Ooze prevention | Enable | `ooze_prevention` | `ooze_prevention` | Enable | `ooze_prevention` | Enable | both |  |
 | Multimaterial › Ooze prevention | Temperature variation | `standby_temperature_delta` | `standby_temperature_delta` | Temperature variation | `standby_temperature_delta` | Temperature variation | both |  |
+| Multimaterial › Flush options | Purge into infill | `wipe_into_infill` | `wipe_into_infill` | Wipe into this object's infill | `flush_into_infill` | Flush into objects' infill | both |  |
 | Multimaterial › Advanced | Use beam interlocking | `interlocking_beam` | `interlocking_beam` | Use beam interlocking | `interlocking_beam` | Use beam interlocking | both |  |
 | Multimaterial › Advanced | Maximum width of a segmented region | `mmu_segmented_region_max_width` | `mmu_segmented_region_max_width` | Maximum width of a segmented region | `mmu_segmented_region_max_width` | Maximum width of a segmented region | both |  |
 | Multimaterial › Advanced | Interlocking depth of a segmented region | `mmu_segmented_region_interlocking_depth` | `mmu_segmented_region_interlocking_depth` | Interlocking depth of a segmented region | `mmu_segmented_region_interlocking_depth` | Interlocking depth of a segmented region | both |  |

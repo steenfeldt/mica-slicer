@@ -376,6 +376,8 @@ wall_transition_angle	In wedge shapes, Arachne adds or removes a wall where the 
 wall_transition_filter_deviation	How much Arachne may vary a wall's width before it adds or removes a wall, as a percentage of the nozzle. Higher values mean fewer transitions but more width variation.
 wall_transition_length	How much room Arachne uses to split or join walls where a part gets thinner, as a percentage of the nozzle.
 wipe	Moves the nozzle back along the line it just printed while retracting, which wipes off ooze and reduces blobs.
+wipe_into_infill	Sparse infill stops asking for its own tool: it prints with a tool the layer uses anyway, usually the wall filament, which saves the tool changes and tower purges it would cost. Sparse infill next to solid infill keeps its tool. Needs several tools.	Purge into infill
+wipe_into_objects	This object never asks for a tool change of its own: its walls and fills print with whatever tool the layer uses anyway, so colors and materials mix in it. Meant for a throwaway or hidden object. Needs several tools.	Purge into this object
 wipe_tower	Prints a prime tower next to the parts. Each tool change purges the old filament into it, so the new one flows cleanly before it touches the part.
 wipe_tower_acceleration	Acceleration for the prime tower. 0 uses the normal acceleration.
 wipe_tower_bridging	The longest distance prime tower layers may bridge over sparse sections.

@@ -64,6 +64,8 @@ extras-only for a particular mode or rejected for an invalid value.
 | `enable_arc_fitting` | `arc_fitting` | converted | `0` → `disabled`, `1` → `emit_center`; U1 inherits `1`. Orca emits I/J arcs, including Klipper. |
 | `ensure_vertical_shell_thickness` | `ensure_vertical_shell_thickness` | converted | As both slicers read their old booleans (`1`: Orca `ensure_all` / Prusa `enabled`, `0`: `ensure_moderate` / `partial`), `none` → `disabled`; Orca's `ensure_critical_only` (never written by Mica) reads as `partial` (lossy). |
 | `enable_prime_tower` | `wipe_tower` | identical | Orca: Enable []; Prusa: Enable []. Same physical quantity and units; vector/scalar shape is checked. |
+| `flush_into_infill` | `wipe_into_infill` | identical | Orca: Flush into objects' infill (object); Prusa: Wipe into this object's infill (region). Active: see [purge into infill](../../../../docs/wipe-tower.md#purge-into-infill-and-objects). |
+| `flush_into_objects` | `wipe_into_objects` | identical | Orca: Flush into this object; Prusa: Wipe into this object (both object settings). Active: see [purge into infill](../../../../docs/wipe-tower.md#purge-into-infill-and-objects). |
 | `enable_support` | `support_material` | identical | Orca: Enable support []; Prusa: Generate support material []. Same physical quantity and units; vector/scalar shape is checked. |
 | `enforce_support_layers` | `support_material_enforce_layers` | identical | Orca:  [layers]; Prusa: Enforce support for the first [layers]. Same physical quantity and units; vector/scalar shape is checked. |
 | `eng_plate_temp` | `bed_temperature` | converted | Orca: Other layers [\u2103]; Prusa: Other layers [°C]. Select only the temperature vector for curr_bed_type; other plates stay extras-only. |
@@ -430,9 +432,7 @@ The report distinguishes these valid values from malformed values.
 | `first_layer_sequence_choice` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `first_x_layer_fan_speed` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `flashforge_serial_number` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `flush_into_infill` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `flush_into_objects` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
-| `flush_into_support` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
+| `flush_into_support` | extras-only | No Prusa equivalent. Without effect for independent tools: Orca's WipeTower2 marks support for purging only with single-extruder multi-material `purge_in_prime_tower`, which Mica refuses (`WipingExtrusions::mark_wiping_extrusions`, `Print::_make_wipe_tower`). |
 | `flush_multiplier` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `flush_volumes_matrix` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |
 | `flush_volumes_vector` | extras-only | No implemented equivalent in Mica’s Prusa option schema. |

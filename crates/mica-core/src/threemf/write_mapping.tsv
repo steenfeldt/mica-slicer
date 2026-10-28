@@ -78,6 +78,8 @@ filament_unloading_speed_start	filament_unloading_speed_start	identity
 filament_vendor	filament_vendor	identity
 filament_wipe	wipe	override
 filament_z_hop	retract_lift	override
+flush_into_infill	wipe_into_infill	identity
+flush_into_objects	wipe_into_objects	identity
 full_fan_speed_layer	full_fan_speed_layer	identity
 fuzzy_skin	fuzzy_skin	enum
 fuzzy_skin_point_distance	fuzzy_skin_point_dist	identity

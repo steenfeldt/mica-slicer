@@ -362,8 +362,8 @@ wall_transition_angle	Float	0	print	10
 wall_transition_filter_deviation	FloatOrPercent	0	print	25%	
 wall_transition_length	FloatOrPercent	0	print	100%	
 wipe	Bools	0	printer	0	
-wipe_into_infill	Bool	0	-	0	
-wipe_into_objects	Bool	0	-	0	
+wipe_into_infill	Bool	0	print	0	
+wipe_into_objects	Bool	0	print	0	
 wipe_tower	Bool	0	print	0	
 wipe_tower_acceleration	Float	0	print	0	
 wipe_tower_bridging	Float	0	print	10	

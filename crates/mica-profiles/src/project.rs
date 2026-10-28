@@ -795,6 +795,14 @@ mod tests {
         let patch = Mapper::default().patch(&raw, true, &mut ignored).unwrap();
         assert_eq!(patch.int("perimeters"), Some(4));
         assert_eq!(patch.float("fill_density"), Some(30.));
+        // Orca's object flush options are PrusaSlicer's wipe options.
+        let mut flush = Settings::new();
+        flush.insert("flush_into_infill".into(), "1".into());
+        flush.insert("flush_into_objects".into(), "1".into());
+        let patch = Mapper::default().patch(&flush, true, &mut ignored).unwrap();
+        assert_eq!(patch.bool("wipe_into_infill"), Some(true));
+        assert_eq!(patch.bool("wipe_into_objects"), Some(true));
+        assert!(ignored.is_empty(), "{ignored:?}");
         let mut prusa = Settings::new();
         prusa.insert("perimeters".into(), "5".into());
         let patch = Mapper::default()

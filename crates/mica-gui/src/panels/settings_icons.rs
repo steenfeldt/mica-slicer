@@ -350,6 +350,13 @@ pub fn section(painter: &egui::Painter, rect: Rect, name: &str, color: Color32) 
             p.line(&[(3., 20.), (21., 20.)]);
         }
         "Filament for Features" => two_spools(&p),
+        // Purge into the part: an arrow down into a wall with zigzag infill.
+        "Flush options" => {
+            p.rect(4., 10., 16., 11., 1.);
+            p.line(&[(6., 19.), (9., 13.), (12., 19.), (15., 13.), (18., 19.)]);
+            p.line(&[(12., 2.), (12., 8.)]);
+            p.line(&[(9.5, 5.5), (12., 8.), (14.5, 5.5)]);
+        }
         "Ooze prevention" => {
             let mut drop: Vec<(f32, f32)> = vec![(12., 3.)];
             let (a0, a1) = (-0.6_f32, PI + 0.6);

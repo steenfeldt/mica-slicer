@@ -68,6 +68,12 @@ pub fn run(root: &Path, defaults_ini: Option<&str>) -> ExitCode {
     for key in list_body(&config_cpp, "m_extruder_option_keys = {") {
         scopes.entry(key).or_insert("printer");
     }
+    // Object and region settings PrusaSlicer edits only per object and part (GUI_Factories'
+    // "Wipe options"); OrcaSlicer keeps the same settings in the process preset
+    // (`flush_into_infill`, `flush_into_objects`), so Mica treats them as print settings.
+    for key in ["wipe_into_infill", "wipe_into_objects"] {
+        scopes.entry(key.to_string()).or_insert("print");
+    }
     let defaults: BTreeMap<&str, &str> = defaults
         .lines()
         .filter(|l| !l.starts_with('#'))

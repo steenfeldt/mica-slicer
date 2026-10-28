@@ -149,6 +149,8 @@ print	Multimaterial	Prime tower		single_extruder_multi_material_priming	orca:sin
 print	Multimaterial	Filament for Features		wipe_tower_extruder	orca:wipe_tower_filament
 print	Multimaterial	Ooze prevention		ooze_prevention	orca:ooze_prevention
 print	Multimaterial	Ooze prevention		standby_temperature_delta	orca:standby_temperature_delta
+print	Multimaterial	Flush options		wipe_into_infill	orca:flush_into_infill
+print	Multimaterial	Flush options		wipe_into_objects	orca:flush_into_objects
 print	Multimaterial	Advanced		interlocking_beam	orca:interlocking_beam
 print	Multimaterial	Advanced		interface_shells	orca:interface_shells
 print	Multimaterial	Advanced		mmu_segmented_region_max_width	orca:mmu_segmented_region_max_width

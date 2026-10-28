@@ -281,6 +281,12 @@ pub fn pages(tab: Tab) -> &'static [Page] {
                 let Some((key, _)) = option_defs().get_key_value(f[4]) else {
                     continue;
                 };
+                // Purging into a whole object is an object setting only: OrcaSlicer hides it in
+                // the process settings (`toggle_line("flush_into_objects", !is_global_config)`)
+                // and PrusaSlicer's print settings have no row for it.
+                if *key == "wipe_into_objects" {
+                    continue;
+                }
                 let tab = match f[0] {
                     "print" => "print",
                     "filament" => "filament",
@@ -773,6 +779,7 @@ fn object_only(key: &str) -> bool {
             | "slicing_mode"
             | "interface_shells"
             | "dont_support_bridges"
+            | "wipe_into_objects"
             | SUPPORT_MODE
     ) || [
         "support_material",
@@ -885,6 +892,8 @@ pub const OBJECT_OVERRIDES: &[(&str, &[&str])] = &[
             "solid_infill_extruder",
             "support_material_extruder",
             "support_material_interface_extruder",
+            "wipe_into_infill",
+            "wipe_into_objects",
         ],
     ),
 ];

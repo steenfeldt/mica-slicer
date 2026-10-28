@@ -39,6 +39,10 @@
 // Changes: Per-tool configurations keep every tool's filament_soluble / filament_is_support (SupportParameters reads them by index).
 // Changes: With a wipe tower the first layer starts with a soluble tool (reorder_extruders; PrusaSlicer rules).
 // Source: orca@8500fcdcca src/libslic3r/GCode.cpp :: GCode::collect_layers_to_print
+// Source: prusaslicer@b028299c77 src/libslic3r/GCode/ExtrusionOrder.cpp :: get_extrusions, get_overriden_extrusions
+// Source: prusaslicer@b028299c77 src/libslic3r/Print.cpp :: Print::_make_wipe_tower
+// Changes: Purge into infill/objects: overridable paths drop their tool in the usage prepass (collect_extruders), paths the
+// Changes: wiping rules force onto a tool print first with it; tower layers are where ensure_perimeters_infills_order runs.
 // Changes: An object whose first layer prints nothing stops the slice with each slicer's own error (collect_layers_to_print).
 
 // Source: prusaslicer@b028299c77 src/libslic3r/Feature/FullSpectrum/VirtualExtruder.cpp :: expand_virtual_extruders_0based
@@ -58,7 +62,9 @@ use crate::mesh::TriangleMesh;
 use crate::print::{LayerSource, PreparedObject};
 use crate::settings::PrintSettings;
 use crate::threemf::Settings;
-use crate::tool_ordering::ToolOrdering;
+use crate::tool_ordering::{
+    EntityKind, RegionTools, ToolOrdering, WipeInto, WipingExtrusions, entity_kind,
+};
 use crate::toolpath::{LayerToolpaths, Role};
 use rayon::prelude::*;
 use std::collections::BTreeMap;
@@ -504,6 +510,66 @@ impl PrintObject {
             _ => self.path_tool(region, role),
         }
     }
+    /// The purge-absorbing options of a region: PrusaSlicer reads `wipe_into_infill` per region
+    /// (a modifier may set it) and `wipe_into_objects` per object. OrcaSlicer's
+    /// `flush_into_infill` / `flush_into_objects` (read into the same keys) are object settings,
+    /// which every region of the object inherits; Mica also lets a modifier set the first one
+    /// on Orca printers.
+    pub(crate) fn wipe_into(&self, region: Option<usize>) -> WipeInto {
+        let flag = |c: &Config, key: &str| c.bool(key).unwrap_or(false);
+        WipeInto {
+            infill: flag(self.path_config(region, 0).0, "wipe_into_infill"),
+            objects: flag(&self.config, "wipe_into_objects"),
+        }
+    }
+    /// Whether any region of the object may absorb a purge.
+    fn wipes(&self) -> bool {
+        self.wipe_into(None).any()
+            || (0..self.prepared.region_count()).any(|r| self.wipe_into(Some(r)).any())
+    }
+    /// A region's wall, solid and sparse infill tools under a per-layer tool switch.
+    fn region_tools(&self, region: Option<usize>, switch: Option<usize>) -> Option<RegionTools> {
+        Some(RegionTools {
+            perimeter: self.path_tool_at(region, Role::Perimeter, switch)?,
+            solid: self.path_tool_at(region, Role::SolidInfill, switch)?,
+            infill: self.path_tool_at(region, Role::InternalInfill, switch)?,
+        })
+    }
+    /// Upstream `collect_extruders` for an object layer whose regions may absorb purges: the
+    /// tools its paths need. Overridable walls and fills do not ask for their own tool; a layer
+    /// left with no tool at all asks for "don't care" (`None`, the current tool).
+    fn wiping_layer_tools(
+        &self,
+        w: &WipingExtrusions,
+        paths: &[crate::toolpath::ExtrusionPath],
+        regions: &[Option<usize>],
+        switch: Option<usize>,
+    ) -> Vec<Option<usize>> {
+        let mut ts = Vec::new();
+        let mut by_region: BTreeMap<Option<usize>, Vec<Role>> = BTreeMap::new();
+        for (pi, p) in paths.iter().enumerate() {
+            let region = regions.get(pi).copied().flatten();
+            if entity_kind(p.role) != EntityKind::Other
+                && self.region_tools(region, switch).is_some()
+            {
+                by_region.entry(region).or_default().push(p.role);
+            } else {
+                let t = self.path_tool_at(region, p.role, switch);
+                if !ts.contains(&t) {
+                    ts.push(t);
+                }
+            }
+        }
+        for (region, roles) in by_region {
+            if let Some(tools) = self.region_tools(region, switch) {
+                w.collect_region(roles, tools, self.wipe_into(region), &mut ts);
+            }
+        }
+        if ts.is_empty() && !paths.is_empty() {
+            ts.push(None);
+        }
+        ts
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -688,6 +754,8 @@ pub struct PreparedPrint {
     pub custom_gcode: crate::custom_gcode::Info,
     /// Tool switches of a single-tool plate on a multi-tool printer (from `custom_gcode`).
     switches: crate::custom_gcode::Switches,
+    /// Purging into infill or objects, when some object asks for it.
+    wiping: Option<WipingExtrusions>,
 }
 
 /// How many bytes of generated toolpaths the tool-usage prepass keeps for export, over all
@@ -803,6 +871,22 @@ impl PreparedPrint {
         // does not hold the paths of every layer at once (deterministic per object, whatever
         // the thread schedule; regenerated layers are identical).
         let share = PREPASS_RETAIN_BYTES / leaders.len().max(1);
+        // Purging into infill or objects (upstream WipingExtrusions). Objects printed one after
+        // another get their own tool ordering upstream, without the print config, so no wiping.
+        let wiping = {
+            let orca = crate::rules::Rules::of(c).is_orca();
+            (!crate::sequential::enabled(c) && objects.iter().any(|o| o.wipes())).then(|| {
+                WipingExtrusions::new(
+                    orca,
+                    (0..tool_count)
+                        .map(|t| c.bool_at("filament_soluble", t).unwrap_or(false))
+                        .collect(),
+                    (0..tool_count)
+                        .map(|t| filament_flag(c, "filament_is_support", t))
+                        .collect(),
+                )
+            })
+        };
         let (usage, prepass): (Vec<_>, Vec<_>) = leaders
             .par_iter()
             .map(|&leader| {
@@ -811,6 +895,7 @@ impl PreparedPrint {
                 let mut usage = Vec::new();
                 let mut retained = BTreeMap::new();
                 let mut kept = 0usize;
+                let object_wiping = wiping.as_ref().filter(|_| o.wipes());
                 for begin in (0..o.prepared.layer_count()).step_by(32) {
                     for (layer, regions) in o
                         .prepared
@@ -818,11 +903,18 @@ impl PreparedPrint {
                     {
                         let mut ts = Vec::new();
                         let switch = switches.at(layer.print_z);
-                        for (pi, p) in layer.paths.iter().enumerate() {
-                            let t =
-                                o.path_tool_at(regions.get(pi).copied().flatten(), p.role, switch);
-                            if !ts.contains(&t) {
-                                ts.push(t);
+                        if let Some(w) = object_wiping {
+                            ts = o.wiping_layer_tools(w, &layer.paths, &regions, switch);
+                        } else {
+                            for (pi, p) in layer.paths.iter().enumerate() {
+                                let t = o.path_tool_at(
+                                    regions.get(pi).copied().flatten(),
+                                    p.role,
+                                    switch,
+                                );
+                                if !ts.contains(&t) {
+                                    ts.push(t);
+                                }
                             }
                         }
                         usage.push((layer.index, layer.print_z, layer.height, ts));
@@ -1134,6 +1226,7 @@ impl PreparedPrint {
             prepass,
             custom_gcode,
             switches,
+            wiping,
         })
     }
 
@@ -1243,6 +1336,7 @@ impl PreparedPrint {
             wipe_tower: None,
             custom_gcode: crate::custom_gcode::Info::default(),
             switches: crate::custom_gcode::Switches::default(),
+            wiping: None,
             warnings: Vec::new(),
         }
     }
@@ -1370,47 +1464,64 @@ impl PreparedPrint {
                             }
                         }
                     }
-                    for &oi in &self.object_order {
-                        for &(o, li) in &l.sources {
-                            if o != oi {
-                                continue;
-                            }
-                            let (layer, regions) = &cache[&(self.group_of[oi], li)];
-                            let shift = self.objects[oi].shift;
-                            let switch = self.switches.at(layer.print_z);
-                            for (pi, path) in layer.paths.iter().enumerate() {
-                                let region = regions.get(pi).copied().flatten();
-                                let object = &self.objects[oi];
-                                if object
-                                    .path_tool_at(region, path.role, switch)
-                                    .unwrap_or_else(|| {
-                                        let assigned =
-                                            object.path_tool(region, Role::SupportMaterial);
-                                        let interface = object
-                                            .path_tool(region, Role::SupportMaterialInterface);
-                                        dont_care_support_tool(
-                                            &object.config,
-                                            tools,
-                                            path.role,
-                                            (assigned, interface),
-                                        )
-                                    })
-                                    == tool
-                                {
-                                    let mut path = path.clone();
-                                    crate::instances::shift_path(&mut path, shift);
-                                    if let Some(group) =
-                                        layer.support_groups.iter().find(|g| g.start == pi)
-                                    {
-                                        let start = out.layer.paths.len();
-                                        out.layer.support_groups.push(start..start + group.len());
+                    // Upstream prints the extrusions forced to this tool by the wiping rules
+                    // first (every instance), then the normal ones.
+                    let passes: &[bool] = if self.wiping.is_some() {
+                        &[true, false]
+                    } else {
+                        &[false]
+                    };
+                    for &overridden_pass in passes {
+                        for &oi in &self.object_order {
+                            for &(o, li) in &l.sources {
+                                if o != oi {
+                                    continue;
+                                }
+                                let (layer, regions) = &cache[&(self.group_of[oi], li)];
+                                let shift = self.objects[oi].shift;
+                                let switch = self.switches.at(layer.print_z);
+                                for (pi, path) in layer.paths.iter().enumerate() {
+                                    let region = regions.get(pi).copied().flatten();
+                                    let object = &self.objects[oi];
+                                    let (path_tool, overridden) = self
+                                        .wipe_route(i, object, region, path.role, switch)
+                                        .unwrap_or_else(|| {
+                                            let t = object
+                                                .path_tool_at(region, path.role, switch)
+                                                .unwrap_or_else(|| {
+                                                    let assigned = object
+                                                        .path_tool(region, Role::SupportMaterial);
+                                                    let interface = object.path_tool(
+                                                        region,
+                                                        Role::SupportMaterialInterface,
+                                                    );
+                                                    dont_care_support_tool(
+                                                        &object.config,
+                                                        tools,
+                                                        path.role,
+                                                        (assigned, interface),
+                                                    )
+                                                });
+                                            (t, false)
+                                        });
+                                    if path_tool == tool && overridden == overridden_pass {
+                                        let mut path = path.clone();
+                                        crate::instances::shift_path(&mut path, shift);
+                                        if let Some(group) =
+                                            layer.support_groups.iter().find(|g| g.start == pi)
+                                        {
+                                            let start = out.layer.paths.len();
+                                            out.layer
+                                                .support_groups
+                                                .push(start..start + group.len());
+                                        }
+                                        out.layer.paths.push(path);
+                                        out.assignments.push(PathAssignment {
+                                            object: oi,
+                                            tool,
+                                            region,
+                                        });
                                     }
-                                    out.layer.paths.push(path);
-                                    out.assignments.push(PathAssignment {
-                                        object: oi,
-                                        tool,
-                                        region,
-                                    });
                                 }
                             }
                         }
@@ -1419,6 +1530,48 @@ impl PreparedPrint {
                 out
             })
             .collect()
+    }
+
+    /// The tool printing a path that may absorb a purge, and whether the wiping rules forced it
+    /// there (upstream `get_extruder_id`): on a layer the wipe tower plans,
+    /// `ensure_perimeters_infills_order` may force it to the layer's first or last non-soluble
+    /// tool; otherwise it keeps its tool, or takes the layer's last tool when its own was
+    /// dropped from the layer. `None` for every other path.
+    fn wipe_route(
+        &self,
+        layer: usize,
+        object: &PrintObject,
+        region: Option<usize>,
+        role: Role,
+        switch: Option<usize>,
+    ) -> Option<(usize, bool)> {
+        let w = self.wiping.as_ref()?;
+        let into = object.wipe_into(region);
+        if !into.any() {
+            return None;
+        }
+        let own = object.path_tool_at(region, role, switch)?;
+        if !w.is_overridable(role, own, into) {
+            return None;
+        }
+        let tools = object.region_tools(region, switch)?;
+        let extruders = &self.ordering.layers.get(layer)?.extruders;
+        let tower = self
+            .wipe_tower
+            .as_ref()
+            .is_some_and(|t| t.job_layers.get(layer).copied().flatten().is_some());
+        if tower {
+            // The island order Mica prints (PrusaSlicer's `infill_first`; Orca's regions read
+            // `is_infill_first`, which Mica does not implement: walls first).
+            let infill_first = object.path_config(region, own).1.infill_first;
+            if let Some(t) = w.ensure_order(extruders, role, tools, into, infill_first) {
+                return Some((t, true));
+            }
+        }
+        Some((
+            crate::tool_ordering::layer_tool_or_last(extruders, own),
+            false,
+        ))
     }
 }
 /// Orca `ToolOrdering::collect_extruders`: on a layer without object extrusions (support
