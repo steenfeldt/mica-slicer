@@ -302,6 +302,25 @@ pub fn preview_model(plates: &[Plate]) -> Mat4 {
     Mat4::from_translation(crate::scene::plates::current_origin(plates).extend(0.))
 }
 impl Frame {
+    /// The distance from the eye to the farthest corner of the plates and objects.
+    pub fn reach(&self) -> f32 {
+        let eye = self.camera.eye();
+        let far = |min: Vec3, max: Vec3| {
+            let d = (eye - (min + max) * 0.5).abs() + (max - min) * 0.5;
+            d.length()
+        };
+        let top = self.bed.height.max(self.bed.max.z);
+        let plates = self.plates.iter().map(|p| {
+            let o = p.origin.extend(0.);
+            far(self.bed.min.with_z(0.) + o, self.bed.max.with_z(top) + o)
+        });
+        let objects = self.objects.iter().map(|o| {
+            let (min, max) = o.bounds();
+            far(min, max)
+        });
+        far(self.bed.min.with_z(0.), self.bed.max.with_z(top))
+            .max(plates.chain(objects).fold(0., f32::max))
+    }
     pub fn aspect(&self) -> f32 {
         self.size[0] as f32 / self.size[1].max(1) as f32
     }
@@ -1638,7 +1657,7 @@ impl Renderer {
             .retain(|key, _| frame.caps.iter().any(|c| c.key == *key));
         let clip = frame.clip.unwrap_or(NO_CLIP);
         let camera = &frame.camera;
-        let vp = camera.matrix(frame.aspect());
+        let vp = camera.matrix_reaching(frame.aspect(), frame.reach());
         // Key light: high, from the viewer's upper left, following the camera so the model never
         // turns into an unlit silhouette.
         let (right, up) = camera.basis();

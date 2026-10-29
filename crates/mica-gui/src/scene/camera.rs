@@ -74,10 +74,17 @@ impl Camera {
         self.target + self.direction() * self.distance()
     }
     pub fn matrix(&self, aspect: f32) -> Mat4 {
+        self.matrix_reaching(aspect, 0.)
+    }
+    /// `matrix` whose far plane (perspective) lies at least `reach` mm from the eye, so the
+    /// scene is never cut off when the target is close to the eye (zoomed in towards the
+    /// pointer, then orbited or panned).
+    pub fn matrix_reaching(&self, aspect: f32, reach: f32) -> Mat4 {
         let view = glam::camera::rh::view::look_at_mat4(self.eye(), self.target, self.up());
         let projection = if self.perspective {
             let d = self.distance();
-            glam::camera::rh::proj::directx::perspective(self.fov, aspect, d * 0.02, d * 40.)
+            let far = (d * 40.).max(reach * 1.05);
+            glam::camera::rh::proj::directx::perspective(self.fov, aspect, d * 0.02, far)
         } else {
             glam::camera::rh::proj::directx::orthographic(
                 -self.span * aspect / 2.,
@@ -284,6 +291,18 @@ mod tests {
         c.orbit_around(Vec2::new(60., -25.), pivot);
         let after = c.project(pivot, 1.3).unwrap();
         assert!(before.abs_diff_eq(after, 1e-3));
+    }
+    #[test]
+    fn far_plane_reaches_the_scene_when_zoomed_in() {
+        let c = Camera {
+            span: 5.,
+            ..Default::default()
+        };
+        let far_point = c.eye() - c.direction() * 900.;
+        let clip = c.matrix(1.4).project_point3(far_point);
+        assert!(clip.z > 1., "cut off without a reach");
+        let clip = c.matrix_reaching(1.4, 900.).project_point3(far_point);
+        assert!((0. ..1.).contains(&clip.z));
     }
     #[test]
     fn fit_frames_bounds() {
