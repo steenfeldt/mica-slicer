@@ -516,8 +516,8 @@ mkdir -p "$(dirname "$site_manifest")"
 cp "$dist/latest.json" "$site_manifest"
 say "Manifest written to $site_manifest"
 # The website's download links name a version's files directly (GitHub's releases/latest skips
-# pre-releases): point the macOS button, its version note and the Windows and Linux rows at
-# this release, for each package it has.
+# pre-releases): point the platform rows and the download button at this release, for each
+# package it has, and its version note.
 if [ -f "$site_dir/index.html" ]; then
   python3 -I - "$site_dir/index.html" "$version" "$dist" "$repo" <<'PY'
 import os, re, sys
@@ -525,16 +525,11 @@ path, version, dist, repo = sys.argv[1:5]
 base = f"https://github.com/{repo}/releases/download/v{version}"
 text = open(path, encoding="utf-8").read()
 new = text
-if os.path.isfile(f"{dist}/MicaSlicer_{version}_arm64.dmg"):
-    new = re.sub(r"releases/download/v[0-9][0-9.]*/MicaSlicer_[0-9][0-9.]*_arm64\.dmg",
-                 f"releases/download/v{version}/MicaSlicer_{version}_arm64.dmg", new)
-    new = re.sub(r"Version [0-9][0-9.]*, Apple Silicon", f"Version {version}, Apple Silicon", new)
-for label, file, kind in (("Windows", f"MicaSlicer_{version}_x64-setup.exe", "64-bit installer"),
-                          ("Linux", f"MicaSlicer_{version}_x86_64.AppImage", "AppImage, 64-bit")):
-    if os.path.isfile(f"{dist}/{file}"):
-        new = re.sub(rf"<li>{label}<span>.*?</span></li>",
-                     f'<li>{label}<span><a href="{base}/{file}">{kind}</a></span></li>',
-                     new)
+for suffix in ("arm64.dmg", "x64-setup.exe", "x86_64.AppImage"):
+    if os.path.isfile(f"{dist}/MicaSlicer_{version}_{suffix}"):
+        new = re.sub(rf"releases/download/v[0-9][0-9.]*/MicaSlicer_[0-9][0-9.]*_{re.escape(suffix)}",
+                     f"releases/download/v{version}/MicaSlicer_{version}_{suffix}", new)
+new = re.sub(r'id="download-version">[0-9][0-9.]*<', f'id="download-version">{version}<', new)
 if new != text:
     open(path, "w", encoding="utf-8").write(new)
     print(f"Website download links now point at {version}")
