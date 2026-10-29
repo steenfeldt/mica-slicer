@@ -5,7 +5,10 @@
 //! volume, end to end in the headless editor with real pointer events: a click only selects,
 //! a press-drag on an unselected model selects and moves it as one undo step, the whole
 //! selection moves together, a locked plate does not move, and the plate warning says where
-//! and how far a model sticks out, with Move inside / Scale to fit / Arrange.
+//! and how far a model sticks out, with Move inside / Scale to fit / Arrange. Also the orbit
+//! pivot: Cmd-drag turns around the point under the middle of the view (also over a model
+//! while the Move gizmo is on), and the "orbit around the screen center" preference turns
+//! around the camera target whatever is selected.
 
 use crate::app::{App, Options};
 use crate::notifications::Action;
@@ -22,6 +25,10 @@ struct Editor {
     app: App,
     ctx: egui::Context,
     time: f64,
+    /// Modifier keys held for the events and frames that follow.
+    modifiers: egui::Modifiers,
+    /// The modifiers egui was last told about.
+    sent: egui::Modifiers,
 }
 
 impl Editor {
@@ -56,7 +63,13 @@ impl Editor {
         let result = crate::app::load_files(vec![model], &app.config, app.bed.center());
         app.finish_load(result);
         app.select(None, false);
-        let mut e = Self { app, ctx, time: 0. };
+        let mut e = Self {
+            app,
+            ctx,
+            time: 0.,
+            modifiers: egui::Modifiers::NONE,
+            sent: egui::Modifiers::NONE,
+        };
         // Let the camera settle on the plate.
         for _ in 0..30 {
             e.frame(vec![]);
@@ -64,8 +77,12 @@ impl Editor {
         e
     }
 
-    fn frame(&mut self, events: Vec<egui::Event>) {
+    fn frame(&mut self, mut events: Vec<egui::Event>) {
         self.time += 1. / 60.;
+        if self.modifiers != self.sent {
+            self.sent = self.modifiers;
+            events.insert(0, egui::Event::ModifiersChanged(self.modifiers));
+        }
         let input = egui::RawInput {
             screen_rect: Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
@@ -98,17 +115,50 @@ impl Editor {
         )
     }
 
+    /// A spot on object `k`'s front face near its bottom left corner, clear of the gizmo.
+    fn on_face(&self, k: usize) -> egui::Pos2 {
+        let (min, _) = self.app.plates.current().objects[k].bounds();
+        let rect = self.app.viewport_rect;
+        let uv = self.uv(min + Vec3::new(3., 0.05, 3.));
+        egui::pos2(
+            rect.left() + uv.x * rect.width(),
+            rect.top() + uv.y * rect.height(),
+        )
+    }
+
+    /// Where world point `p` shows in the 3D view, 0..1 (0.5, 0.5: the middle).
+    fn uv(&self, p: Vec3) -> glam::Vec2 {
+        let rect = self.app.viewport_rect;
+        self.app
+            .viewport
+            .camera
+            .project(p, rect.aspect_ratio())
+            .expect("in front of the camera")
+    }
+
+    /// Pans the view so the middle of the screen is off the plate's center and the model.
+    fn pan_away(&mut self) {
+        self.app.viewport.camera.target += Vec3::new(-60., 45., 0.);
+        self.frame(vec![]);
+    }
+
+    /// A spot in the 3D view clear of the model, the gizmo and the toolbars.
+    fn empty_spot(&self) -> egui::Pos2 {
+        self.app.viewport_rect.center() + egui::vec2(-300., 180.)
+    }
+
     fn position(&self, k: usize) -> Vec3 {
         self.app.plates.current().objects[k].position
     }
 
     /// Presses at `from`, moves in `steps` to `to`, holds there for `hold` seconds, releases.
     fn drag(&mut self, from: egui::Pos2, to: egui::Pos2, steps: usize, hold: f64) {
-        let button = |pos, pressed| egui::Event::PointerButton {
+        let modifiers = self.modifiers;
+        let button = move |pos, pressed| egui::Event::PointerButton {
             pos,
             button: egui::PointerButton::Primary,
             pressed,
-            modifiers: egui::Modifiers::NONE,
+            modifiers,
         };
         self.frame(vec![egui::Event::PointerMoved(from)]);
         self.frame(vec![button(from, true)]);
@@ -275,4 +325,82 @@ fn outside_warning_says_where_and_offers_the_fixes() {
     assert_eq!(e.app.undo.undo_label(), Some("Scale to fit"));
     e.app.undo();
     assert_eq!(e.app.plates.current().objects[0].scale, Vec3::splat(14.));
+}
+
+#[test]
+fn cmd_drag_orbits_around_the_screen_center_even_over_the_selected_model() {
+    let mut e = Editor::new();
+    e.app.select(Some(0), false);
+    e.frame(vec![]);
+    e.pan_away();
+    let rect = e.app.viewport_rect;
+    let camera = e.app.viewport.camera.clone();
+    let pivot = crate::viewport::orbit::under_screen_centre(
+        &camera,
+        &e.app.plates.current().objects,
+        rect.aspect_ratio(),
+    );
+    assert_eq!(pivot.z, 0.);
+    assert!(e.uv(pivot).abs_diff_eq(glam::Vec2::splat(0.5), 1e-3));
+    let before = e.position(0);
+    let undo = e.app.undo.len();
+    e.modifiers = egui::Modifiers::COMMAND;
+    // A press on the model with the Move gizmo on: Orca turns the view instead of moving.
+    let p = e.on_face(0);
+    e.drag(p, p + egui::vec2(120., -40.), 8, 0.);
+    e.modifiers = egui::Modifiers::NONE;
+    assert_eq!(e.position(0), before, "Cmd-drag does not move the model");
+    assert_eq!(e.app.undo.len(), undo, "nothing to undo");
+    let after = &e.app.viewport.camera;
+    assert!((after.yaw - camera.yaw).abs() > 0.1, "the view turned");
+    let uv = e.uv(pivot);
+    assert!(
+        uv.abs_diff_eq(glam::Vec2::splat(0.5), 2e-3),
+        "the point that was under the middle stays there: {uv}"
+    );
+    // Without Cmd the same press moves the model on the bed again.
+    let p = e.on_face(0);
+    e.drag(p, p + egui::vec2(80., 0.), 8, 0.);
+    let moved = e.position(0) - before;
+    assert!(moved.length() > 5. && moved.z == 0., "{moved}");
+}
+
+#[test]
+fn the_orbit_pivot_follows_the_preference() {
+    // Off (default): around the selected model, like Orca.
+    let mut e = Editor::new();
+    assert!(!e.app.prefs.orbit_screen_center);
+    e.app.select(Some(0), false);
+    e.frame(vec![]);
+    e.pan_away();
+    let model = e.app.plates.current().objects[0].pivot_world();
+    let at = e.uv(model);
+    let spot = e.empty_spot();
+    e.drag(spot, spot + egui::vec2(100., 30.), 8, 0.);
+    assert!(e.uv(model).abs_diff_eq(at, 2e-3), "the model stays put");
+
+    // On: around the middle of the view (the camera target), whatever is selected.
+    let mut e = Editor::new();
+    e.app.prefs.orbit_screen_center = true;
+    e.app.select(Some(0), false);
+    e.frame(vec![]);
+    e.pan_away();
+    let target = e.app.viewport.camera.target;
+    let yaw = e.app.viewport.camera.yaw;
+    let model = e.app.plates.current().objects[0].pivot_world();
+    let at = e.uv(model);
+    let spot = e.empty_spot();
+    e.drag(spot, spot + egui::vec2(100., 30.), 8, 0.);
+    let camera = &e.app.viewport.camera;
+    assert!((camera.yaw - yaw).abs() > 0.1, "the view turned");
+    assert!(
+        camera.target.distance(target) < 1e-3,
+        "{target} → {}",
+        camera.target
+    );
+    assert!(e.uv(target).abs_diff_eq(glam::Vec2::splat(0.5), 1e-3));
+    assert!(
+        !e.uv(model).abs_diff_eq(at, 0.01),
+        "the selection is not the pivot"
+    );
 }

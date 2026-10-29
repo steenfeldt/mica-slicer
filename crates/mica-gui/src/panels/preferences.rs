@@ -433,6 +433,28 @@ impl App {
             self.prefs.zoom_to_pointer = on;
             self.prefs_dirty = true;
         }
+        let mut screen_center = None;
+        item(
+            ui,
+            "Orbit around the screen center",
+            &crate::keymap::localise(
+                "Like PrusaSlicer: the view turns around what's in the middle of the screen, \
+                 also after panning. Off: around the selected object or the plate's center, \
+                 like OrcaSlicer. Cmd-drag always turns around the middle of the screen.",
+            ),
+            |ui| {
+                screen_center = switch(
+                    ui,
+                    "prefs-orbit-center",
+                    self.prefs.orbit_screen_center,
+                    true,
+                )
+            },
+        );
+        if let Some(on) = screen_center {
+            self.prefs.orbit_screen_center = on;
+            self.prefs_dirty = true;
+        }
         let mut reverse = None;
         item(
             ui,

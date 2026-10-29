@@ -29,7 +29,8 @@ filament choices. Each nozzle gets its own filament selection. Snapmaker exposes
 plate selection; Prusa uses the plate dimensions/settings from its printer profile.
 
 Open or drop STL / 3MF files, select a model with a click, or press and drag any model to
-select and move it on the bed in one go. Background left drag orbits, right/middle drag pans, and the wheel zooms.
+select and move it on the bed in one go. Background left drag orbits (Cmd/Ctrl-drag around the
+middle of the view), right/middle drag pans, and the wheel zooms.
 The object list exposes tool assignment and Z rotation. Position fields are offsets
 from imported placement. Arrange uses rows with 10 mm gaps and centers the group.
 System theme changes are followed automatically.

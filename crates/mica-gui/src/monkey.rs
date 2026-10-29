@@ -2941,6 +2941,7 @@ impl Monkey {
         if self.rng.chance(0.3) {
             self.app.viewport.camera.perspective = self.rng.chance(0.5);
             self.app.prefs.zoom_to_pointer = self.rng.chance(0.5);
+            self.app.prefs.orbit_screen_center = self.rng.chance(0.5);
             self.app.prefs.reverse_zoom = self.rng.chance(0.5);
             let sizes = crate::state::ToolbarSize::ALL;
             self.app.prefs.toolbar_size = sizes[self.rng.below(sizes.len())];

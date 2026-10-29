@@ -61,6 +61,9 @@ pub struct Prefs {
     pub perspective: bool,
     /// Scrolling zooms towards the mouse pointer (on) or the centre of the view.
     pub zoom_to_pointer: bool,
+    /// Left-drag orbits around the middle of the view (PrusaSlicer) instead of the selection
+    /// or the plate's center (OrcaSlicer).
+    pub orbit_screen_center: bool,
     /// Scrolling up zooms out instead of in.
     pub reverse_zoom: bool,
     /// Colours picked last for filaments (`#RRGGBB`, newest first), for the colour popup.
@@ -259,6 +262,7 @@ impl Default for Prefs {
             defaults: Defaults::default(),
             perspective: true,
             zoom_to_pointer: true,
+            orbit_screen_center: false,
             reverse_zoom: false,
             recent_colours: vec![],
             check_updates: true,
@@ -731,12 +735,14 @@ mod tests {
         assert_eq!(d.auto_slice_delay(), std::time::Duration::from_millis(500));
         assert_eq!(d.recent_limit, DEFAULT_RECENT);
         assert!(d.perspective && d.zoom_to_pointer && !d.reverse_zoom);
+        assert!(!d.orbit_screen_center, "orbits like OrcaSlicer by default");
         assert_eq!(d.defaults, Defaults::default());
         let mut p = Prefs {
             auto_slice_delay_ms: 1500,
             theme: "follow-system".into(),
             perspective: false,
             zoom_to_pointer: false,
+            orbit_screen_center: true,
             reverse_zoom: true,
             defaults: Defaults {
                 printer: "Prusa/Prusa CORE One HF0.4 nozzle".into(),
@@ -770,5 +776,6 @@ mod tests {
         assert_eq!(old.auto_slice_delay_ms, DEFAULT_AUTO_SLICE_DELAY_MS);
         assert_eq!(old.recent_limit, DEFAULT_RECENT);
         assert!(old.perspective);
+        assert!(!old.orbit_screen_center);
     }
 }

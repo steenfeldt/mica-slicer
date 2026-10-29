@@ -77,7 +77,14 @@ incremental (snapped increments when Shift is held), so the editor can record th
   undo step. Locked plates do not move (the drag turns the camera), and while a tool gives the
   drag its own meaning (painting, layer heights, brim ears, measure, cut, lay on face; with the
   Text tool only an already selected model moves) it keeps that meaning.
-- Left drag on empty space orbits around the selection (or the current plate centre), right/middle drag pans,
+- Left drag on empty space orbits around the selection (or the current plate centre), like
+  OrcaSlicer; with Settings › General › "Orbit around the screen center" it orbits around the
+  camera target instead (PrusaSlicer: the middle of the view, which panning and zooming at the
+  pointer move; the selection does not matter). Cmd/Ctrl-drag orbits around the point under
+  the middle of the view on the bed, taken when the rotation starts and kept until the button
+  goes up (Orca's `m_rotation_center`, `viewport/orbit.rs`); while a gizmo (the default Move
+  one included) or a tool is on, a Cmd-drag that starts on a model orbits too instead of moving
+  or painting it; with none on it still moves the model, as in Orca. Right/middle drag pans,
   wheel zooms towards the cursor with a short animation; `0`–`6` views, `Z` fits the selection
   or plate (`Shift+Z` all plates), `P` toggles perspective, double-click focuses an object.
 - `M`/`R`/`S` pick the move/rotate/scale gizmo, `F` toggles lay-on-face, `Esc` deselects.

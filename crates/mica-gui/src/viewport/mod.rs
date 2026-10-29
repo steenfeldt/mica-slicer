@@ -11,6 +11,7 @@ pub mod flatten;
 pub mod gizmo;
 pub mod icons;
 pub mod measure;
+pub mod orbit;
 mod plate_bar;
 pub mod plate_tags;
 mod preview_plates;
@@ -461,6 +462,11 @@ pub struct Viewport {
     angle_edit: Option<String>,
     /// Scrolling zooms towards the pointer (else the centre of the view).
     pub zoom_to_pointer: bool,
+    /// Left-drag orbits around the camera target, the middle of the view (PrusaSlicer),
+    /// instead of the selection or the plate's center (Settings › General).
+    pub orbit_screen_center: bool,
+    /// The pivot of the orbit drag in progress (Cmd-drag keeps its own).
+    orbit: orbit::Orbit,
     /// Scrolling up zooms out.
     pub reverse_zoom: bool,
     /// How big the floating toolbars are (Settings › General).
@@ -532,6 +538,8 @@ impl Viewport {
             moving: false,
             angle_edit: None,
             zoom_to_pointer: true,
+            orbit_screen_center: false,
+            orbit: orbit::Orbit::default(),
             reverse_zoom: false,
             toolbar_size: icons::ToolbarSize::default(),
             measure_on: false,
@@ -1325,6 +1333,7 @@ impl Viewport {
         {
             let (origin, dir) = self.camera.ray(uv(rect, p), aspect);
             self.drag = Drag::Orbit;
+            self.orbit.end();
             // What was under the pointer where the button went down (a fast pointer may be
             // elsewhere by the time egui reports the drag), handles first, then objects.
             let pressed_handle = layout
@@ -1343,6 +1352,17 @@ impl Viewport {
                 && pick_tower(&scene, origin, dir).is_some_and(|d| {
                     picking::pick_face(scene.objects, origin, dir).is_none_or(|h| d < h.distance)
                 });
+            // Cmd-drag turns the view even over a model while a tool or gizmo is on (Orca:
+            // `!any_gizmo_active || !evt.CmdDown()`, the painter gizmos' `control_down`);
+            // handles still take the drag.
+            let tool_on = layout.is_some()
+                || self.paint.is_some()
+                || self.object_tool.is_some()
+                || self.lay_on_face
+                || measuring
+                || scene.cut.is_some()
+                || self.emboss;
+            let command_orbits = command && tool_on;
             let section_grab = section_eq.and_then(|eq| {
                 self.section.hit(
                     &gizmo::Painter {
@@ -1362,6 +1382,7 @@ impl Viewport {
                 self.drag = Drag::Section;
             } else if self.object_tool == Some(ObjectTool::LayerHeights)
                 && editing
+                && !command_orbits
                 && let Some((i, hit, _)) = self.paint_hit(&scene, rect, p, aspect)
                 && let Some(o) = scene.objects.get(i)
             {
@@ -1373,6 +1394,7 @@ impl Viewport {
                 };
             } else if self.paint.is_some()
                 && editing
+                && !command_orbits
                 && let Some((i, hit, _)) = self.paint_hit(&scene, rect, p, aspect)
             {
                 actions.push(Action::GestureBegin(
@@ -1417,6 +1439,7 @@ impl Viewport {
             } else if pressed_tower
                 && !self.lay_on_face
                 && !shift
+                && !command_orbits
                 && let Some(point) = self.camera.bed_point(uv(rect, p), aspect)
             {
                 // Dragging the tower selects it and moves it on the bed.
@@ -1428,6 +1451,7 @@ impl Viewport {
             } else if let Some(i) = pressed_object
                 && editing
                 && !shift
+                && !command_orbits
                 && self.press_moves(&scene, i)
                 && let Some(point) = picking::pick_face(scene.objects, origin, dir)
                     .map(|h| (origin + dir * h.distance).z)
@@ -1470,24 +1494,26 @@ impl Viewport {
         {
             self.drag = Drag::Pan;
         }
-        let pivot = scene
-            .selected
-            .filter(|_| scene.preview.is_none())
-            .and_then(|i| scene.objects.get(i))
-            .map(|o| o.pivot_world())
-            .or_else(|| {
-                (scene.tower_selected && scene.preview.is_none())
-                    .then(|| current_tower(&scene).map(|t| t.centre()))
-                    .flatten()
-            })
-            .unwrap_or_else(|| {
-                let origin = scene
-                    .plates
-                    .iter()
-                    .find(|p| p.current)
-                    .map_or(Vec2::ZERO, |p| p.origin);
-                scene.bed.center() + origin.extend(0.)
-            });
+        let usual_pivot = || {
+            scene
+                .selected
+                .filter(|_| scene.preview.is_none())
+                .and_then(|i| scene.objects.get(i))
+                .map(|o| o.pivot_world())
+                .or_else(|| {
+                    (scene.tower_selected && scene.preview.is_none())
+                        .then(|| current_tower(&scene).map(|t| t.centre()))
+                        .flatten()
+                })
+                .unwrap_or_else(|| {
+                    let origin = scene
+                        .plates
+                        .iter()
+                        .find(|p| p.current)
+                        .map_or(Vec2::ZERO, |p| p.origin);
+                    scene.bed.center() + origin.extend(0.)
+                })
+        };
         if let Drag::Paint { index, last } = self.drag
             && let Some(p) = pointer
             && last.is_none_or(|(at, _)| at != p)
@@ -1566,6 +1592,14 @@ impl Viewport {
             }
             Drag::Orbit => {
                 if response.dragged_by(PointerButton::Primary) {
+                    let camera = &self.camera;
+                    let pivot = self.orbit.pivot(
+                        command,
+                        self.orbit_screen_center,
+                        camera,
+                        || orbit::under_screen_centre(camera, scene.objects, aspect),
+                        usual_pivot,
+                    );
                     self.camera.orbit_around(Vec2::new(delta.x, delta.y), pivot);
                 }
             }
@@ -1657,6 +1691,7 @@ impl Viewport {
                 actions.push(Action::Edited);
             }
             self.section.end();
+            self.orbit.end();
             if let Some(b) = box_rect.take() {
                 finished_box = Some(b);
             }
@@ -1682,9 +1717,11 @@ impl Viewport {
                 });
             }
         }
-        // A click without movement in a painting tool is a dab.
+        // A click without movement in a painting tool is a dab (not with Cmd held: Orca's
+        // painter leaves Cmd presses to the camera).
         if self.paint.is_some()
             && editing
+            && !command
             && response.clicked()
             && let Some(p) = response.interact_pointer_pos()
             && let Some((i, hit, _)) = self.paint_hit(&scene, rect, p, aspect)
@@ -2740,7 +2777,7 @@ impl Viewport {
                     "No slice to show: slice the plate from the Preview page"
                 }
             } else if !scene.editable {
-                "Slicing… the camera still works: drag to orbit, right-drag to pan, scroll to zoom"
+                "Slicing… the camera still works: drag to orbit (Cmd-drag around the screen center), right-drag to pan, scroll to zoom"
             } else if scene.cut.is_some_and(|c| c.editing) {
                 "Connectors: click the cut face to place one · click one to select it · Delete removes it · Esc when done"
             } else if scene.cut.is_some() {
@@ -2797,7 +2834,7 @@ impl Viewport {
             } else if scene.selected.is_some() {
                 match self.mode {
                     gizmo::Mode::Move => {
-                        "Drag the model or the arrows to move · Shift snaps to 1 mm · Shift-click adds to the selection · right-click for actions"
+                        "Drag the model or the arrows to move · Shift snaps to 1 mm · Shift-click adds to the selection · Cmd-drag orbits · right-click for actions"
                     }
                     gizmo::Mode::Rotate => {
                         "Drag a ring or its handle (blue turns, red / green tilt) · ring: 5° steps · inside: snap 45° · outside: free · Shift 1° · double-click to type"
@@ -2812,7 +2849,7 @@ impl Viewport {
             } else {
                 "Click a model to select it, drag it to move it · Shift-drag a box to select several · Double-click to focus · Right-click for actions"
             };
-            t.to_owned()
+            crate::keymap::localise(t)
         };
         if text.is_empty() {
             return;

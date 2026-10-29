@@ -416,6 +416,10 @@ const CMD_ARROWS: &str = if cfg!(target_os = "macos") {
 /// see [`localise`]).
 pub const MOUSE: &[(&str, &str)] = &[
     ("Left drag", "Rotate the view (on an object: move it)"),
+    (
+        "Cmd drag",
+        "Rotate the view around the middle of the screen",
+    ),
     ("Right or middle drag", "Pan the view"),
     ("Scroll", "Zoom"),
     ("Shift or Cmd click", "Add to or remove from the selection"),

@@ -681,6 +681,7 @@ impl App {
         viewport.theme_mode = mode;
         viewport.camera.perspective = prefs.perspective;
         viewport.zoom_to_pointer = prefs.zoom_to_pointer;
+        viewport.orbit_screen_center = prefs.orbit_screen_center;
         viewport.reverse_zoom = prefs.reverse_zoom;
         viewport.toolbar_size = prefs.toolbar_size;
         viewport.fit_plate(&bed, &plates::snapshot(&plates), false, 1.5, false);
@@ -1988,6 +1989,7 @@ impl App {
             self.prefs_dirty = true;
         }
         self.viewport.zoom_to_pointer = self.prefs.zoom_to_pointer;
+        self.viewport.orbit_screen_center = self.prefs.orbit_screen_center;
         self.viewport.reverse_zoom = self.prefs.reverse_zoom;
         self.viewport.toolbar_size = self.prefs.toolbar_size;
     }
