@@ -553,6 +553,7 @@ struct PipelineDesc<'a> {
     topology: wgpu::PrimitiveTopology,
     fragment: &'a str,
     writes: wgpu::ColorWrites,
+    bias: wgpu::DepthBiasState,
 }
 fn pipeline(device: &wgpu::Device, d: PipelineDesc<'_>) -> wgpu::RenderPipeline {
     let source = format!("{}\n{}", include_str!("common.wgsl"), d.source);
@@ -594,7 +595,7 @@ fn pipeline(device: &wgpu::Device, d: PipelineDesc<'_>) -> wgpu::RenderPipeline 
             depth_write_enabled: Some(write),
             depth_compare: Some(compare),
             stencil: Default::default(),
-            bias: Default::default(),
+            bias: d.bias,
         }),
         multisample: wgpu::MultisampleState {
             count: d.samples,
@@ -871,6 +872,15 @@ impl Renderer {
             topology,
             fragment,
             writes: wgpu::ColorWrites::ALL,
+            bias: Default::default(),
+        };
+        // Painted facets lie on the face they paint: a depth bias (in depth-buffer steps, so
+        // the same on screen at every zoom) lets them win the depth test against that face
+        // without moving them in front of nearby geometry, such as raised lettering.
+        let paint_bias = wgpu::DepthBiasState {
+            constant: -8,
+            slope_scale: -1.,
+            clamp: 0.,
         };
         let tri = wgpu::PrimitiveTopology::TriangleList;
         let background_pipeline = pipeline(
@@ -969,14 +979,17 @@ impl Renderer {
         // Patterned paint blends over the model at its strength (alpha).
         let paint_pipeline = pipeline(
             device,
-            base(
-                include_str!("paint.wgsl"),
-                &paint_layout,
-                Some((false, wgpu::CompareFunction::LessEqual)),
-                Some(wgpu::BlendState::ALPHA_BLENDING),
-                tri,
-                "fs",
-            ),
+            PipelineDesc {
+                bias: paint_bias,
+                ..base(
+                    include_str!("paint.wgsl"),
+                    &paint_layout,
+                    Some((false, wgpu::CompareFunction::LessEqual)),
+                    Some(wgpu::BlendState::ALPHA_BLENDING),
+                    tri,
+                    "fs",
+                )
+            },
         );
         // Translucent objects (a filament colour with an alpha, as OrcaSlicer draws them after
         // the opaque volumes with blending): each, back to front, first writes the depth of its
@@ -1008,29 +1021,35 @@ impl Renderer {
                 "fs",
             ),
         );
-        // A translucent object's colour painting writes its (lifted) depth, so the object's
+        // A translucent object's colour painting writes its (biased) depth, so the object's
         // own colour is not blended in under it; patterned paint goes over both.
         let paint_solid_pipeline = pipeline(
             device,
-            base(
-                include_str!("paint.wgsl"),
-                &paint_layout,
-                Some((true, wgpu::CompareFunction::LessEqual)),
-                Some(wgpu::BlendState::ALPHA_BLENDING),
-                tri,
-                "fs_solid",
-            ),
+            PipelineDesc {
+                bias: paint_bias,
+                ..base(
+                    include_str!("paint.wgsl"),
+                    &paint_layout,
+                    Some((true, wgpu::CompareFunction::LessEqual)),
+                    Some(wgpu::BlendState::ALPHA_BLENDING),
+                    tri,
+                    "fs_solid",
+                )
+            },
         );
         let paint_marks_pipeline = pipeline(
             device,
-            base(
-                include_str!("paint.wgsl"),
-                &paint_layout,
-                Some((false, wgpu::CompareFunction::LessEqual)),
-                Some(wgpu::BlendState::ALPHA_BLENDING),
-                tri,
-                "fs_marks",
-            ),
+            PipelineDesc {
+                bias: paint_bias,
+                ..base(
+                    include_str!("paint.wgsl"),
+                    &paint_layout,
+                    Some((false, wgpu::CompareFunction::LessEqual)),
+                    Some(wgpu::BlendState::ALPHA_BLENDING),
+                    tri,
+                    "fs_marks",
+                )
+            },
         );
         let mask_pipeline = pipeline(
             device,
@@ -1881,7 +1900,7 @@ impl Renderer {
                     mask_items.push((id, v.transform, 0.5));
                 }
             }
-            // Painted facets after every object, lifted a little towards the eye (a
+            // Painted facets after every object, depth-biased onto their face (a
             // translucent object's with the object itself, below).
             let mut translucent_paint: HashMap<u64, Vec<(u64, Uniform)>> = HashMap::new();
             for overlay in &frame.overlays {
@@ -1899,10 +1918,8 @@ impl Renderer {
                     });
                     (buffer, overlay.vertices.len() as u32)
                 });
-                let lift = ((eye - o.pivot_world()).length() * 0.0015).clamp(0.05, 0.6);
                 let uniform = Uniform {
                     model: o.transform().to_cols_array_2d(),
-                    extra: [lift, 0., 0., 0.],
                     clip,
                     ..base
                 };

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // Provenance: original
-// Painted facets over an object, pulled a little towards the eye (extra.x mm) so they win
-// the depth test against the face they lie on. Colour painting (pattern 0) is the facet's
+// Painted facets over an object; the pipeline's depth bias makes them win the depth test
+// against the face they lie on. Colour painting (pattern 0) is the facet's
 // own colour, solid and lit like the mesh. Every other kind is a screen-space pattern over
 // the model's base colour: a diagonal hatch (support), stripes (seam) or a stipple (fuzzy
 // skin), blended at the vertex colour's alpha (full for the active tool, half alongside
@@ -24,12 +24,10 @@ struct Output {
 @vertex fn vs(v: Input) -> Output {
     var o: Output;
     let world = (u.model * vec4(v.p, 1.0)).xyz;
-    let towards_eye = normalize(u.eye.xyz - world);
-    let lifted = world + towards_eye * u.extra.x;
     o.world = world;
     o.color = v.color;
     o.pattern = v.pattern;
-    o.clip = u.vp * vec4(lifted, 1.0);
+    o.clip = u.vp * vec4(world, 1.0);
     return o;
 }
 // A small integer hash for the stipple: the same dot for the same pixel cell every frame.
