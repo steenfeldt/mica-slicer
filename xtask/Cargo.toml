@@ -12,6 +12,8 @@ mica-profiles.workspace = true
 # `site-shots`: the screenshot manifest (site/screenshots.toml in the website repository) and
 # the web images.
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+# AVIF for the web images, pure Rust (no assembler needed).
+ravif = { version = "0.12.0", default-features = false, features = ["threading"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 toml = "0.9"

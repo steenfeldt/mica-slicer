@@ -40,3 +40,8 @@ inherits = "release"
 lto = false
 codegen-units = 16
 incremental = true
+
+# `cargo xtask site-shots` encodes the website's AVIF images in a debug build; unoptimized,
+# the AV1 encoder takes minutes per picture.
+[profile.dev.package.rav1e]
+opt-level = 3

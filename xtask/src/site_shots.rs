@@ -16,9 +16,10 @@
 //! `target/site-shots/`; the web files go to the website's `site/img/`: an AVIF per `widths` entry and a PNG
 //! fallback at `fallback_width`, plus `site/og-image.jpg` from the shot marked `og`.
 //!
-//! AVIF is encoded by `avifenc` when it is on the PATH, else by macOS's `sips`; without either
-//! the task stops (the page's `<picture>` elements need the AVIF files). Resizing, the PNG
-//! fallback and the JPEG come from the `image` crate.
+//! AVIF is encoded in-process by `ravif` as one plain 8-bit image. (macOS's `sips` writes a
+//! grid of 512-pixel tiles, which Firefox does not decode: the page then shows a broken image
+//! instead of the PNG fallback.) Resizing, the PNG fallback and the JPEG come from the `image`
+//! crate.
 //!
 //! `--dry-run` prints each shot's exact command without running anything. `--check` builds
 //! nothing either: it checks that every image the manifest makes exists and that `index.html`
@@ -240,7 +241,6 @@ fn try_run(root: &Path, args: &[String]) -> Result<(), String> {
         }
         return Ok(());
     }
-    let encoder = avif_encoder()?;
     let build = Command::new("cargo")
         .args(["build", "--offline", "--profile", &profile])
         .args(["-p", "mica-gui", "-p", "mica-printhost"])
@@ -258,7 +258,7 @@ fn try_run(root: &Path, args: &[String]) -> Result<(), String> {
         for s in &shots {
             let raw = raw_dir.join(format!("{}.png", s.name));
             shoot(root, &gui, &mock, &work, &manifest.defaults, s, &raw)?;
-            let sizes = web_files(&web, &manifest.defaults, s, &raw, &encoder, &work)?;
+            let sizes = web_files(&web, &manifest.defaults, s, &raw)?;
             table.push((s.name.clone(), sizes));
         }
         println!("\n{:<22} {:>10}  files", "shot", "bytes");
@@ -419,55 +419,23 @@ impl Drop for MockPrinters {
     }
 }
 
-enum Avif {
-    Avifenc,
-    Sips,
-}
-
-fn avif_encoder() -> Result<Avif, String> {
-    let works = |cmd: &str, arg: &str| {
-        Command::new(cmd)
-            .arg(arg)
-            .stdout(Stdio::null())
-            .stderr(Stdio::null())
-            .status()
-            .is_ok()
-    };
-    if works("avifenc", "--version") {
-        Ok(Avif::Avifenc)
-    } else if cfg!(target_os = "macos") && works("sips", "--help") {
-        Ok(Avif::Sips)
-    } else {
-        Err("no AVIF encoder: install libavif (avifenc), or run on macOS (sips)".into())
-    }
-}
-
-fn encode_avif(enc: &Avif, png: &Path, out: &Path, quality: u32) -> Result<(), String> {
-    let q = quality.to_string();
-    let mut cmd = match enc {
-        Avif::Avifenc => {
-            let mut c = Command::new("avifenc");
-            c.args(["-q", &q, "-s", "4"]).arg(png).arg(out);
-            c
-        }
-        Avif::Sips => {
-            let mut c = Command::new("sips");
-            c.args(["-s", "format", "avif", "-s", "formatOptions", &q])
-                .arg(png)
-                .arg("--out")
-                .arg(out);
-            c
-        }
-    };
-    let ok = cmd
-        .stdout(Stdio::null())
-        .status()
-        .is_ok_and(|s| s.success());
-    if ok && out.is_file() {
-        Ok(())
-    } else {
-        Err(format!("AVIF encoding of {} failed", png.display()))
-    }
+/// One plain (not tiled) 8-bit AVIF, which every browser with AVIF support decodes.
+fn encode_avif(img: &RgbaImage, out: &Path, quality: u32) -> Result<(), String> {
+    let px: Vec<ravif::RGB8> = img
+        .pixels()
+        .map(|p| ravif::RGB8::new(p[0], p[1], p[2]))
+        .collect();
+    let avif = ravif::Encoder::new()
+        .with_quality(quality as f32)
+        .with_speed(4)
+        .with_bit_depth(ravif::BitDepth::Eight)
+        .encode_rgb(ravif::Img::new(
+            &px[..],
+            img.width() as usize,
+            img.height() as usize,
+        ))
+        .map_err(|e| format!("AVIF encoding of {}: {e}", out.display()))?;
+    fs::write(out, avif.avif_file).map_err(|e| format!("{}: {e}", out.display()))
 }
 
 fn resized(img: &RgbaImage, width: u32) -> RgbaImage {
@@ -499,32 +467,19 @@ fn write_png(img: &RgbaImage, path: &Path) -> Result<(), String> {
 
 /// The web files of one shot, written into the website repository `web`; returns (path under
 /// site/, bytes).
-fn web_files(
-    web: &Path,
-    d: &Defaults,
-    s: &Shot,
-    raw: &Path,
-    enc: &Avif,
-    work: &Path,
-) -> Result<Vec<(String, u64)>, String> {
+fn web_files(web: &Path, d: &Defaults, s: &Shot, raw: &Path) -> Result<Vec<(String, u64)>, String> {
     let img = image::open(raw)
         .map_err(|e| format!("{}: {e}", raw.display()))?
         .to_rgba8();
     let site = web.join("site");
-    let tmp = work.join(format!("{}-resized.png", s.name));
-    fs::create_dir_all(work).map_err(|e| e.to_string())?;
     let mut out = Vec::new();
     let size = |p: &Path| fs::metadata(p).map(|m| m.len()).unwrap_or(0);
     for &w in &d.widths {
         let file = format!("img/{}-{w}.avif", s.name);
         let path = site.join(&file);
-        let r = resized(&img, w);
-        // A fast PNG is enough as the encoder's input.
-        r.save(&tmp).map_err(|e| e.to_string())?;
-        encode_avif(enc, &tmp, &path, d.avif_quality)?;
+        encode_avif(&resized(&img, w), &path, d.avif_quality)?;
         out.push((file, size(&path)));
     }
-    let _ = fs::remove_file(&tmp);
     let file = format!("img/{}-{}.png", s.name, d.fallback_width);
     let path = site.join(&file);
     write_png(&resized(&img, d.fallback_width), &path)?;
