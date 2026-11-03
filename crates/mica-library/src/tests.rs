@@ -752,3 +752,32 @@ fn a_second_handle_in_one_process_is_read_only_too() {
     assert!(second.wait_idle(T));
     assert_eq!(second.snapshot().models.len(), 3);
 }
+
+#[test]
+fn read_view_shows_the_saved_library_without_taking_the_index() {
+    let lib = TempDir::new("view-lib");
+    let data = TempDir::new("view-data");
+    synthetic_library(lib.path(), 3).unwrap();
+    assert!(crate::read_view(data.path()).unwrap().models.is_empty());
+    let owner = Library::open(data.path(), quiet()).unwrap();
+    owner.add_folder(lib.path()).unwrap();
+    assert!(owner.wait_idle(T));
+    let first = owner.snapshot().models[0].id.clone();
+    owner.set_favourite(&first, true);
+    assert!(owner.wait_idle(T));
+    let view = crate::read_view(data.path()).unwrap();
+    assert_eq!(view.models.len(), owner.snapshot().models.len());
+    assert_eq!(view.folders.len(), 1);
+    assert_eq!(view.folders[0].state, FolderState::Ready);
+    assert!(
+        view.models
+            .iter()
+            .any(|m| m.id == first && m.user.favourite)
+    );
+    let with_thumb = view.models.iter().find(|m| m.thumbnail.is_some()).unwrap();
+    assert!(with_thumb.thumbnail.as_ref().unwrap().exists());
+    // The owner still has the index: reading a view took nothing from it.
+    assert!(!owner.read_only());
+    owner.set_favourite(&first, false);
+    assert!(owner.wait_idle(T));
+}

@@ -5,7 +5,7 @@
 //! password itself goes to the macOS Keychain (a generic password item of the service
 //! "Mica Slicer", the reference as its account), on Linux and other Unix systems to
 //! `secrets.toml`, a file only its owner can read in Mica's settings folder
-//! ([`super::secrets_file`]). Windows gets a clear "not supported yet" answer, tests and
+//! ([`crate::secrets_file`]). Windows gets a clear "not supported yet" answer, tests and
 //! headless screenshots an in-memory store that never touches disk.
 
 use std::{
@@ -151,9 +151,9 @@ pub fn system() -> Box<dyn SecretStore> {
     }
     #[cfg(all(unix, not(target_os = "macos")))]
     {
-        let printers = super::config::default_path();
+        let printers = crate::config::default_path();
         let dir = printers.parent().unwrap_or(std::path::Path::new("."));
-        Box::new(super::secrets_file::FileStore::new(dir))
+        Box::new(crate::secrets_file::FileStore::new(dir))
     }
     #[cfg(not(unix))]
     {

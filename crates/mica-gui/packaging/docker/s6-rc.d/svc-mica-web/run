@@ -1,0 +1,19 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# SPDX-License-Identifier: AGPL-3.0-only
+# Provenance: original
+#
+# Mica's web dashboard (docs/web-dashboard.md), supervised by s6 next to the streamed Mica.
+# It runs as abc, Mica's own user, with Mica's home (/config), so it reads the same
+# printers.toml, the same secrets file (0600, owned by abc) and the same library index.
+# Inside the container it listens on every interface (the published port decides who can
+# reach it); names that could be DNS-rebound are refused unless MICA_WEB_ALLOW_HOSTS lists
+# them. Read-only unless MICA_WEB_ALLOW_PRINTING=1.
+
+# "Open in Mica": the streamed Mica on port 3000 of the host the dashboard was opened with.
+default_url='http://{host}:3000/'
+open_url="${MICA_WEB_OPEN_URL:-$default_url}"
+
+cd /config || exit 1
+exec s6-setuidgid abc env HOME=/config MICA_WEB_OPEN_URL="${open_url}" \
+  /opt/mica/usr/bin/mica-web --listen "${MICA_WEB_LISTEN:-0.0.0.0:3002}"

@@ -7,7 +7,7 @@
 //! Cameras are discovered here (with the slowly changing info); playing them is the camera
 //! players' job (`printhost::cameras`).
 
-use super::poll;
+use mica_printers::poll;
 use mica_printhost::{
     CameraInfo, Capabilities, Error, ErrorKind, LoadedFilament, PrinterHost, PrinterInfo,
     PrinterState, PrinterStatus,
@@ -182,7 +182,7 @@ struct Shared {
     commands: Mutex<VecDeque<Command>>,
 }
 
-pub type Connector = Arc<dyn Fn() -> Result<Box<dyn PrinterHost>, String> + Send + Sync>;
+pub use mica_printers::Connector;
 
 pub struct Watcher {
     shared: Arc<Shared>,

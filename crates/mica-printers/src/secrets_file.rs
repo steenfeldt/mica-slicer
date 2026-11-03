@@ -16,7 +16,7 @@
 //!   with the `chmod` / `chown` that fixes it. Mica never repairs it silently: a secrets file
 //!   that was readable by others may have been read, and its owner should know.
 
-use super::keychain::SecretStore;
+use crate::secrets::SecretStore;
 use std::{
     collections::BTreeMap,
     fs,

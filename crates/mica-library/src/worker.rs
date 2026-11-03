@@ -173,7 +173,7 @@ pub(crate) fn run(
     w.main_loop();
 }
 
-fn status(path: &Path, state: FolderState) -> FolderStatus {
+pub(crate) fn status(path: &Path, state: FolderState) -> FolderStatus {
     FolderStatus {
         path: path.to_path_buf(),
         state,
@@ -184,7 +184,7 @@ fn status(path: &Path, state: FolderState) -> FolderStatus {
 }
 
 /// A folder that should exist but does not, or a share mount point that has gone.
-fn available(root: &Path) -> bool {
+pub(crate) fn available(root: &Path) -> bool {
     root.is_dir()
 }
 
@@ -1282,92 +1282,7 @@ impl Worker {
     }
 
     fn build(&self) -> Snapshot {
-        let mut by_hash: HashMap<&str, Vec<(&PathBuf, &FileRecord)>> = HashMap::new();
-        for (p, r) in &self.index.files {
-            by_hash.entry(r.hash.as_str()).or_default().push((p, r));
-        }
-        let offline: HashSet<&Path> = self
-            .status
-            .iter()
-            .filter(|(_, s)| s.state == FolderState::Offline)
-            .map(|(p, _)| p.as_path())
-            .collect();
-        let mut models: Vec<Model> = by_hash
-            .into_iter()
-            .filter_map(|(hash, files)| {
-                let info = self.index.models.get(hash)?.clone();
-                let mut locations: Vec<Location> = files
-                    .iter()
-                    .map(|(p, r)| Location {
-                        path: (*p).clone(),
-                        root: r.root.clone(),
-                        size: r.size,
-                        modified: (r.mtime_ns / 1_000_000_000) as i64,
-                        online: !offline.contains(r.root.as_path()),
-                    })
-                    .collect();
-                locations.sort_by(|a, b| b.online.cmp(&a.online).then(a.path.cmp(&b.path)));
-                let first = &locations[0];
-                Some(Model {
-                    id: hash.to_string(),
-                    name: first
-                        .path
-                        .file_name()
-                        .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
-                    kind: files[0].1.kind,
-                    thumbnail: info
-                        .thumbnail
-                        .as_ref()
-                        .map(|ext| self.thumbs.join(format!("{hash}.{ext}"))),
-                    info,
-                    locations,
-                    user: Default::default(),
-                })
-            })
-            .collect();
-        models.sort_by(|a, b| {
-            a.name
-                .to_lowercase()
-                .cmp(&b.name.to_lowercase())
-                .then(a.id.cmp(&b.id))
-        });
-        let mut folders: Vec<FolderStatus> = self
-            .index
-            .folders
-            .iter()
-            .map(|f| {
-                let mut s = self
-                    .status
-                    .get(f)
-                    .cloned()
-                    .unwrap_or_else(|| status(f, FolderState::Waiting));
-                s.files = self.index.files.values().filter(|r| &r.root == f).count();
-                s
-            })
-            .collect();
-        folders.sort_by(|a, b| a.path.cmp(&b.path));
-        let extras = self
-            .index
-            .extras
-            .iter()
-            .map(|(p, r)| Extra {
-                path: p.clone(),
-                root: r.root.clone(),
-                kind: r.kind,
-                size: r.size,
-                modified: (r.mtime_ns / 1_000_000_000) as i64,
-                thumbnail: r.thumbnail.as_ref().map(|t| self.thumbs.join(t)),
-                online: !offline.contains(r.root.as_path()),
-            })
-            .collect();
-        Snapshot {
-            files: self.index.files.len(),
-            pending_thumbnails: self.renders.len(),
-            models,
-            extras,
-            grouping: Default::default(),
-            folders,
-        }
+        build(&self.index, &self.thumbs, &self.status, self.renders.len())
     }
 
     /// Publishes a new snapshot (throttled unless `now`).
@@ -1388,5 +1303,97 @@ impl Worker {
         drop(g);
         self.last_publish = Instant::now();
         self.dirty = false;
+    }
+}
+
+/// The snapshot of `index`: one model per content, thumbnails in `thumbs`, folder states
+/// from `states` (folders without one are waiting), `pending` thumbnails still to render.
+pub(crate) fn build(
+    index: &Index,
+    thumbs: &Path,
+    states: &HashMap<PathBuf, FolderStatus>,
+    pending: usize,
+) -> Snapshot {
+    let mut by_hash: HashMap<&str, Vec<(&PathBuf, &FileRecord)>> = HashMap::new();
+    for (p, r) in &index.files {
+        by_hash.entry(r.hash.as_str()).or_default().push((p, r));
+    }
+    let offline: HashSet<&Path> = states
+        .iter()
+        .filter(|(_, s)| s.state == FolderState::Offline)
+        .map(|(p, _)| p.as_path())
+        .collect();
+    let mut models: Vec<Model> = by_hash
+        .into_iter()
+        .filter_map(|(hash, files)| {
+            let info = index.models.get(hash)?.clone();
+            let mut locations: Vec<Location> = files
+                .iter()
+                .map(|(p, r)| Location {
+                    path: (*p).clone(),
+                    root: r.root.clone(),
+                    size: r.size,
+                    modified: (r.mtime_ns / 1_000_000_000) as i64,
+                    online: !offline.contains(r.root.as_path()),
+                })
+                .collect();
+            locations.sort_by(|a, b| b.online.cmp(&a.online).then(a.path.cmp(&b.path)));
+            let first = &locations[0];
+            Some(Model {
+                id: hash.to_string(),
+                name: first
+                    .path
+                    .file_name()
+                    .map_or_else(String::new, |n| n.to_string_lossy().into_owned()),
+                kind: files[0].1.kind,
+                thumbnail: info
+                    .thumbnail
+                    .as_ref()
+                    .map(|ext| thumbs.join(format!("{hash}.{ext}"))),
+                info,
+                locations,
+                user: Default::default(),
+            })
+        })
+        .collect();
+    models.sort_by(|a, b| {
+        a.name
+            .to_lowercase()
+            .cmp(&b.name.to_lowercase())
+            .then(a.id.cmp(&b.id))
+    });
+    let mut folders: Vec<FolderStatus> = index
+        .folders
+        .iter()
+        .map(|f| {
+            let mut s = states
+                .get(f)
+                .cloned()
+                .unwrap_or_else(|| status(f, FolderState::Waiting));
+            s.files = index.files.values().filter(|r| &r.root == f).count();
+            s
+        })
+        .collect();
+    folders.sort_by(|a, b| a.path.cmp(&b.path));
+    let extras = index
+        .extras
+        .iter()
+        .map(|(p, r)| Extra {
+            path: p.clone(),
+            root: r.root.clone(),
+            kind: r.kind,
+            size: r.size,
+            modified: (r.mtime_ns / 1_000_000_000) as i64,
+            thumbnail: r.thumbnail.as_ref().map(|t| thumbs.join(t)),
+            online: !offline.contains(r.root.as_path()),
+        })
+        .collect();
+    Snapshot {
+        files: index.files.len(),
+        pending_thumbnails: pending,
+        models,
+        extras,
+        grouping: Default::default(),
+        folders,
     }
 }

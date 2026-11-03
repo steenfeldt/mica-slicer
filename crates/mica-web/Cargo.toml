@@ -1,0 +1,32 @@
+[package]
+name = "mica-web"
+description = "Mica Slicer web dashboard: printers, cameras, uploads and the library in a browser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "mica-web"
+path = "src/main.rs"
+
+[dependencies]
+mica-core.workspace = true
+mica-printers = { path = "../mica-printers" }
+mica-printhost = { path = "../mica-printhost" }
+mica-camera = { path = "../mica-camera" }
+mica-library = { path = "../mica-library" }
+# The HTTP request head parser (already in the tree); the server around it is Mica's own
+# (`src/http.rs`): one thread per connection, no async runtime, no web framework.
+httparse = "1.10.1"
+# Camera frames re-encoded as JPEG for the browser (already in the tree through mica-camera).
+image = { version = "0.25.10", default-features = false, features = ["jpeg"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+mica-testkit.workspace = true
+
+[lints]
+workspace = true

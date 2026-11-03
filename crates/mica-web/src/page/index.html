@@ -1,0 +1,40 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- Provenance: original -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="rgb(22, 25, 28)">
+<title>Mica</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M8 1l6 3.5v7L8 15l-6-3.5v-7z' fill='%238b7cf6'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <div class="brand">Mica <span>Dashboard</span></div>
+  <nav role="tablist">
+    <button role="tab" id="tab-printers" aria-selected="true">Printers</button>
+    <button role="tab" id="tab-library" aria-selected="false">Library</button>
+  </nav>
+  <div class="spacer"></div>
+  <a id="open-mica" class="button primary" hidden>Open in Mica</a>
+</header>
+<main>
+  <section id="printers">
+    <div id="printers-note" class="notice" hidden></div>
+    <div id="printer-grid" class="grid"></div>
+  </section>
+  <section id="library" hidden>
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Search the library" autocomplete="off">
+      <label class="check"><input id="gcode-only" type="checkbox" checked> G-code only</label>
+    </div>
+    <div id="library-note" class="notice" hidden></div>
+    <div id="model-grid" class="grid models"></div>
+    <button id="more" class="button more" hidden>Show more</button>
+  </section>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

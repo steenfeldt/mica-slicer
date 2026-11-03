@@ -180,6 +180,35 @@ pub fn canonical(p: &Path) -> PathBuf {
     p.to_path_buf()
 }
 
+/// The library in `data_dir` as Mica last saved it, read without opening the index: from a
+/// private copy of the file ([`store::Store::read_snapshot`]), so nothing is locked, scanned
+/// or written, and a Mica window using the same folder keeps the index. Folders that are not
+/// there are offline; tags and favorites are included. For viewers that must never own the
+/// index (the web dashboard). A missing index is an empty library.
+pub fn read_view(data_dir: &Path) -> Result<Snapshot, String> {
+    let index = store::Store::read_snapshot(&data_dir.join("index.redb"))?;
+    let states: HashMap<PathBuf, FolderStatus> = index
+        .folders
+        .iter()
+        .map(|f| {
+            let state = if worker::available(f) {
+                FolderState::Ready
+            } else {
+                FolderState::Offline
+            };
+            (f.clone(), worker::status(f, state))
+        })
+        .collect();
+    let mut snap = worker::build(&index, &data_dir.join("thumbs"), &states, 0);
+    for m in &mut snap.models {
+        if let Some(u) = index.user.get(&m.id) {
+            m.user = u.clone();
+        }
+    }
+    snap.grouping = index.grouping;
+    Ok(snap)
+}
+
 impl Library {
     /// Opens the library stored in `data_dir` and starts its worker (which reads the index
     /// and then scans every configured folder). Never blocks on the index or the folders.

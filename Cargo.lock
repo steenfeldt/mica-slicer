@@ -3285,6 +3285,7 @@ dependencies = [
  "mica-core",
  "mica-gcode",
  "mica-library",
+ "mica-printers",
  "mica-printhost",
  "mica-profiles",
  "mica-testkit",
@@ -3294,8 +3295,6 @@ dependencies = [
  "rayon",
  "resvg",
  "rfd",
- "rustix 1.1.5",
- "security-framework",
  "serde",
  "serde_json",
  "skrifa",
@@ -3318,6 +3317,19 @@ dependencies = [
  "serde_json",
  "xxhash-rust",
  "zip",
+]
+
+[[package]]
+name = "mica-printers"
+version = "0.0.4"
+dependencies = [
+ "mica-camera",
+ "mica-core",
+ "mica-printhost",
+ "rustix 1.1.5",
+ "security-framework",
+ "serde",
+ "toml 0.9.12+spec-1.1.0",
 ]
 
 [[package]]
@@ -3384,6 +3396,21 @@ dependencies = [
  "objc2-video-toolbox",
  "openh264",
  "windows",
+]
+
+[[package]]
+name = "mica-web"
+version = "0.0.4"
+dependencies = [
+ "httparse",
+ "image",
+ "mica-camera",
+ "mica-core",
+ "mica-library",
+ "mica-printers",
+ "mica-printhost",
+ "mica-testkit",
+ "serde_json",
 ]
 
 [[package]]

@@ -4,7 +4,9 @@ Mica Slicer can run on a home server and be used from a browser. The image is
 linuxserver.io's [Selkies](https://github.com/linuxserver/docker-baseimage-selkies) base with
 Mica added: Selkies runs an X display, starts Mica in it, and streams the screen to the browser
 (WebRTC or WebSockets), with keyboard, mouse, clipboard and file transfer. This is the whole
-desktop app, not a separate web version.
+desktop app, not a separate web version. Next to it runs Mica's **web dashboard**
+(`docs/web-dashboard.md`) on port 3002: a light page for a phone with the printers' status,
+their cameras and the library.
 
 Files: `crates/mica-gui/packaging/docker/Dockerfile` and `compose.yaml` next to it.
 
@@ -20,12 +22,12 @@ or by hand:
 
 ```sh
 docker build -f crates/mica-gui/packaging/docker/Dockerfile -t mica-slicer .
-docker run -d --name mica-slicer -p 3000:3000 -p 3001:3001 --shm-size=1g \
+docker run -d --name mica-slicer -p 3000:3000 -p 3001:3001 -p 3002:3002 --shm-size=1g \
   -e PUID=$(id -u) -e PGID=$(id -g) -v "$PWD/mica-config:/config" mica-slicer
 ```
 
-Then open `http://<host>:3000`. The image builds for the machine it is built on (x86-64 or
-arm64). The build compiles Mica from this checkout and fetches the pinned OrcaSlicer profiles
+Then open `http://<host>:3000` for Mica, `http://<host>:3002` for the dashboard. The image
+builds for the machine it is built on (x86-64 or arm64). The build compiles Mica from this checkout and fetches the pinned OrcaSlicer profiles
 (`scripts/fetch-upstream.sh --profiles orca`), so it needs network access.
 
 ## Where things are kept
@@ -43,6 +45,31 @@ Mount your models and projects too (a NAS share mounted on the host, for example
 `-v /mnt/3dprint:/prints`); Mica's file dialogs show the container's folders.
 
 `PUID` and `PGID` make the files in the mounted folders belong to that host user.
+
+## The web dashboard (port 3002)
+
+The image runs `mica-web` as a second service (an s6-rc service, `svc-mica-web`, beside
+Selkies' own), as the same user as Mica (`abc`) and with the same home (`/config`). So it
+reads the same `printers.toml`, the same printer secrets file (which only that user may read)
+and the same library index; it never writes any of them. Inside the container it listens on
+all interfaces; the published port decides who can reach it.
+
+It is **read-only by default**: status, cameras and library only. To let it take G-code
+uploads and send or start prints, set
+
+```yaml
+      - MICA_WEB_ALLOW_PRINTING=1
+```
+
+It answers requests addressed by IP address, a short host name (`mica-box`) or a `.local`
+name. Opened by a full DNS name, such as a Tailscale name, that name must be listed:
+`MICA_WEB_ALLOW_HOSTS=mica-box.tailnet-name.ts.net` (comma-separated; `.tailnet-name.ts.net`
+for every name under it). Its **Open in Mica** button goes to port 3000 of the host the
+dashboard was opened with; `MICA_WEB_OPEN_URL` changes that (`{host}` stands for that host,
+e.g. `https://{host}:3001/`). The lines are in `compose.yaml`, commented out.
+
+The dashboard has no login of its own: `CUSTOM_USER` / `PASSWORD` protect only ports 3000 and
+3001. Do not publish 3002 where you would not publish Mica itself, or leave it out of `ports`.
 
 ## Updates
 
@@ -66,8 +93,9 @@ display scale once, at start).
 
 ## Security
 
-Whoever reaches the page drives Mica, and Mica can start prints on your printers. Keep the
-ports on your own network or behind Tailscale; do not forward them to the internet. Selkies
+Whoever reaches the page drives Mica, and Mica can start prints on your printers; whoever
+reaches port 3002 sees the printers, their cameras and the library (and can send prints when
+`MICA_WEB_ALLOW_PRINTING=1`). Keep the ports on your own network or behind Tailscale; do not forward them to the internet. Selkies
 can ask for a login (`CUSTOM_USER`, `PASSWORD`) and serves HTTPS on port 3001 with a
 self-signed certificate.
 

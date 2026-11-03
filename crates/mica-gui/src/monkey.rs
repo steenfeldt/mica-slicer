@@ -253,7 +253,7 @@ fn install_panic_hook() {
                 frames.join("\n    ")
             );
             // Under `cargo test` other tests run beside the short monkey run on threads named
-            // after them (`printhost::keychain::tests::…`), some panicking on purpose: only
+            // after them (`printhost::config::tests::…`), some panicking on purpose: only
             // the monkey's own thread and the threads it starts count.
             let other_test = thread.contains("::") && !thread.contains("monkey");
             if !other_test && let Ok(mut p) = PANICS.lock() {

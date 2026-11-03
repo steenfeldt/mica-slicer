@@ -17,8 +17,8 @@ backend protocol logic stays in `mica-printhost` and is registered there.
   with. **Test connection** shows what the backend reports (model, firmware, state, tools, what
   it can do, loaded spools) or a plain-language error ("401: XL refused the credentials — check
   the API key in My printers against the printer's Settings → Network → PrusaLink → API key").
-- **Secrets go to the macOS Keychain, on Linux to a private file** (`printhost/keychain.rs`,
-  `printhost/secrets_file.rs`). On macOS: one generic-password item per printer under the
+- **Secrets go to the macOS Keychain, on Linux to a private file** (`mica-printers/src/secrets.rs`,
+  `mica-printers/src/secrets_file.rs`). On macOS: one generic-password item per printer under the
   service "Mica Slicer" (`security-framework` 3.7.0), the account being an opaque reference like
   `mica-printer-19c6…-3`. On Linux (the AppImage, the Docker image) and other Unix systems:
   `secrets.toml` in Mica's settings folder (next to `printers.toml`, `MICA_CONFIG_DIR` when set),
@@ -69,7 +69,7 @@ backend protocol logic stays in `mica-printhost` and is registered there.
   (refreshed every few seconds; PrusaLink has none and says so); the loaded spools with "Use
   these in the project". Live state comes from one monitor thread per printer
   (`printhost/monitor.rs`), polled at 2 s while printing or paused, 10 s idle, 15 s after a
-  failure (`printhost/poll.rs`), and **not at all** while the view is hidden or the window is in
+  failure (`mica-printers/src/poll.rs`), and **not at all** while the view is hidden or the window is in
   the background; only the printer being looked at polls. Commands run even while hidden.
 - **Filament sync** (`panels/sync.rs`): the Filament card gets a sync button when the profile
   has a linked printer; it sets each tool's colour (overlay `filament_colour`) and, when the

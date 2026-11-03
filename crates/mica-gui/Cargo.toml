@@ -20,6 +20,8 @@ mica-library = { path = "../mica-library" }
 mica-profiles.workspace = true
 mica-printhost = { path = "../mica-printhost" }
 mica-camera = { path = "../mica-camera" }
+# printers.toml, printer secrets, camera choice and polling (shared with the web dashboard).
+mica-printers = { path = "../mica-printers" }
 # The in-app updater (signed manifests from the update server; see docs/release.md).
 mica-update = { path = "../mica-update" }
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
@@ -44,7 +46,6 @@ mica-cli = { path = "../mica-cli" }
 openh264 = ["mica-camera/openh264"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
-security-framework = "=3.7.0"
 # The native menu bar (File / Edit / View … in the system menu bar); see `src/menu/native.rs`.
 muda = { version = "=0.19.3", default-features = false }
 # Pasting into a text field from the native Edit menu (already in the tree through egui-winit).
@@ -52,11 +53,6 @@ arboard = { version = "3.7.0", default-features = false }
 # The system's Reduce motion setting for the quick tour (`tour.rs`; already in the tree
 # through winit and muda).
 objc2-app-kit = { version = "0.3.2", default-features = false, features = ["std", "NSWorkspace", "NSAccessibility"] }
-
-[target.'cfg(unix)'.dependencies]
-# The user id that must own the printer secrets file on Linux (`printhost/secrets_file.rs`);
-# already in the tree through tempfile and wayland, no new download.
-rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 # The window frame on Wayland desktops that leave it to the app (GNOME): libadwaita-style title

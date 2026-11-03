@@ -1,0 +1,27 @@
+[package]
+name = "mica-printers"
+description = "The printers Mica Slicer knows: printers.toml, their secrets, camera choice and polling"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+mica-core.workspace = true
+mica-printhost = { path = "../mica-printhost" }
+mica-camera = { path = "../mica-camera" }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.9"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "=3.7.0"
+
+[target.'cfg(unix)'.dependencies]
+# The user id that must own the printer secrets file on Linux (`src/secrets_file.rs`);
+# already in the tree through tempfile and wayland, no new download.
+rustix = { version = "1.1.5", default-features = false, features = ["std", "process"] }
+
+[lints]
+workspace = true

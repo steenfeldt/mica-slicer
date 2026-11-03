@@ -292,7 +292,7 @@ only a requested start sends `print=true`. A returned `print_started=true` confi
 Mica accepts both a direct upload receipt and a `result` envelope and does not issue a second
 start request. The public Rust API, diagnostics and warning order stay unchanged.
 
-Polling in `mica-gui/src/printhost/poll.rs` is original Mica scheduling policy. A visible
+Polling in `mica-printers/src/poll.rs` (shared by the window and the web dashboard) is original Mica scheduling policy. A visible
 printing or paused job refreshes every 2 seconds so the Machine view feels responsive;
 an idle card refreshes every 10 seconds to reduce unnecessary requests. A hidden running job
 keeps a 10-second watch for completion/error notifications; other hidden printers do not poll.

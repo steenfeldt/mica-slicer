@@ -41,11 +41,11 @@ Before adding a dependency, check that its license is compatible with AGPL-3.0-o
 | `roxmltree`, `simplecss`, `svgtypes`, `kurbo`, `data-url`, `siphasher`, `base64`, `arrayvec` | 0.20.0, 0.2.2, 0.15.3, 0.11.3, 0.3.2, 1.0.4, 0.22.1, 0.7.8 | MIT OR Apache-2.0 | `resvg` / `usvg` | XML, CSS, SVG value and path parsing |
 | `strict-num`, `xmlwriter`, `imagesize`, `pico-args`, `float-cmp` | 0.1.1, 0.1.0, 0.13.0, 0.5.0, 0.9.0 | MIT | `resvg` / `usvg` | Helpers |
 | `arrayref` | 0.3.9 | BSD-2-Clause | `tiny-skia` | Array slicing |
-| `security-framework` | 3.7.0 (pinned exactly; released 2026-02-20) | MIT OR Apache-2.0 | `mica-gui` (macOS only) | Printer API keys and passwords as generic-password items in the macOS Keychain (service "Mica Slicer"); `printers.toml` only stores the item reference |
+| `security-framework` | 3.7.0 (pinned exactly; released 2026-02-20) | MIT OR Apache-2.0 | `mica-printers` (macOS only; used by the window and the web dashboard) | Printer API keys and passwords as generic-password items in the macOS Keychain (service "Mica Slicer"); `printers.toml` only stores the item reference |
 | `muda` (no default features) | 0.19.3 (pinned exactly; released 2026-06-17) | Apache-2.0 OR MIT | `mica-gui` (macOS only) | The native macOS menu bar (application, File, Edit, View, Calibrate, Window and Help menus) built from Mica's one menu description; falls back to the in-window menu if it cannot be set up |
 | `keyboard-types`, `crossbeam-channel` | 0.7.0, 0.5.17 | MIT OR Apache-2.0 | `muda` | Accelerator key codes and the menu event channel (`objc2`, `objc2-app-kit`, `objc2-foundation`, `dpi`, `png`, `once_cell`, `thiserror` were already in the tree) |
 | `arboard` (direct dependency, no default features) | 3.7.0 | MIT OR Apache-2.0 | `mica-gui` (macOS only) | Reads the clipboard text when the native Edit > Paste item pastes into a text field; already in the tree through `egui-winit`, no new download |
-| `rustix` (direct dependency, features `std`, `process`) | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `mica-gui` (Unix only) | The current user id, which must own the printer secrets file on Linux (`printhost/secrets_file.rs`); already in the tree, no new download |
+| `rustix` (direct dependency, features `std`, `process`) | 1.1.5 | Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT | `mica-printers` (Unix only) | The current user id, which must own the printer secrets file on Linux (`mica-printers/src/secrets_file.rs`); already in the tree, no new download |
 | `security-framework-sys`, `core-foundation` 0.10, `core-foundation-sys`, `bitflags` 2 | 2.17.0, 0.10.1, 0.8.7, 2.13.2 | MIT OR Apache-2.0 | `security-framework` | Bindings and Core Foundation types for the Keychain calls |
 | `image` (features `jpeg`, `png` only) | 0.25.10 | MIT OR Apache-2.0 | `mica-gui` | Decoding camera snapshots (JPEG / PNG) for the Machine view, and texture images imported into the texture gallery; already in the dependency tree through `eframe` |
 | `png` | 0.18.1 | MIT OR Apache-2.0 | `mica-core` | Reading and writing the grey PNG height maps of surface textures (bundled maps, custom images in projects); already in the tree through `image` |
@@ -441,6 +441,11 @@ It contains no upstream source, presets, meshes or G-code; Orca source behavior 
 - Existing `serde`/`serde_json` parse printer responses; existing `toml` 0.9 and `serde` parse the CLI's credential-reference configuration. No new package versions or fixture data were fetched.
 
 Mock HTTP responses in `mica-printhost` are original representative fixtures, not printer captures.
+
+The web dashboard (`mica-web`, see `docs/web-dashboard.md`) adds no new package: it parses
+request heads with the existing `httparse` 1.10.1 (MIT OR Apache-2.0) around Mica's own small
+server, re-encodes camera frames with the existing `image` 0.25 JPEG encoder, and its page
+(`crates/mica-web/src/page/`) is original HTML, CSS and JavaScript without frameworks.
 Moonraker adaptations from the pinned OrcaSlicer and PrusaSlicer sources are registered in `PROVENANCE.md`.
 
 ## Model library

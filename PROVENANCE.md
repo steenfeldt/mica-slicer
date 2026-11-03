@@ -854,8 +854,25 @@ One row per `ported` or `adapted` file, plus explicitly registered original work
 | `crates/mica-videodec/src/openh264_backend.rs` | original | Mica (this workspace) | Development-only OpenH264 backend (feature `openh264`) |
 
 | `crates/mica-printhost/src/connect.rs` | adapted | prusaslicer `src/slic3r/Utils/OctoPrint.cpp` (`PrusaConnect::set_http_post_header_args`, `PrusaLink::test_with_method_check`, `post_inner`, `put_inner`), `OctoPrint.hpp` (`PrusaConnect`) | Per-printer API-key cloud uploader, version negotiation, multipart print/queue fields, 202 warnings; streamed transport, no polling/retries; PUT queue explicitly refused |
-| `crates/mica-gui/src/printhost/config.rs` | adapted | prusaslicer `src/slic3r/Utils/PrusaConnect.cpp` (`PrusaConnectNew::upload`, printer page URL only) | Original Mica connection config/credential storage; external Connect printer URL from an explicitly supplied, validated ID; no OAuth or account queries |
-| `crates/mica-gui/src/printhost/secrets_file.rs` | original | Mica (this workspace) | Printer secrets on Linux and other Unix systems: `secrets.toml` in Mica's settings folder, reference → secret; 0600 file written atomically (temp file + rename), 0700 new folder, files open to others or owned by another user refused with the chmod/chown that fixes them |
+| `crates/mica-printers/src/config.rs` | adapted | prusaslicer `src/slic3r/Utils/PrusaConnect.cpp` (`PrusaConnectNew::upload`, printer page URL only) | Original Mica connection config/credential storage; external Connect printer URL from an explicitly supplied, validated ID; no OAuth or account queries. Moved from `mica-gui/src/printhost/config.rs` so the web dashboard reads the same `printers.toml` |
+
+## Shared printer list and web dashboard (`crates/mica-printers`, `crates/mica-web`)
+
+| File | Kind | Source | Notes |
+|---|---|---|---|
+| `crates/mica-printers/src/lib.rs` | original | Mica (this workspace) | The printers Mica knows, shared by the window and the web dashboard; the `Connector` type |
+| `crates/mica-printers/src/secrets.rs` | original | Mica (this workspace) | Secret stores (moved from `mica-gui/src/printhost/keychain.rs`): macOS Keychain, the Unix secrets file, in-memory, unsupported stub (Windows) |
+| `crates/mica-printers/src/secrets_file.rs` | original | Mica (this workspace) | Printer secrets on Linux and other Unix systems (moved from `mica-gui/src/printhost/secrets_file.rs`): `secrets.toml` in Mica's settings folder, reference → secret; 0600 file written atomically (temp file + rename), 0700 new folder, files open to others or owned by another user refused with the chmod/chown that fixes them |
+| `crates/mica-printers/src/camera.rs` | original | Mica (this workspace) | Which camera of a printer to play and how (moved from `mica-gui/src/printhost/cameras.rs`), and the `mica_camera::Source` for a choice |
+| `crates/mica-printers/src/poll.rs` | original | Mica (this workspace) | Mica's polling budget (moved from `mica-gui/src/printhost/poll.rs`) |
+| `crates/mica-gui/src/printhost/config.rs` | original | Mica (this workspace) | How well a physical printer fits a Mica printer profile; re-exports the shared `printers.toml` code |
+| `crates/mica-web/src/lib.rs` | original | Mica (this workspace) | The dashboard: routes, read-only by default (every POST refused without `--allow-printing`), the action header, the DNS-rebinding `Host` check, the Open in Mica URL per host, uploads into a temporary folder, G-code sent from the library |
+| `crates/mica-web/src/main.rs` | original | Mica (this workspace) | `mica-web` command line: listen address (loopback by default), read-only unless `--allow-printing`, allowed hosts, Open in Mica URL |
+| `crates/mica-web/src/http.rs` | original | Mica (this workspace) | Minimal HTTP/1.1 server around `httparse`: one thread per connection, bounded head, Content-Length bodies |
+| `crates/mica-web/src/fleet.rs` | original | Mica (this workspace) | `printers.toml` re-read on change, per-printer polling while a page looks, status JSON with colour names, uploads with progress |
+| `crates/mica-web/src/cameras.rs` | original | Mica (this workspace) | One `mica_camera::Player` per printer shared by its viewers, frames re-encoded as JPEG and served as MJPEG; stops with the last viewer |
+| `crates/mica-web/src/library.rs` | original | Mica (this workspace) | Read-only library view (`mica_library::read_view`), search through `mica_library::query`, cached thumbnails |
+| `crates/mica-web/tests/api.rs` | original | Mica (this workspace) | JSON API, cameras, uploads and library sends against the loopback mock printers |
 
 ## Full G-code configuration and identity
 

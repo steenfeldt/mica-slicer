@@ -13,14 +13,9 @@ pub mod discover;
 pub mod explain;
 pub mod file_header;
 pub mod job;
-pub mod keychain;
 pub mod monitor;
-pub mod poll;
-// Used on Linux and other Unix systems; built (and tested) on macOS too.
-#[cfg(unix)]
-#[cfg_attr(target_os = "macos", allow(dead_code))]
-pub mod secrets_file;
 pub mod u1map;
+pub use mica_printers::{poll, secrets as keychain};
 
 use config::{Fit, Printer};
 use explain::Explanation;

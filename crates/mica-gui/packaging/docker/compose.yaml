@@ -18,6 +18,15 @@ services:
       # Optional login for the page:
       # - CUSTOM_USER=mica
       # - PASSWORD=change-me
+      # The web dashboard on port 3002 (docs/web-dashboard.md). It has no login of its own
+      # (CUSTOM_USER / PASSWORD protect only port 3000/3001) and is read-only by default.
+      # Let it take uploads and send / start prints:
+      # - MICA_WEB_ALLOW_PRINTING=1
+      # Full DNS names it may be opened with besides IP addresses, short names and .local
+      # (e.g. a Tailscale name; ".tailnet-name.ts.net" allows every name under it):
+      # - MICA_WEB_ALLOW_HOSTS=mica-box.tailnet-name.ts.net
+      # Where its "Open in Mica" button goes ({host}: the name the dashboard was opened with):
+      # - MICA_WEB_OPEN_URL=https://{host}:3001/
     volumes:
       # Mica's settings, profiles, printers (and their secrets file), library index.
       - ./config:/config
@@ -29,5 +38,6 @@ services:
     ports:
       - 3000:3000 # HTTP
       - 3001:3001 # HTTPS (self-signed)
+      - 3002:3002 # web dashboard (printers, cameras, library)
     shm_size: 1gb
     restart: unless-stopped
