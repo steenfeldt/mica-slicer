@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- SPDX-License-Identifier: AGPL-3.0-only -->
+<!-- Provenance: original -->
+<!-- Unraid template for the Mica Slicer image (docs/docker.md). -->
+<Container version="2">
+  <Name>mica-slicer</Name>
+  <Repository>ghcr.io/steenfeldt/mica-slicer:latest</Repository>
+  <Registry>https://github.com/steenfeldt/mica-slicer/pkgs/container/mica-slicer</Registry>
+  <Network>host</Network>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/steenfeldt/mica-slicer/issues</Support>
+  <Project>https://micaslicer.com</Project>
+  <Overview>Mica Slicer, a native 3D-printing slicer, streamed to your browser (Mica at https://[IP]:3001, the read-only web dashboard with printer status, cameras and the library at http://[IP]:3002). Host networking lets Mica find printers that announce themselves. Keep it on your own network or behind Tailscale.</Overview>
+  <Category>Tools: Other</Category>
+  <WebUI>https://[IP]:3001/</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/steenfeldt/mica-slicer/main/crates/mica-gui/packaging/docker/unraid/mica-slicer.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/steenfeldt/mica-slicer/main/crates/mica-gui/assets/icon/mica-512.png</Icon>
+  <ExtraParams>--shm-size=1g</ExtraParams>
+  <Config Name="Settings" Target="/config" Default="/mnt/user/appdata/mica-slicer" Mode="rw" Description="Mica's settings, profiles, printers (and their secrets file) and the library index." Type="Path" Display="always" Required="true">/mnt/user/appdata/mica-slicer</Config>
+  <Config Name="Models" Target="/prints" Default="/mnt/user/3dprint" Mode="rw" Description="Your models and projects; Mica's file dialogs and library see them under /prints." Type="Path" Display="always" Required="false">/mnt/user/3dprint</Config>
+  <Config Name="GPU" Target="/dev/dri" Default="/dev/dri" Mode="" Description="An Intel or AMD GPU for rendering (remove it to render in software)." Type="Device" Display="always" Required="false">/dev/dri</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="User that owns the files in the mapped folders (Unraid: nobody = 99)." Type="Variable" Display="advanced" Required="true">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="Group of the files in the mapped folders (Unraid: users = 100)." Type="Variable" Display="advanced" Required="true">100</Config>
+  <Config Name="Dashboard: allow printing" Target="MICA_WEB_ALLOW_PRINTING" Default="" Mode="" Description="1 lets the dashboard take G-code uploads and send or start prints. Empty: read-only." Type="Variable" Display="advanced" Required="false"/>
+  <Config Name="Dashboard: extra host names" Target="MICA_WEB_ALLOW_HOSTS" Default="" Mode="" Description="Full DNS names the dashboard may be opened with besides IP addresses, short names and .local (e.g. a Tailscale name)." Type="Variable" Display="advanced" Required="false"/>
+  <Config Name="Login user" Target="CUSTOM_USER" Default="" Mode="" Description="Optional login for the streamed Mica (not the dashboard)." Type="Variable" Display="advanced" Required="false"/>
+  <Config Name="Login password" Target="PASSWORD" Default="" Mode="" Description="Password for that login." Type="Variable" Display="advanced" Mask="true" Required="false"/>
+</Container>

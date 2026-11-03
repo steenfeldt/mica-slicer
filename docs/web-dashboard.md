@@ -99,7 +99,7 @@ cameras and the library, and, with `--allow-printing`, send files to the printer
 
 The Docker image (`docs/docker.md`) runs `mica-web` next to the streamed Mica, on port 3002,
 as Mica's user with Mica's settings folder, read-only unless `MICA_WEB_ALLOW_PRINTING=1`, with
-**Open in Mica** pointing to port 3000 of the same host.
+**Open in Mica** pointing to port 3001 (HTTPS) of the same host.
 
 `mica-web` needs no display or GPU. On Linux, `mica-camera` decodes H.264 (RTSP and WebRTC
 cameras) with GStreamer: building needs `libgstreamer1.0-dev` and

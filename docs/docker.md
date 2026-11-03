@@ -8,43 +8,63 @@ desktop app, not a separate web version. Next to it runs Mica's **web dashboard*
 (`docs/web-dashboard.md`) on port 3002: a light page for a phone with the printers' status,
 their cameras and the library.
 
-Files: `crates/mica-gui/packaging/docker/Dockerfile` and `compose.yaml` next to it.
+Files: `crates/mica-gui/packaging/docker/` (`Dockerfile`, `compose.yaml`, the Unraid template
+`unraid/mica-slicer.xml`); the published image is built by `.github/workflows/docker.yml`.
 
-## Build and run
+## The published image
 
-From the repository root:
+`ghcr.io/steenfeldt/mica-slicer`, for x86-64 and arm64:
+
+| Tag | What |
+|---|---|
+| `latest`, `0.0.5`, … | The newest release, and each release by version. Built when a release is published on GitHub. |
+| `edge` | The `main` branch, built when the workflow is started by hand. |
 
 ```sh
-docker compose -f crates/mica-gui/packaging/docker/compose.yaml up -d --build
-```
-
-or by hand:
-
-```sh
-docker build -f crates/mica-gui/packaging/docker/Dockerfile -t mica-slicer .
-docker run -d --name mica-slicer -p 3000:3000 -p 3001:3001 -p 3002:3002 --shm-size=1g \
-  -e PUID=$(id -u) -e PGID=$(id -g) -v "$PWD/mica-config:/config" mica-slicer
+docker run -d --name mica-slicer --network host --shm-size=1g \
+  --device /dev/dri:/dev/dri -e PUID=$(id -u) -e PGID=$(id -g) \
+  -v "$PWD/mica-config:/config" ghcr.io/steenfeldt/mica-slicer:latest
 ```
 
 Then open `https://<host>:3001` for Mica and `http://<host>:3002` for the dashboard. Selkies
 needs a secure page, so from any other computer Mica is only reachable over HTTPS: port 3001,
 with a self-signed certificate the browser warns about once (plain HTTP on port 3000 works
-only on the server itself). For a certificate the browser trusts, put a reverse proxy in front
-of 3001, such as `tailscale serve` or Traefik.
+only on the server itself). For a certificate the browser
+trusts, put a reverse proxy in front of 3001, such as `tailscale serve` or Traefik.
+
+## Building it yourself
+
+From the repository root:
+
+```sh
+docker compose -f crates/mica-gui/packaging/docker/compose.yaml up -d --build
+# or
+docker build -f crates/mica-gui/packaging/docker/Dockerfile -t mica-slicer .
+```
 
 The image builds for the machine it is built on (x86-64 or arm64). The build compiles Mica
 from this checkout and fetches the pinned OrcaSlicer profiles
 (`scripts/fetch-upstream.sh --profiles orca`), so it needs network access.
 
+## Unraid
+
+Add the template from
+`https://raw.githubusercontent.com/steenfeldt/mica-slicer/main/crates/mica-gui/packaging/docker/unraid/mica-slicer.xml`
+(Docker › Add Container › Template repositories, or save it to
+`/boot/config/plugins/dockerMan/templates-user/`). It uses the published image, the host's
+network (Mica on 3001, the dashboard on 3002), `/mnt/user/appdata/mica-slicer` for
+`/config`, a share for your models and the GPU (`/dev/dri`). The GPU must not be bound to a
+VM; if `/dev/dri/renderD128` exists on Unraid, Mica can use it.
+
 ## Network and finding printers
 
 Mica finds printers that announce themselves (the Snapmaker U1, Moonraker printers, PrusaLink
 on a Raspberry Pi) with mDNS, which does not cross Docker's default bridge network. To find
-them from the container, run it with the host's network: `network_mode: host` in
-`compose.yaml` (the `ports` lines then do nothing; the container uses 3000, 3001, 3002 and
-8082 on the host directly). Without it, everything else works, and **Add printer › Enter an
-address** adds any printer by its IP address. Prusa's XL and CORE One announce nothing on
-the network anyway, so they are always added by address.
+them from the container, run it with the host's network (`--network host`,
+`network_mode: host`); it then uses ports 3000, 3001, 3002 and 8082 on the host directly. On
+a bridge network everything else works, and **Add printer › Enter an address** adds any
+printer by its IP address. Prusa's XL and CORE One announce nothing on the network anyway, so
+they are always added by address.
 
 ## Where things are kept
 
@@ -57,8 +77,8 @@ host, or it is lost with the container:
 | `/config/.local/share/mica-slicer` | The library's index and thumbnails |
 | `/config/Desktop` | Files uploaded through the Selkies side panel |
 
-Mount your models and projects too (a NAS share mounted on the host, for example
-`-v /mnt/3dprint:/prints`); Mica's file dialogs show the container's folders.
+Mount your models and projects too (a NAS share, for example `-v /mnt/3dprint:/prints`);
+Mica's file dialogs show the container's folders.
 
 `PUID` and `PGID` make the files in the mounted folders belong to that host user.
 
@@ -89,17 +109,17 @@ The dashboard has no login of its own: `CUSTOM_USER` / `PASSWORD` protect only p
 
 ## Updates
 
-The image is updated as a whole: rebuild or pull it and recreate the container; `/config`
-keeps everything. The image sets `MICA_UPDATES=notify`, so Mica checks for new versions but
-only announces them (no *Install*). Mica also recognizes a container by itself
+The image is updated as a whole: pull the new image (or rebuild) and recreate the container;
+`/config` keeps everything. The image sets `MICA_UPDATES=notify`, so Mica checks for new
+versions but only announces them (no *Install*). Mica also recognizes a container by itself
 (`/.dockerenv`, `/run/.containerenv`); see `docs/release.md`.
 
 ## Graphics and speed
 
-Mica draws with Vulkan. Without a GPU in the container it uses Mesa's software Vulkan
-(lavapipe): the plate, menus and settings are fine, big previews are slow, and Selkies encodes
-the video on the CPU too. Pass an Intel or AMD GPU in with `--device /dev/dri:/dev/dri` (the
-`devices` lines in `compose.yaml`): Mica then renders on it and Selkies can encode on it.
+Mica draws with Vulkan. Pass an Intel or AMD GPU in with `--device /dev/dri:/dev/dri`: Mica
+then renders on it (tried on a Radeon 8060S: smooth). Without a GPU it uses Mesa's software
+Vulkan (lavapipe): the plate, menus and settings are fine, big previews are slow, and
+everything competes with the video encoding for the CPU.
 
 The image streams at the browser's size in points at scale 1
 (`SELKIES_USE_CSS_SCALING="true|locked"`, `SELKIES_SCALING_DPI=96`). On a Retina screen
@@ -111,9 +131,9 @@ display scale once, at start).
 
 Whoever reaches the page drives Mica, and Mica can start prints on your printers; whoever
 reaches port 3002 sees the printers, their cameras and the library (and can send prints when
-`MICA_WEB_ALLOW_PRINTING=1`). Keep the ports on your own network or behind Tailscale; do not forward them to the internet. Selkies
-can ask for a login (`CUSTOM_USER`, `PASSWORD`) and serves HTTPS on port 3001 with a
-self-signed certificate.
+`MICA_WEB_ALLOW_PRINTING=1`). Keep the ports on your own network or behind Tailscale; do not
+forward them to the internet. Selkies can ask for a login (`CUSTOM_USER`, `PASSWORD`); it does
+not cover the dashboard.
 
 Mica is licensed AGPL-3.0: if you offer a modified Mica to other people over a network, offer
 them its source as well.
