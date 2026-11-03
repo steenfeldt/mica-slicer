@@ -149,7 +149,9 @@ impl App {
             .title_bar(false)
             .resizable(false)
             .collapsible(false)
-            .default_pos(ctx.content_rect().center_top() + egui::vec2(-WINDOW_W / 2., 70.))
+            // Anchored, not placed once: it stays centered when the window is resized after
+            // launch (a streamed screen that grows when the browser connects).
+            .anchor(egui::Align2::CENTER_TOP, egui::vec2(0., 70.))
             .frame(
                 egui::Frame::window(&ctx.global_style())
                     .fill(p.bg)
