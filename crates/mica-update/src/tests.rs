@@ -733,3 +733,18 @@ fn appimage_is_replaced() {
     assert_eq!(std::fs::read_to_string(&image).unwrap(), "new");
     std::fs::remove_dir_all(&root).unwrap();
 }
+
+#[test]
+fn a_container_only_announces_updates() {
+    use crate::outside;
+    // A container image's own Mica (not an AppImage inside it) is updated with the image.
+    assert!(outside(None, true, false));
+    assert!(!outside(None, true, true));
+    assert!(!outside(None, false, false));
+    // The setting wins either way.
+    assert!(outside(Some("notify"), false, false));
+    assert!(outside(Some(" Notify "), false, true));
+    assert!(!outside(Some("install"), true, false));
+    // An unknown value changes nothing.
+    assert!(outside(Some("maybe"), true, false));
+}

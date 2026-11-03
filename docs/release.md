@@ -409,6 +409,11 @@ update signature is made.
   updates when asked.
 - Not updatable in place: an app run from the mounted `.dmg` or a translocated location (the
   message asks to move it to Applications), a bare Linux binary (not an AppImage).
+- Updated from outside: in a Linux container (`/.dockerenv` or `/run/.containerenv`, and not
+  an AppImage) Mica still checks, but only announces the new version (*What's new*, *Later*,
+  and a note to pull the new image and recreate the container); there is no *Install*.
+  `MICA_UPDATES=notify` asks for this anywhere (a container image sets it explicitly);
+  `MICA_UPDATES=install` lets Mica update itself even in a container.
 
 The manifest and signature format is cargo-packager-updater's (`latest.json` with a
 `platforms` map, base64 minisign signatures), so cargo-packager's signer and docs apply. The

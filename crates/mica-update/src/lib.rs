@@ -48,6 +48,9 @@ pub const CHANNEL: &str = "alpha";
 pub const URL_ENV: &str = "MICA_UPDATE_URL";
 /// Enables the updater in a development build (one run from cargo's `target/` folder).
 pub const FORCE_ENV: &str = "MICA_UPDATE_FORCE";
+/// How this copy of Mica is updated: `notify` (a container image sets it) means from outside,
+/// so new versions are only announced; `install` lets Mica update itself even in a container.
+pub const UPDATES_ENV: &str = "MICA_UPDATES";
 
 /// The embedded public key list (see `update-key.pub`).
 const KEY_FILE: &str = include_str!("../update-key.pub");
@@ -151,6 +154,29 @@ pub fn platform() -> Option<String> {
 pub fn is_dev_build(exe: &Path) -> bool {
     exe.ancestors()
         .any(|a| a.file_name().is_some_and(|n| n == "target") && a.join("CACHEDIR.TAG").exists())
+}
+
+/// Whether this copy of Mica is updated from outside (a container image), so the updater
+/// announces new versions but never installs them: [`UPDATES_ENV`] says so, or, without it,
+/// Mica runs in a Linux container (`/.dockerenv`, `/run/.containerenv`) and not as an
+/// AppImage.
+pub fn updated_from_outside() -> bool {
+    let in_container = cfg!(target_os = "linux")
+        && (Path::new("/.dockerenv").exists() || Path::new("/run/.containerenv").exists());
+    let appimage = std::env::var_os("APPIMAGE").is_some();
+    outside(
+        std::env::var(UPDATES_ENV).ok().as_deref(),
+        in_container,
+        appimage,
+    )
+}
+
+fn outside(setting: Option<&str>, in_container: bool, appimage: bool) -> bool {
+    match setting.map(str::trim) {
+        Some(v) if v.eq_ignore_ascii_case("notify") => true,
+        Some(v) if v.eq_ignore_ascii_case("install") => false,
+        _ => in_container && !appimage,
+    }
 }
 
 /// Whether [`FORCE_ENV`] asks for the updater in a development build.

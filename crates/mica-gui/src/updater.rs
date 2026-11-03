@@ -11,6 +11,8 @@
 //!
 //! A development build (run from cargo's `target/` folder) never updates itself unless
 //! `MICA_UPDATE_FORCE=1`; headless runs (tests, screenshots, the monkey) never go online.
+//! A copy updated from outside (a container image: `MICA_UPDATES=notify`, or a Linux
+//! container detected at start) still checks, but only announces: no Install anywhere.
 
 use crate::app::App;
 use crate::notifications::{Action, Level, Notification};
@@ -79,6 +81,8 @@ pub struct Updater {
     pub notes_open: bool,
     /// A manual check found nothing new: say so once.
     pub up_to_date_note: bool,
+    /// Updated from outside (a container image): announce new versions, never install.
+    pub announce_only: bool,
 }
 
 impl Default for Updater {
@@ -97,6 +101,7 @@ impl Updater {
             later: false,
             notes_open: false,
             up_to_date_note: false,
+            announce_only: false,
         }
     }
 
@@ -111,6 +116,7 @@ impl Updater {
         }
         let mut u = Self::disabled("");
         u.client = Client::official();
+        u.announce_only = mica_update::updated_from_outside();
         u
     }
 
@@ -187,7 +193,7 @@ impl Updater {
 
     /// Downloads, verifies and installs `release`.
     pub fn install(&mut self, release: Release, ctx: &egui::Context) {
-        if self.working() {
+        if self.working() || self.announce_only {
             return;
         }
         let Ok(client) = self.client.clone() else {
@@ -315,6 +321,10 @@ pub fn due(last: u64, now: u64) -> bool {
 
 const KEY: &str = "update";
 
+/// What an announce-only copy says instead of offering Install.
+const CONTAINER_NOTE: &str = "This Mica runs in a container and is updated with its image: pull \
+     the new image and recreate the container.";
+
 impl App {
     /// The quiet check at start: on (Preferences), not in the last day, a build that updates.
     pub(crate) fn startup_update_check(&mut self, ctx: &egui::Context) {
@@ -391,16 +401,24 @@ impl App {
                     return None;
                 }
                 let title = format!("Mica Slicer {} is available", r.version);
-                let text = format!(
-                    "{title}. You have {}. Installing downloads it in the background; nothing \
-                     you are doing stops.",
-                    mica_update::current_version()
-                );
-                Notification::new(Level::Info, title, text)
-                    .keyed(format!("{KEY}:available:{}", r.version))
-                    .action("What's new", Action::UpdateNotes)
-                    .action("Install", Action::UpdateInstall)
-                    .action("Later", Action::UpdateLater)
+                let current = mica_update::current_version();
+                if u.announce_only {
+                    let text = format!("{title}. You have {current}. {CONTAINER_NOTE}");
+                    Notification::new(Level::Info, title, text)
+                        .keyed(format!("{KEY}:available:{}", r.version))
+                        .action("What's new", Action::UpdateNotes)
+                        .action("Later", Action::UpdateLater)
+                } else {
+                    let text = format!(
+                        "{title}. You have {current}. Installing downloads it in the background; \
+                     nothing you are doing stops."
+                    );
+                    Notification::new(Level::Info, title, text)
+                        .keyed(format!("{KEY}:available:{}", r.version))
+                        .action("What's new", Action::UpdateNotes)
+                        .action("Install", Action::UpdateInstall)
+                        .action("Later", Action::UpdateLater)
+                }
             }
             Phase::Downloading {
                 release,
@@ -576,9 +594,16 @@ impl App {
                         }
                     });
                 ui.add_space(8.);
+                if self.updater.announce_only {
+                    ui.label(CONTAINER_NOTE);
+                    ui.add_space(8.);
+                }
                 ui.horizontal(|ui| {
                     let available = matches!(self.updater.phase, Phase::Available(_));
-                    if crate::panels::widgets::primary_button(ui, "Install", available).clicked() {
+                    if !self.updater.announce_only
+                        && crate::panels::widgets::primary_button(ui, "Install", available)
+                            .clicked()
+                    {
                         action = Some(Action::UpdateInstall);
                     }
                     if crate::panels::widgets::button(ui, "Later", true).clicked() {
@@ -655,6 +680,16 @@ mod tests {
         let labels: Vec<&str> = n.actions.iter().map(|a| a.0.as_str()).collect();
         assert_eq!(labels, ["What's new", "Install", "Later"]);
         assert!(n.life.is_none());
+        // A container's copy announces the version but offers no Install.
+        app.updater.announce_only = true;
+        let n = app.update_notification().unwrap();
+        let labels: Vec<&str> = n.actions.iter().map(|a| a.0.as_str()).collect();
+        assert_eq!(labels, ["What's new", "Later"]);
+        assert!(n.text.contains("container"), "{}", n.text);
+        assert!(n.life.is_none());
+        app.run_update_action(&Action::UpdateInstall, &ctx);
+        assert_eq!(app.updater.phase, Phase::Available(release.clone()));
+        app.updater.announce_only = false;
         app.run_update_action(&Action::UpdateNotes, &ctx);
         assert!(app.updater.notes_open);
         app.run_update_action(&Action::UpdateLater, &ctx);
