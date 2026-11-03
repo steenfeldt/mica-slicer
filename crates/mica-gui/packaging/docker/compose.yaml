@@ -1,0 +1,33 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Provenance: original
+# Mica Slicer streamed to the browser (docs/docker.md). Run from the repository root:
+#   docker compose -f crates/mica-gui/packaging/docker/compose.yaml up -d --build
+# then open http://<host>:3000. Keep it on your own network or behind Tailscale: whoever
+# reaches the page drives Mica, and Mica can start prints.
+services:
+  mica:
+    build:
+      context: ../../../..
+      dockerfile: crates/mica-gui/packaging/docker/Dockerfile
+    image: mica-slicer
+    container_name: mica-slicer
+    environment:
+      - PUID=1000 # the host user that owns the mounted folders (id -u)
+      - PGID=1000 # (id -g)
+      - TZ=Etc/UTC
+      # Optional login for the page:
+      # - CUSTOM_USER=mica
+      # - PASSWORD=change-me
+    volumes:
+      # Mica's settings, profiles, printers (and their secrets file), library index.
+      - ./config:/config
+      # Your models and projects, e.g. a NAS share mounted on the host.
+      # - /mnt/3dprint:/prints
+    # A GPU for rendering (and video encoding): Intel or AMD.
+    # devices:
+    #   - /dev/dri:/dev/dri
+    ports:
+      - 3000:3000 # HTTP
+      - 3001:3001 # HTTPS (self-signed)
+    shm_size: 1gb
+    restart: unless-stopped

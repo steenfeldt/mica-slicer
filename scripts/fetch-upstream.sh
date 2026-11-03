@@ -6,10 +6,10 @@
 # Usage: scripts/fetch-upstream.sh [--profiles] [id ...]    (no ids = fetch all)
 #
 # --profiles: only the data the tests read (CI uses this). For orca and snapmaker-orca that is
-# a sparse, blob-filtered checkout of resources/profiles (plus Snapmaker Orca's 3DBenchy.3mf),
-# a few tens of MB instead of the whole source tree; other ids are fetched whole. A sparse
-# checkout is not a source reference: `cargo xtask provenance` does not check paths in it, and a
-# later run without --profiles replaces it with the full tree.
+# a sparse, blob-filtered checkout of resources/profiles (plus Orca's LICENSE.txt and Snapmaker
+# Orca's 3DBenchy.3mf), a few tens of MB instead of the whole source tree; other ids are
+# fetched whole. A sparse checkout is not a source reference: `cargo xtask provenance` does not
+# check paths in it, and a later run without --profiles replaces it with the full tree.
 set -euo pipefail
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -21,10 +21,11 @@ if [ "${1:-}" = "--profiles" ]; then
   shift
 fi
 
-# The paths a --profiles checkout keeps (empty: the whole tree).
+# The paths a --profiles checkout keeps (empty: the whole tree). Orca's LICENSE.txt ships with
+# the bundled profiles (cargo xtask bundle-profiles, the container image).
 sparse_paths() {
   case "$1" in
-    orca) echo "/resources/profiles/" ;;
+    orca) echo "/resources/profiles/ /LICENSE.txt" ;;
     snapmaker-orca) echo "/resources/profiles/ /resources/handy_models/3DBenchy.3mf" ;;
     *) echo "" ;;
   esac

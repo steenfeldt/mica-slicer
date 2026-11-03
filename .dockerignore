@@ -1,0 +1,7 @@
+# The Docker build context (crates/mica-gui/packaging/docker): sources only.
+target/
+out/
+.claude/
+.git/
+upstream/*
+!upstream/UPSTREAM.lock
