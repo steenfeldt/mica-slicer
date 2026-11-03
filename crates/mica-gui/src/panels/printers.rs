@@ -9,9 +9,9 @@
 //!
 //! "Settings" opens the former window for one printer: add / edit / remove, the type
 //! (PrusaLink, Klipper via Moonraker, Snapmaker U1), address, credentials (saved in the
-//! macOS Keychain; `printers.toml` only gets a reference), the linked Mica profile, an
-//! optional camera URL with its own login (password in the Keychain too), and "Test
-//! connection" showing what the backend reports or a readable error.
+//! macOS Keychain or, on Linux, Mica's secrets file; `printers.toml` only gets a reference),
+//! the linked Mica profile, an optional camera URL with its own login (password stored the
+//! same way), and "Test connection" showing what the backend reports or a readable error.
 
 use super::{
     add_printer::{self, Style, line},
@@ -1141,10 +1141,11 @@ impl App {
         {
             ui.ctx().open_url(egui::OpenUrl::new_tab(url));
         }
+        let store = self.printers.secrets.short_label();
         let credential = match (&printer.username, printer.has_secret()) {
-            (Some(u), true) => format!("user {u} + password ({})", where_kept(&printer)),
+            (Some(u), true) => format!("user {u} + password ({})", where_kept(&printer, store)),
             (Some(u), false) => format!("user {u}, no password saved"),
-            (None, true) => format!("API key ({})", where_kept(&printer)),
+            (None, true) => format!("API key ({})", where_kept(&printer, store)),
             (None, false) => "none".to_string(),
         };
         fact(ui, "Login", &credential);
@@ -1167,9 +1168,9 @@ impl App {
             (Some(url), Some(user)) => format!(
                 "{url} (user {user}{})",
                 if printer.camera_keychain.is_some() {
-                    ", password in the Keychain"
+                    format!(", password in the {}", self.printers.secrets.short_label())
                 } else {
-                    ""
+                    String::new()
                 }
             ),
             (Some(url), None) => url.clone(),
@@ -1511,7 +1512,7 @@ impl App {
             ui.add_space(96.);
             ui.label(
                 egui::RichText::new(if store_ok {
-                    format!("Saved in the {store_label}; never written to Mica's files.")
+                    format!("Saved in the {store_label}; never written to printers.toml.")
                 } else {
                     format!(
                         "Secret storage is {store_label}; use api_key_env in printers.toml instead."
@@ -1689,7 +1690,7 @@ impl App {
                 .secret_touched
                 .then(|| self.printers_editor.secret.clone());
             // A camera URL pasted with `user:password@` is split: the user name stays, the
-            // password goes to the Keychain, the URL is saved without them.
+            // password goes to the secret store, the URL is saved without them.
             let mut camera_typed = self
                 .printers_editor
                 .camera_secret_touched
@@ -1792,13 +1793,13 @@ fn split_credentials(url: &str) -> Option<(String, String, Option<String>)> {
     Some((format!("{scheme}://{host}{tail}"), user, pass))
 }
 
-fn where_kept(printer: &Printer) -> &'static str {
+fn where_kept(printer: &Printer, store: &str) -> String {
     if printer.keychain.is_some() {
-        "in the Keychain"
+        format!("in the {store}")
     } else if printer.api_key_env.is_some() || printer.password_env.is_some() {
-        "from an environment variable"
+        "from an environment variable".into()
     } else {
-        "not saved"
+        "not saved".into()
     }
 }
 

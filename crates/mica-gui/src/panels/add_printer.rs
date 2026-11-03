@@ -15,7 +15,7 @@
 //!
 //! Adding writes what the old flow wrote: the profile goes into `my_printers` (mica.toml) and
 //! becomes the current printer; a connection becomes a `printers.toml` entry linked to that
-//! profile, its key in the Keychain.
+//! profile, its key in the secret store (the macOS Keychain, or secrets.toml on Linux).
 
 use super::widgets::{self, Glyph};
 use crate::app::App;

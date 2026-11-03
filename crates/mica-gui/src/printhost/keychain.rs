@@ -3,8 +3,10 @@
 
 //! Where printer secrets live. `printers.toml` only ever holds a *reference*; the API key or
 //! password itself goes to the macOS Keychain (a generic password item of the service
-//! "Mica Slicer", the reference as its account). Other platforms get a clear "not supported
-//! yet" answer, tests and headless screenshots an in-memory store that never touches disk.
+//! "Mica Slicer", the reference as its account), on Linux and other Unix systems to
+//! `secrets.toml`, a file only its owner can read in Mica's settings folder
+//! ([`super::secrets_file`]). Windows gets a clear "not supported yet" answer, tests and
+//! headless screenshots an in-memory store that never touches disk.
 
 use std::{
     collections::BTreeMap,
@@ -19,8 +21,12 @@ use std::{
 pub const SERVICE: &str = "Mica Slicer";
 
 pub trait SecretStore: Send + Sync {
-    /// Where secrets go, for the UI ("macOS Keychain").
+    /// Where secrets go, for the UI after "the" ("macOS Keychain").
     fn label(&self) -> &'static str;
+    /// A shorter name for tight spots ("Keychain").
+    fn short_label(&self) -> &'static str {
+        self.label()
+    }
     /// False when secrets cannot be kept on this platform; the UI then says so instead of
     /// pretending to save.
     fn available(&self) -> bool {
@@ -54,6 +60,9 @@ impl SecretStore for MemoryStore {
     fn label(&self) -> &'static str {
         "memory (not saved)"
     }
+    fn short_label(&self) -> &'static str {
+        "memory"
+    }
     fn get(&self, reference: &str) -> Result<Option<String>, String> {
         Ok(self.0.lock().unwrap().get(reference).cloned())
     }
@@ -76,6 +85,9 @@ pub struct Keychain;
 impl SecretStore for Keychain {
     fn label(&self) -> &'static str {
         "macOS Keychain"
+    }
+    fn short_label(&self) -> &'static str {
+        "Keychain"
     }
     fn get(&self, reference: &str) -> Result<Option<String>, String> {
         use security_framework::passwords::get_generic_password;
@@ -102,9 +114,9 @@ impl SecretStore for Keychain {
 }
 
 /// Platforms without a secret store yet: nothing is saved, and the UI says so.
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(unix))]
 pub struct Unsupported;
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(unix))]
 impl SecretStore for Unsupported {
     fn label(&self) -> &'static str {
         "not supported yet on this platform"
@@ -122,20 +134,28 @@ impl SecretStore for Unsupported {
         Ok(())
     }
 }
-#[cfg(not(target_os = "macos"))]
+#[cfg(not(unix))]
 const UNSUPPORTED: &str = "Saving printer secrets is not supported yet on this platform; use an api_key_env entry in printers.toml";
 
-/// The platform's store: the Keychain on macOS, the unsupported stub elsewhere.
+/// The platform's store: the Keychain on macOS, `secrets.toml` in Mica's settings folder (the
+/// folder of `printers.toml`, `MICA_CONFIG_DIR` when set) on other Unix systems, the
+/// unsupported stub elsewhere (Windows).
 pub fn system() -> Box<dyn SecretStore> {
     assert!(
         !mica_core::user_data::isolated(),
-        "a test (or test tool) opened the macOS Keychain: use MemoryStore"
+        "a test (or test tool) opened the real secret store: use MemoryStore"
     );
     #[cfg(target_os = "macos")]
     {
         Box::new(Keychain)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        let printers = super::config::default_path();
+        let dir = printers.parent().unwrap_or(std::path::Path::new("."));
+        Box::new(super::secrets_file::FileStore::new(dir))
+    }
+    #[cfg(not(unix))]
     {
         Box::new(Unsupported)
     }
@@ -145,9 +165,9 @@ pub fn system() -> Box<dyn SecretStore> {
 mod tests {
     use super::*;
 
-    /// Tests use `MemoryStore`: opening the real Keychain panics.
+    /// Tests use `MemoryStore`: opening the real Keychain or secrets file panics.
     #[test]
-    fn tests_cannot_open_the_real_keychain() {
+    fn tests_cannot_open_the_real_secret_store() {
         assert!(std::panic::catch_unwind(system).is_err());
     }
 

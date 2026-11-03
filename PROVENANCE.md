@@ -855,6 +855,7 @@ One row per `ported` or `adapted` file, plus explicitly registered original work
 
 | `crates/mica-printhost/src/connect.rs` | adapted | prusaslicer `src/slic3r/Utils/OctoPrint.cpp` (`PrusaConnect::set_http_post_header_args`, `PrusaLink::test_with_method_check`, `post_inner`, `put_inner`), `OctoPrint.hpp` (`PrusaConnect`) | Per-printer API-key cloud uploader, version negotiation, multipart print/queue fields, 202 warnings; streamed transport, no polling/retries; PUT queue explicitly refused |
 | `crates/mica-gui/src/printhost/config.rs` | adapted | prusaslicer `src/slic3r/Utils/PrusaConnect.cpp` (`PrusaConnectNew::upload`, printer page URL only) | Original Mica connection config/credential storage; external Connect printer URL from an explicitly supplied, validated ID; no OAuth or account queries |
+| `crates/mica-gui/src/printhost/secrets_file.rs` | original | Mica (this workspace) | Printer secrets on Linux and other Unix systems: `secrets.toml` in Mica's settings folder, reference → secret; 0600 file written atomically (temp file + rename), 0700 new folder, files open to others or owned by another user refused with the chmod/chown that fixes them |
 
 ## Full G-code configuration and identity
 

@@ -66,9 +66,9 @@ impl Entry {
         };
         if self.keychain.is_some() {
             return Err(
-                "this printer's secret is in the macOS Keychain (set up in Mica's My printers); \
-                 the CLI cannot read the Keychain yet, so add api_key_env or password_env for \
-                 command-line use"
+                "this printer's secret was saved by Mica's My printers (in the macOS Keychain, or \
+                 secrets.toml on Linux); the CLI cannot read it yet, so add api_key_env or \
+                 password_env for command-line use"
                     .into(),
             );
         }

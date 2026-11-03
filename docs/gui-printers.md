@@ -17,15 +17,29 @@ backend protocol logic stays in `mica-printhost` and is registered there.
   with. **Test connection** shows what the backend reports (model, firmware, state, tools, what
   it can do, loaded spools) or a plain-language error ("401: XL refused the credentials — check
   the API key in My printers against the printer's Settings → Network → PrusaLink → API key").
-- **Secrets go to the macOS Keychain** (`printhost/keychain.rs`, `security-framework` 3.7.0):
-  one generic-password item per printer under the service "Mica Slicer", the account being an
-  opaque reference like `mica-printer-19c6…-3`. `printers.toml` (next to `mica.toml`) stores
-  only that reference (`keychain = "…"`), never the key. On other platforms the store reports
-  itself as "not supported yet" and the form says so instead of pretending to save. Tests and
-  headless screenshots use an in-memory store, so they never touch the real Keychain or disk.
+- **Secrets go to the macOS Keychain, on Linux to a private file** (`printhost/keychain.rs`,
+  `printhost/secrets_file.rs`). On macOS: one generic-password item per printer under the
+  service "Mica Slicer" (`security-framework` 3.7.0), the account being an opaque reference like
+  `mica-printer-19c6…-3`. On Linux (the AppImage, the Docker image) and other Unix systems:
+  `secrets.toml` in Mica's settings folder (next to `printers.toml`, `MICA_CONFIG_DIR` when set),
+  a `[secrets]` table of reference = secret lines. It is created with mode 0600 (a temporary file
+  in the same folder, made 0600 before the secret is written, then renamed over the old one); a
+  settings folder Mica has to create is created 0700. If the file can be read or written by
+  group or others, or belongs to another user, Mica refuses to use it and says which `chmod 600`
+  (or `chown`) fixes it, instead of repairing it silently: a key that others could read may need
+  changing. The file is not encrypted; it is as private as the account and disk it is on. In the
+  Docker image the settings folder is the mounted `/config`, so the file lives on the host's
+  volume and is exactly as protected as that folder (keep it out of shared or world-readable
+  places, and out of backups you would not trust with the keys). Either way `printers.toml`
+  (next to `mica.toml`) stores only the reference (`keychain = "…"`, the field keeps its first
+  name), never the key, so a `printers.toml` copied to another machine just lacks its secrets:
+  enter them again in My printers. On Windows the store reports itself as "not supported yet"
+  and the form says so instead of pretending to save. Tests and headless screenshots use an
+  in-memory store, so they never touch the real Keychain, secrets file or disk (the file store's
+  own tests use temporary folders).
   The file is the CLI's: `mica print` still reads `api_key_env` / `password_env` entries, and the
   GUI reads them too; the CLI accepts the GUI's extra `profile` / `model` fields and says clearly
-  that it cannot read the Keychain yet.
+  that it cannot read the Keychain or secrets file yet.
 - **Profile link**: each physical printer may name a profile (`profile = "Prusa/Original Prusa
   XL 5T Input Shaper 0.4 nozzle"`); several printers can share one. Without a link the first
   printer of the same family whose reported model names the profile's model is used (an XL for
@@ -127,6 +141,8 @@ passes so background answers land; printer flags default to 1500 ms).
 ## Tests
 
 `cargo test -p mica-gui printhost`: the in-memory secret store and unique references; the
+secrets file (0600 file and 0700 new folder, atomic rewrites, files open to others or owned by
+another user refused with the fix, broken files reported without their contents); the
 `printers.toml` round trip without secrets (inline secrets, duplicates and unknown keys refused
 without echoing the line; the CLI's example parses); credentials resolved from the store, never
 the file, with readable missing-secret errors; profile ranking (linked → model → family →
@@ -142,7 +158,8 @@ GUI's extra fields.
 1. **My printers**: add the CORE One and XL with their real PrusaLink API keys (and, if used,
    user name + password) and the U1 with its Moonraker address (`host:7125`). Test each; confirm
    the reported model, firmware, tool count (XL: 5, U1: 4) and that "Can" lists upload / start /
-   pause / resume / cancel. Check Keychain Access shows "Mica Slicer" items and that
+   pause / resume / cancel. Check Keychain Access shows "Mica Slicer" items (on Linux: that
+   `secrets.toml` exists with mode 0600) and that
    `~/Library/Application Support/Mica Slicer/printers.toml` holds only `keychain = "…"`
    references. Enter a wrong key once and confirm the 401 text.
 2. **Print dialog**: with the printer idle, slice a small cube, open Print…, confirm the
@@ -198,7 +215,7 @@ opens one window with three screens (`panels/add_printer.rs`):
    (not supported yet)" and offer a camera address of the user's own (MJPEG / RTSP / snapshot)
    with *Test* and a preview. *Add <name>* writes what the old flow wrote: `my_printers` in
    mica.toml (and selects the profile), and with an address a `printers.toml` entry linked to the
-   profile, its key in the Keychain.
+   profile, its key in the secret store (Keychain or secrets file).
 
 **My printers** (`panels/printers.rs`) is now a grid of cards: picture (or, for a printer with a
 camera that is online, a snapshot refreshed every 3 s while the window is open; clicking it opens
@@ -235,7 +252,7 @@ pointer loop, `_http` filtering and merging, a sparse and a full fake responder 
 PrusaLink / 401 / U1 probes against the scripted HTTP mock: GETs only, no key sent);
 `printhost::catalog` (grouping of XL, CORE One, MK4S, U1; matching found printers;
 `base_name`); `printhost::discover` (no search without a loopback target in tests);
-`add_printer_tests` (the screens and their buttons, Setup's prefs / printers.toml / Keychain
+`add_printer_tests` (the screens and their buttons, Setup's prefs / printers.toml / secret-store
 entries, one-click add and the key prompt, cards polling only while open).
 
 Checked read-only against real printers on a LAN: the U1
@@ -356,7 +373,7 @@ slice-only, Orca rules, Klipper G-code byte-identical to `mica slice --vendor �
   snapshot endpoint.
 - Add printer: per-tool nozzles at setup, user + password (digest) logins (use `+ Add manually`
   under Settings), IPv6-only printers; slow vendors' print/filament lists (Bambu Lab: 2 000+ filaments) are composed on the UI thread when such a printer is selected.
-- The CLI reading Keychain references (it says so clearly for now).
+- The CLI reading Keychain or secrets-file references (it says so clearly for now).
 - Thumbnails of the job on the printer, file browsing and queues (the backend reserves them).
 - Bed-type preflight for the U1 (the backend's `bed_type` is unconfirmed, so the dialog does not
   send one yet).

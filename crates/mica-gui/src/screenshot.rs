@@ -352,7 +352,7 @@ struct Args {
     /// Save the result to the filament profile (`--calibrate-save`).
     calibrate_save: bool,
     /// `--printer-host NAME=prusalink|moonraker|u1@ADDRESS[#KEY]`: a physical printer, kept
-    /// in memory (nothing is written to printers.toml or the Keychain). Repeatable.
+    /// in memory (nothing is written to printers.toml or the secret store). Repeatable.
     printer_hosts: Vec<String>,
     /// `--printer-camera NAME=URL`: the manual camera URL of a `--printer-host` printer.
     printer_cameras: Vec<String>,

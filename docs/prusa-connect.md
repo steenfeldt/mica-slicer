@@ -26,8 +26,8 @@ Mica supports the API-key uploader from pinned PrusaSlicer 2.9.6,
   Connect: cloud acceptance cannot confirm physical printing.
 - GUI: My printers → Settings → Add manually → Type → **Prusa Connect (API key)**.
   Create the key in Connect → select printer → Settings → API key. The key is
-  saved through the same `SecretStore` / macOS Keychain service and reference as
-  PrusaLink. No secret is serialized. The optional **Connect ID** is the ID from
+  saved through the same `SecretStore` (macOS Keychain, or `secrets.toml` on Linux)
+  and reference as PrusaLink. No secret is serialized. The optional **Connect ID** is the ID from
   `/printer/ID/dashboard` in the printer's browser URL; it enables **Open in Prusa
   Connect**, including for a PrusaLink entry. It is not inferred from a secret or
   fetched through another API.
@@ -54,8 +54,9 @@ mica print job.bgcode --printer-host cloud-xl --queue
 ```
 
 The two optional flags are mutually exclusive. The CLI keeps its existing
-credential policy: environment-variable references only; a Keychain-backed entry
-reports that CLI Keychain access is not implemented. It does not read the Keychain.
+credential policy: environment-variable references only; an entry with a
+secret-store reference reports that the CLI cannot read it yet. It does not read the
+Keychain or the secrets file.
 `mica printers status` is unsupported for Connect and makes no request.
 
 ## Exact outbound requests for review
@@ -168,7 +169,7 @@ and `put_inner`, including empty parent paths, filename versus URL path encoding
 202 warning distinction and PUT's header-presence semantics.
 
 Mica uses its existing streamed Rust HTTP transport, timeout/error types, progress
-callback, Keychain store, configuration and GUI worker threads. Successful
+callback, secret store, configuration and GUI worker threads. Successful
 response text (including plain text, not only JSON) is shown after stripping control
 characters, redacting the key, and limiting display to 2,048 characters; the
 response read is bounded at 2 MiB. Empty 202 bodies get a clear fallback warning.
@@ -212,4 +213,4 @@ credential-store tests use MemoryStore. No real service or printer was contacted
 - `cargo xtask corpus --quick`: 14 cases pass, zero validation errors.
 - cube20 and 3DBenchy for CORE One, XL and U1 are byte-identical before and after the
   implementation; `mica validate --json` reports zero errors for all six.
-- No real service, printer or Keychain is accessed by the tests.
+- No real service, printer, Keychain or secrets file is accessed by the tests.

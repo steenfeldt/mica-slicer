@@ -3294,6 +3294,7 @@ dependencies = [
  "rayon",
  "resvg",
  "rfd",
+ "rustix 1.1.5",
  "security-framework",
  "serde",
  "serde_json",

@@ -2,8 +2,8 @@
 // Provenance: original
 
 //! The GUI's side of printer connections: the list of physical printers (`printers.toml`),
-//! their secrets (Keychain), test connections, the live monitors behind the Machine view and
-//! the Print dialog's state machine. Everything that talks to a printer runs on a thread;
+//! their secrets (the macOS Keychain, elsewhere a private file), test connections, the live
+//! monitors behind the Machine view and the Print dialog's state machine. Everything that talks to a printer runs on a thread;
 //! the UI only drains channels.
 
 pub mod cameras;
@@ -16,6 +16,10 @@ pub mod job;
 pub mod keychain;
 pub mod monitor;
 pub mod poll;
+// Used on Linux and other Unix systems; built (and tested) on macOS too.
+#[cfg(unix)]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
+pub mod secrets_file;
 pub mod u1map;
 
 use config::{Fit, Printer};
@@ -316,7 +320,7 @@ impl Printers {
     }
 
     /// A connection factory for the printer at `index`: the secret is read now, on the
-    /// calling thread, so the Keychain is never touched from a worker.
+    /// calling thread, so the secret store is never touched from a worker.
     pub fn connector(&self, index: usize) -> Result<Connector, String> {
         let p = self.list.get(index).ok_or("no such printer")?;
         if LOOPBACK_ONLY.load(std::sync::atomic::Ordering::Relaxed) && !is_loopback(&p.address) {

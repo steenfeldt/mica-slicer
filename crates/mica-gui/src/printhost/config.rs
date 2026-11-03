@@ -5,7 +5,8 @@
 
 //! The physical printers Mica can talk to: `printers.toml` next to `mica.toml`, shared with
 //! the CLI (`mica print --printer-host NAME`). Secrets are never in this file: an entry names
-//! a Keychain reference (`keychain = "…"`) or, for CLI setups, an environment variable.
+//! a reference into Mica's secret store (`keychain = "…"`: the macOS Keychain, `secrets.toml`
+//! on Linux; see `keychain.rs`) or, for CLI setups, an environment variable.
 //! Each entry may link to a Mica printer profile (`profile = "Vendor/Preset"`); several
 //! physical printers can share one profile.
 
@@ -107,7 +108,7 @@ pub struct Printer {
     pub connect_printer_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub username: Option<String>,
-    /// Keychain reference of the API key or password.
+    /// Secret-store reference of the API key or password (the field keeps its first name).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub keychain: Option<String>,
     /// CLI-style secret references; the GUI reads them and never writes them.
@@ -125,7 +126,7 @@ pub struct Printer {
     /// HTTP), used instead of what the printer reports. Never carries credentials.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<String>,
-    /// The camera's login: a user name here, the password in the Keychain (reference).
+    /// The camera's login: a user name here, the password in the secret store (reference).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera_username: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -333,7 +334,7 @@ pub fn parse(text: &str) -> Result<Vec<Printer>, String> {
     for p in &file.printers {
         if p.api_key.is_some() || p.password.is_some() {
             return Err(format!(
-                "{FILE_NAME}: {} has an inline secret; Mica keeps secrets in the Keychain only. Remove the api_key / password line.",
+                "{FILE_NAME}: {} has an inline secret; Mica never keeps secrets in this file. Remove the api_key / password line and enter it in My printers.",
                 p.name
             ));
         }
@@ -349,8 +350,9 @@ pub fn to_toml(printers: &[Printer]) -> String {
         printers: printers.to_vec(),
     };
     format!(
-        "# Mica Slicer printers. Secrets are NOT in this file: `keychain` names a macOS Keychain\n\
-         # item (service \"Mica Slicer\"), `api_key_env` / `password_env` an environment variable.\n\
+        "# Mica Slicer printers. Secrets are NOT in this file: `keychain` names an item in Mica's\n\
+         # secret store (macOS Keychain service \"Mica Slicer\", or secrets.toml next to this file\n\
+         # on Linux), `api_key_env` / `password_env` an environment variable.\n\
          {}",
         toml::to_string(&file).expect("printers always serialize")
     )

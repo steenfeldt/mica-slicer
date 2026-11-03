@@ -200,9 +200,9 @@ address = "http://u1.local:7125"
 `kind` is exactly `PrusaLink`, `PrusaConnect`, `Moonraker` or `SnapmakerU1`. Inline secret fields, unknown fields,
 duplicate names, mixed credential mechanisms and missing/empty secret environment variables are
 errors. The GUI writes the same file (see [gui-printers.md](gui-printers.md)): its entries carry
-`keychain = "reference"` (the macOS Keychain item holding the key or password), optionally
-`profile = "Vendor/Preset"` and `model = "…"`. The CLI accepts those fields but cannot read the
-Keychain yet and says so; add `api_key_env` / `password_env` for command-line use. No config or
+`keychain = "reference"` (the macOS Keychain item, or on Linux the `secrets.toml` entry, holding
+the key or password), optionally `profile = "Vendor/Preset"` and `model = "…"`. The CLI accepts
+those fields but cannot read the Keychain or secrets file yet and says so; add `api_key_env` / `password_env` for command-line use. No config or
 secret is written by these commands.
 
 ```sh
