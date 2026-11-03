@@ -26,9 +26,25 @@ docker run -d --name mica-slicer -p 3000:3000 -p 3001:3001 -p 3002:3002 --shm-si
   -e PUID=$(id -u) -e PGID=$(id -g) -v "$PWD/mica-config:/config" mica-slicer
 ```
 
-Then open `http://<host>:3000` for Mica, `http://<host>:3002` for the dashboard. The image
-builds for the machine it is built on (x86-64 or arm64). The build compiles Mica from this checkout and fetches the pinned OrcaSlicer profiles
+Then open `https://<host>:3001` for Mica and `http://<host>:3002` for the dashboard. Selkies
+needs a secure page, so from any other computer Mica is only reachable over HTTPS: port 3001,
+with a self-signed certificate the browser warns about once (plain HTTP on port 3000 works
+only on the server itself). For a certificate the browser trusts, put a reverse proxy in front
+of 3001, such as `tailscale serve` or Traefik.
+
+The image builds for the machine it is built on (x86-64 or arm64). The build compiles Mica
+from this checkout and fetches the pinned OrcaSlicer profiles
 (`scripts/fetch-upstream.sh --profiles orca`), so it needs network access.
+
+## Network and finding printers
+
+Mica finds printers that announce themselves (the Snapmaker U1, Moonraker printers, PrusaLink
+on a Raspberry Pi) with mDNS, which does not cross Docker's default bridge network. To find
+them from the container, run it with the host's network: `network_mode: host` in
+`compose.yaml` (the `ports` lines then do nothing; the container uses 3000, 3001, 3002 and
+8082 on the host directly). Without it, everything else works, and **Add printer › Enter an
+address** adds any printer by its IP address. Prusa's XL and CORE One announce nothing on
+the network anyway, so they are always added by address.
 
 ## Where things are kept
 
@@ -64,9 +80,9 @@ uploads and send or start prints, set
 It answers requests addressed by IP address, a short host name (`mica-box`) or a `.local`
 name. Opened by a full DNS name, such as a Tailscale name, that name must be listed:
 `MICA_WEB_ALLOW_HOSTS=mica-box.tailnet-name.ts.net` (comma-separated; `.tailnet-name.ts.net`
-for every name under it). Its **Open in Mica** button goes to port 3000 of the host the
+for every name under it). Its **Open in Mica** button goes to port 3001 (HTTPS) of the host the
 dashboard was opened with; `MICA_WEB_OPEN_URL` changes that (`{host}` stands for that host,
-e.g. `https://{host}:3001/`). The lines are in `compose.yaml`, commented out.
+e.g. `https://mica.example.ts.net/` behind a proxy). The lines are in `compose.yaml`, commented out.
 
 The dashboard has no login of its own: `CUSTOM_USER` / `PASSWORD` protect only ports 3000 and
 3001. Do not publish 3002 where you would not publish Mica itself, or leave it out of `ports`.

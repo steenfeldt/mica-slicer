@@ -48,7 +48,7 @@ pub struct Options {
     pub library: PathBuf,
     pub secrets: Arc<dyn SecretStore>,
     /// Where "Open in Mica" goes (the streamed Mica window), if anywhere. `{host}` stands for
-    /// the host name the page was opened with (`http://{host}:3000/` in the Docker image).
+    /// the host name the page was opened with (`https://{host}:3001/` in the Docker image).
     pub open_url: Option<String>,
     /// Refuse printers and cameras that are not on this computer (tests).
     pub loopback_only: bool,

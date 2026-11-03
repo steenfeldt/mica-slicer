@@ -2,8 +2,9 @@
 # Provenance: original
 # Mica Slicer streamed to the browser (docs/docker.md). Run from the repository root:
 #   docker compose -f crates/mica-gui/packaging/docker/compose.yaml up -d --build
-# then open http://<host>:3000. Keep it on your own network or behind Tailscale: whoever
-# reaches the page drives Mica, and Mica can start prints.
+# then open https://<host>:3001 (Selkies needs HTTPS; plain HTTP on 3000 only works on the
+# server itself) and http://<host>:3002 for the dashboard. Keep it on your own network or
+# behind Tailscale: whoever reaches the page drives Mica, and Mica can start prints.
 services:
   mica:
     build:
@@ -26,7 +27,8 @@ services:
       # (e.g. a Tailscale name; ".tailnet-name.ts.net" allows every name under it):
       # - MICA_WEB_ALLOW_HOSTS=mica-box.tailnet-name.ts.net
       # Where its "Open in Mica" button goes ({host}: the name the dashboard was opened with):
-      # - MICA_WEB_OPEN_URL=https://{host}:3001/
+      # (default https://{host}:3001/; e.g. behind tailscale serve or Traefik):
+      # - MICA_WEB_OPEN_URL=https://mica.tailnet-name.ts.net/
     volumes:
       # Mica's settings, profiles, printers (and their secrets file), library index.
       - ./config:/config
@@ -35,8 +37,12 @@ services:
     # A GPU for rendering (and video encoding): Intel or AMD.
     # devices:
     #   - /dev/dri:/dev/dri
+    # Finding printers that announce themselves (U1, Moonraker) needs the host's network: mDNS
+    # does not cross Docker's bridge. With it the ports below do nothing (the container uses
+    # 3000, 3001, 3002 and 8082 on the host). Printers added by address work either way.
+    # network_mode: host
     ports:
-      - 3000:3000 # HTTP
+      - 3000:3000 # HTTP (only from the server itself)
       - 3001:3001 # HTTPS (self-signed)
       - 3002:3002 # web dashboard (printers, cameras, library)
     shm_size: 1gb

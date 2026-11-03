@@ -25,7 +25,7 @@ OPTIONS:
                         Repeatable; also MICA_WEB_ALLOW_HOSTS (comma-separated).
   --open-url URL        Where \"Open in Mica\" goes (the streamed Mica window); {host}
                         stands for the name the page was opened with, e.g.
-                        http://{host}:3000/. Also MICA_WEB_OPEN_URL.
+                        https://{host}:3001/. Also MICA_WEB_OPEN_URL.
   --allow-printing      Take G-code uploads and send / start prints from the page. Off by
                         default: the dashboard is read-only (status, cameras, library).
                         Also MICA_WEB_ALLOW_PRINTING=1.

@@ -27,7 +27,7 @@ MICA_CONFIG_DIR=/srv/mica/config ./target/release/mica-web --open-url https://mi
 | `--listen ADDR:PORT` | | Where to listen. Default `127.0.0.1:7380`: this computer only. |
 | `--allow-printing` | `MICA_WEB_ALLOW_PRINTING=1` | Take G-code uploads and send / start prints. **Off by default**: the dashboard is read-only. |
 | `--allow-host NAME` | `MICA_WEB_ALLOW_HOSTS` (comma-separated) | Also answer requests addressed to the DNS name `NAME` (`mica-box.tailnet.ts.net`; `.tailnet.ts.net` allows every name under it). Repeatable. See *Security*. |
-| `--open-url URL` | `MICA_WEB_OPEN_URL` | Where **Open in Mica** goes. `{host}` stands for the name the dashboard was opened with (`http://{host}:3000/`). Without it the button is hidden. |
+| `--open-url URL` | `MICA_WEB_OPEN_URL` | Where **Open in Mica** goes. `{host}` stands for the name the dashboard was opened with (`https://{host}:3001/`). Without it the button is hidden. |
 | `--printers FILE` | | The printer list. Default: `printers.toml` in Mica's settings folder. |
 | `--library DIR` | | The library's data folder. Default: Mica's (`$MICA_CONFIG_DIR/library` when set). |
 

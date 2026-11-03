@@ -10,8 +10,9 @@
 # reach it); names that could be DNS-rebound are refused unless MICA_WEB_ALLOW_HOSTS lists
 # them. Read-only unless MICA_WEB_ALLOW_PRINTING=1.
 
-# "Open in Mica": the streamed Mica on port 3000 of the host the dashboard was opened with.
-default_url='http://{host}:3000/'
+# "Open in Mica": the streamed Mica on port 3001 (HTTPS) of the host the dashboard was opened
+# with. Selkies needs a secure page: plain HTTP on port 3000 only works on the server itself.
+default_url='https://{host}:3001/'
 open_url="${MICA_WEB_OPEN_URL:-$default_url}"
 
 cd /config || exit 1
