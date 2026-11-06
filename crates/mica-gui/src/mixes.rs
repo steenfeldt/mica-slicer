@@ -664,8 +664,8 @@ impl App {
     }
 
     /// Renumbers one-based tools everywhere they are used: object and part assignments,
-    /// layer ranges and color painting.
-    fn renumber_tools(&mut self, map: &BTreeMap<usize, usize>) {
+    /// layer ranges, plate settings and color painting.
+    pub(crate) fn renumber_tools(&mut self, map: &BTreeMap<usize, usize>) {
         if map.is_empty() {
             return;
         }
@@ -675,6 +675,9 @@ impl App {
             "perimeter_extruder",
             "infill_extruder",
             "solid_infill_extruder",
+            "support_material_extruder",
+            "support_material_interface_extruder",
+            "wipe_tower_extruder",
         ];
         let remap_overrides = |o: &mut BTreeMap<String, String>| {
             for k in keys {
@@ -698,8 +701,9 @@ impl App {
         };
         let states = |s: u8| map.get(&usize::from(s)).map_or(s, |t| *t as u8);
         for plate in &mut self.plates.plates {
+            remap_overrides(&mut plate.overrides);
             for o in &mut plate.objects {
-                for role in o.tools.0.iter_mut().take(3).flatten() {
+                for role in o.tools.0.iter_mut().flatten() {
                     *role = one(*role + 1) - 1;
                 }
                 remap_overrides(&mut o.overrides);

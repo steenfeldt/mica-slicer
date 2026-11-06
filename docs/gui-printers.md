@@ -89,6 +89,15 @@ backend protocol logic stays in `mica-printhost` and is registered there.
   applies to the print dialog's U1 slot dropdown ("Slot 1 · PLA Basic · yellow"), its filament
   rows and the Machine view's tool tiles ("PLA · yellow"). Loaded spools come from the monitor
   or the last test connection; the sync asks the printer first when nothing is known yet.
+- **Moving a color to another tool** (`tool_remap.rs`): right-clicking a tool row of the
+  Filaments card offers *Swap with* ▸ T2… and *Move everything to* ▸ T2…. Everything that
+  prints with the tool follows, on every plate, as one undo step: objects and parts (all five
+  roles), object, part, height-range and plate overrides, painted areas, mixed colors'
+  components, layer tool and color changes, and the print settings' support, support
+  interface and wipe tower tools (written to the print overlay when they name a moved tool).
+  The slots' filaments and colors stay put, so the parts take the other slot's filament: after
+  a sync put the printer's spools in different slots, a swap brings the colors back. A move
+  that would make a mixed color use one tool twice is refused with the mix's name.
 - **File header** (Moonraker and U1 printers, `printhost/file_header.rs`): see
   [gcode-config-identity.md](gcode-config-identity.md#per-printer-file-header).
 

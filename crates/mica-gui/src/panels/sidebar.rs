@@ -628,6 +628,7 @@ impl App {
         let recent = self.recent_colours();
         let mut mix_draft = self.mixes.draft.clone();
         let mut mix_acts = Vec::new();
+        let mut remap: Option<crate::tool_remap::ToolRemap> = None;
         card(ui, |ui| {
             widgets::card_header(ui, if tools > 1 { "Filaments" } else { "Filament" }, |ui| {
                 if tools == 1
@@ -786,6 +787,38 @@ impl App {
                         Some(full) => response.on_hover_text(full),
                         None => response,
                     };
+                    // Right-click: what prints with this tool moves to another one.
+                    if tools > 1 {
+                        response.context_menu(|ui| {
+                            use crate::tool_remap::ToolRemap;
+                            for (title, make) in [
+                                (
+                                    "Swap with",
+                                    ToolRemap::Swap as fn(usize, usize) -> ToolRemap,
+                                ),
+                                ("Move everything to", ToolRemap::Move),
+                            ] {
+                                ui.menu_button(title, |ui| {
+                                    for (t, c) in colours.iter().enumerate().take(tools) {
+                                        if t == tool {
+                                            continue;
+                                        }
+                                        let clicked = ui
+                                            .horizontal(|ui| {
+                                                swatch(ui, *c, 12.);
+                                                ui.button(format!("T{}", t + 1))
+                                            })
+                                            .inner
+                                            .clicked();
+                                        if clicked {
+                                            remap = Some(make(tool, t));
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                            }
+                        });
+                    }
                     if tools > 1
                         && widgets::icon_button(ui, Glyph::Pencil, "Filament settings", true)
                             .clicked()
@@ -921,6 +954,11 @@ impl App {
         });
         self.mixes.draft = mix_draft;
         self.apply_mix_acts(mix_acts);
+        if let Some(r) = remap
+            && let Err(e) = self.remap_tool(r)
+        {
+            self.notify_error("Tools not changed", e);
+        }
         if let Some((tool, action)) = popover_action {
             let id = ui
                 .make_persistent_id(("filament-combo", tool))

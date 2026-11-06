@@ -86,6 +86,7 @@ mod slice_error_tests;
 mod state;
 mod textures;
 mod theme;
+mod tool_remap;
 mod tour;
 #[cfg(test)]
 mod tour_tests;
