@@ -56,7 +56,7 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         if file.is_dir() {
             continue;
         }
-        let name = archive_path("", file.name())?;
+        let name = archive_path("", &file.name()?)?;
         if entries.insert(name.clone(), i).is_some() {
             return Err(invalid(format!("duplicate ZIP entry {name}")));
         }

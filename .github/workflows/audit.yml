@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Provenance: original
+#
+# Security advisories (RustSec) for the locked dependencies: on every push and weekly, so an
+# advisory published between releases shows up without a code change. A vulnerable crate
+# fails the job; unmaintained or yanked crates are warnings only.
+name: Security advisories
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+      - run: cargo audit

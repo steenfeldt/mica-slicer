@@ -470,7 +470,11 @@ fn three_mf(data: &[u8]) -> Result<Extracted, String> {
             .collect();
     }
     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(data)).map_err(|e| e.to_string())?;
-    let names: Vec<String> = zip.file_names().map(str::to_string).collect();
+    let names: Vec<String> = zip
+        .file_names()
+        .map(|n| n.map(std::borrow::Cow::into_owned))
+        .collect::<Result<_, _>>()
+        .map_err(|e| e.to_string())?;
     info.sliced = names
         .iter()
         .any(|n| n.starts_with("Metadata/plate_") && n.ends_with(".gcode"));

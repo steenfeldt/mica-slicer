@@ -19,10 +19,10 @@ boostvoronoi = { path = "../boostvoronoi" }
 clipper2-rust = { path = "../clipper2", features = ["using_z"] }
 flate2 = "1.1.10"
 png = "0.18.1"
-quick-xml = "0.37"
+quick-xml = "0.41"
 rayon = "1.12.0"
 sha2 = "0.10.9"
-zip = { version = "2", default-features = false, features = ["deflate"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 
 [features]
 # Benchmark-only: record every Clipper2 input to `MICA_CLIPPER_DUMP` (see examples/clipper_bench.rs).

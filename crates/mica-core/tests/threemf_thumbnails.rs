@@ -105,7 +105,10 @@ impl Archive {
         Self(zip::ZipArchive::new(std::fs::File::open(path).unwrap()).unwrap())
     }
     fn names(&self) -> Vec<String> {
-        self.0.file_names().map(str::to_string).collect()
+        self.0
+            .file_names()
+            .map(|n| n.unwrap().into_owned())
+            .collect()
     }
     fn bytes(&mut self, name: &str) -> Vec<u8> {
         let mut out = vec![];

@@ -1,0 +1,9 @@
+# cargo audit (RustSec), also run by .github/workflows/audit.yml. Every ignored advisory says
+# why it does not apply yet and what removes it.
+[advisories]
+ignore = [
+    # crypto-bigint 0.5 timing variability, through dimpl 0.7 -> ecdsa 0.16: the camera's
+    # WebRTC DTLS handshake on the LAN (mica-camera). dimpl 0.9 (ecdsa 0.17) has the fix and
+    # needs str0m 0.25: an update of Mica's camera crypto backend, to be tested on a camera.
+    "RUSTSEC-2026-0387",
+]

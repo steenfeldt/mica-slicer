@@ -28,7 +28,7 @@ fn attributes(
         let a = a.map_err(|e| invalid(e.to_string()))?;
         attrs.insert(
             String::from_utf8_lossy(a.key.as_ref()).into_owned(),
-            a.decode_and_unescape_value(reader.decoder())
+            a.decoded_and_normalized_value(quick_xml::XmlVersion::Implicit1_0, reader.decoder())
                 .map_err(|e| invalid(e.to_string()))?
                 .into_owned(),
         );

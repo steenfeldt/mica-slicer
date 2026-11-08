@@ -97,7 +97,7 @@ fn orca_resource_ids_are_unique_across_model_files() {
     let mut ids = std::collections::BTreeSet::new();
     for i in 0..z.len() {
         let f = z.by_index(i).unwrap();
-        if !f.name().ends_with(".model") {
+        if !f.name().unwrap().ends_with(".model") {
             continue;
         }
         let mut r = Reader::from_reader(std::io::BufReader::new(f));
@@ -291,13 +291,13 @@ fn mica_plate_metadata_stays_in_the_sidecar() {
             let mut data = Vec::new();
             f.read_to_end(&mut data).unwrap();
             let text = String::from_utf8_lossy(&data);
-            if f.name() == "Metadata/mica.json" {
+            if f.name().unwrap() == "Metadata/mica.json" {
                 sidecar = text.contains("mica_calibration");
             } else {
                 assert!(
                     !text.contains("mica_calibration"),
                     "{flavour:?} {}",
-                    f.name()
+                    f.name().unwrap()
                 );
             }
         }
@@ -332,8 +332,8 @@ fn rewrite(path: &Path, mut change: impl FnMut(&str, &mut Vec<u8>) -> bool) {
         let mut f = z.by_index(i).unwrap();
         let mut data = Vec::new();
         f.read_to_end(&mut data).unwrap();
-        if change(f.name(), &mut data) {
-            out.start_file(f.name(), zip::write::SimpleFileOptions::default())
+        if change(&f.name().unwrap(), &mut data) {
+            out.start_file(f.name().unwrap(), zip::write::SimpleFileOptions::default())
                 .unwrap();
             out.write_all(&data).unwrap();
         }
@@ -572,7 +572,7 @@ fn layer_height_profile_and_brim_ears_roundtrip() {
         let temp = Temp::new();
         write(&temp.0, &p, flavour).unwrap();
         let mut zip = zip::ZipArchive::new(std::fs::File::open(&temp.0).unwrap()).unwrap();
-        let names: Vec<String> = zip.file_names().map(str::to_owned).collect();
+        let names: Vec<String> = zip.file_names().map(|n| n.unwrap().into_owned()).collect();
         assert!(names.iter().any(|n| n == file), "{names:?}");
         assert_eq!(
             names.iter().any(|n| n == "Metadata/brim_ear_points.txt"),

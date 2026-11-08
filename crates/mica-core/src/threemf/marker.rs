@@ -52,9 +52,10 @@ pub(super) fn manifest<R: Read + Seek>(zip: &mut zip::ZipArchive<R>) -> Result<J
     let mut files = Vec::new();
     for i in 0..zip.len() {
         let f = zip.by_index(i)?;
-        if f.name() != "Metadata/mica.json" {
+        let name = f.name()?.into_owned();
+        if name != "Metadata/mica.json" {
             files.push((
-                f.name().to_owned(),
+                name,
                 Json::Array(vec![Json::number(f.crc32()), Json::number(f.size())]),
             ));
         }

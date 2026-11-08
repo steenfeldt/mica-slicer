@@ -346,8 +346,10 @@ pub(crate) fn register_textures<R: Read + Seek>(
 ) -> Result<(), ThreeMfError> {
     let names: Vec<String> = zip
         .file_names()
+        .map(|n| n.map(std::borrow::Cow::into_owned))
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
         .filter(|n| n.to_ascii_lowercase().starts_with(TEXTURES) && n.ends_with(".png"))
-        .map(str::to_owned)
         .collect();
     for name in names {
         let mut png = Vec::new();

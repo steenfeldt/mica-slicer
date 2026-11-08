@@ -200,6 +200,7 @@ pub fn license_text(id: &str) -> Option<&'static str> {
         "CDLA-Permissive-2.0" => include_str!("../assets/credits/licenses/CDLA-Permissive-2.0.txt"),
         "ISC" => include_str!("../assets/credits/licenses/ISC.txt"),
         "MIT" => include_str!("../assets/credits/licenses/MIT.txt"),
+        "MIT-0" => include_str!("../assets/credits/licenses/MIT-0.txt"),
         "OFL-1.1" => include_str!("../assets/credits/licenses/OFL-1.1.txt"),
         "Ubuntu-font-1.0" => include_str!("../assets/credits/licenses/Ubuntu-font-1.0.txt"),
         "Unicode-3.0" => include_str!("../assets/credits/licenses/Unicode-3.0.txt"),

@@ -397,7 +397,7 @@ pub fn coloured_3mf() -> Vec<u8> {
         .compression_method(zip::CompressionMethod::Deflated);
     for i in 0..zin.len() {
         let mut f = zin.by_index(i).expect("entry");
-        let name = f.name().to_string();
+        let name = f.name().unwrap().to_string();
         let mut data = vec![];
         f.read_to_end(&mut data).expect("read entry");
         if name == "Metadata/project_settings.config" {
@@ -422,7 +422,7 @@ pub fn four_plates_3mf() -> Vec<u8> {
         .compression_method(zip::CompressionMethod::Deflated);
     for i in 0..zin.len() {
         let mut f = zin.by_index(i).expect("entry");
-        let name = f.name().to_string();
+        let name = f.name().unwrap().to_string();
         let mut data = vec![];
         f.read_to_end(&mut data).expect("read entry");
         if name == "Metadata/model_settings.config" {
@@ -463,10 +463,13 @@ pub fn sample_3mf(picture: &[u8]) -> Vec<u8> {
         .compression_method(zip::CompressionMethod::Deflated);
     for i in 0..zin.len() {
         let mut f = zin.by_index(i).expect("entry");
-        if f.name().eq_ignore_ascii_case("Metadata/plate_1.png") {
+        if f.name()
+            .unwrap()
+            .eq_ignore_ascii_case("Metadata/plate_1.png")
+        {
             continue;
         }
-        let name = f.name().to_string();
+        let name = f.name().unwrap().to_string();
         let mut data = vec![];
         f.read_to_end(&mut data).expect("read entry");
         out.start_file(name, opts).expect("entry");

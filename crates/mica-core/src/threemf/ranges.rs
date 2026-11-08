@@ -41,9 +41,12 @@ pub(super) fn parse(
                         let a = a.map_err(|e| invalid(e.to_string()))?;
                         Ok((
                             String::from_utf8_lossy(a.key.as_ref()).into_owned(),
-                            a.decode_and_unescape_value(reader.decoder())
-                                .map_err(|e| invalid(e.to_string()))?
-                                .into_owned(),
+                            a.decoded_and_normalized_value(
+                                quick_xml::XmlVersion::Implicit1_0,
+                                reader.decoder(),
+                            )
+                            .map_err(|e| invalid(e.to_string()))?
+                            .into_owned(),
                         ))
                     })
                     .collect::<Result<Settings, ThreeMfError>>()?;
@@ -77,7 +80,18 @@ pub(super) fn parse(
                 stack.push(name);
             }
             Event::Text(t) if key.is_some() => {
-                value.push_str(&t.unescape().map_err(|e| invalid(e.to_string()))?)
+                value.push_str(&t.xml10_content().map_err(|e| invalid(e.to_string()))?)
+            }
+            // `&amp;`, `&#10;`: entity and character references come as events of their own.
+            Event::GeneralRef(r) if key.is_some() => {
+                if let Some(c) = r.resolve_char_ref().map_err(|e| invalid(e.to_string()))? {
+                    value.push(c);
+                } else {
+                    let name = r.decode().map_err(|e| invalid(e.to_string()))?;
+                    let text = quick_xml::escape::resolve_predefined_entity(&name)
+                        .ok_or_else(|| invalid(format!("unknown entity &{name};")))?;
+                    value.push_str(text);
+                }
             }
             Event::CData(t) if key.is_some() => {
                 value.push_str(&t.decode().map_err(|e| invalid(e.to_string()))?)
@@ -128,4 +142,16 @@ pub(super) fn parse(
         }
     }
     Ok(result)
+}
+
+#[cfg(test)]
+mod tests {
+    /// Option text with references: `&amp;` and `&#10;` arrive as their own XML events.
+    #[test]
+    fn option_text_keeps_entities_and_newlines() {
+        let xml = r#"<?xml version="1.0" encoding="utf-8"?>
+<objects><object id="1"><range min_z="0" max_z="2"><option opt_key="layer_gcode">G1 X1 &amp; Y2&#10;M400</option></range></object></objects>"#;
+        let ranges = super::parse(xml.as_bytes()).unwrap();
+        assert_eq!(ranges[&1][0].settings["layer_gcode"], "G1 X1 & Y2\nM400");
+    }
 }
