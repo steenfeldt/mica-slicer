@@ -21,7 +21,7 @@ use str0m::crypto::dtls::{
 };
 use str0m::crypto::{
     AeadAes128Gcm, AeadAes128GcmCipher, AeadAes256Gcm, AeadAes256GcmCipher, Aes128CmSha1_80Cipher,
-    CryptoError, CryptoProvider, Sha1HmacProvider, Sha256Provider, SrtpProvider,
+    CryptoError, CryptoProvider, Sha1HmacProvider, Sha1Provider, Sha256Provider, SrtpProvider,
     SupportedAeadAes128Gcm, SupportedAeadAes256Gcm, SupportedAes128CmSha1_80,
 };
 
@@ -29,11 +29,13 @@ use str0m::crypto::{
 pub fn provider() -> Arc<CryptoProvider> {
     static SRTP: Srtp = Srtp;
     static HMAC: HmacSha1 = HmacSha1;
+    static SHA1: Sha1 = Sha1;
     static SHA256: Sha256 = Sha256;
     static DTLS: Dtls = Dtls;
     Arc::new(CryptoProvider {
         srtp_provider: &SRTP,
         sha1_hmac_provider: &HMAC,
+        sha1_provider: &SHA1,
         sha256_provider: &SHA256,
         dtls_provider: &DTLS,
     })
@@ -49,6 +51,15 @@ impl Sha1HmacProvider for HmacSha1 {
             mac.update(p);
         }
         mac.finalize().into_bytes().into()
+    }
+}
+
+/// SHA-1 for DTLS certificate fingerprints a peer announces with `sha-1`.
+#[derive(Debug)]
+struct Sha1;
+impl Sha1Provider for Sha1 {
+    fn sha1(&self, data: &[u8]) -> [u8; 20] {
+        sha1::Sha1::digest(data).into()
     }
 }
 
@@ -338,7 +349,7 @@ impl DtlsInstance for Instance {
     fn handle_timeout(&mut self, now: Instant) -> Result<(), DtlsImplError> {
         self.0.handle_timeout(now)
     }
-    fn send_application_data(&mut self, data: &[u8]) -> Result<(), DtlsImplError> {
+    fn send_application_data(&mut self, data: &[u8]) -> Result<usize, DtlsImplError> {
         self.0.send_application_data(data)
     }
     fn is_active(&self) -> bool {

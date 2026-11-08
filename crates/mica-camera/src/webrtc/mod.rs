@@ -50,8 +50,6 @@ use str0m::{
 const CONNECT: Duration = Duration::from_secs(10);
 /// No video for this long ends the session (it is then retried with back-off).
 const STALL: Duration = Duration::from_secs(10);
-/// How long an incomplete frame waits for its missing packets.
-const REORDER_WAIT: Duration = Duration::from_millis(250);
 /// At most one key frame request this often.
 const PLI_EVERY: Duration = Duration::from_secs(1);
 /// Signalling answers are small JSON; more is refused.
@@ -271,10 +269,8 @@ pub fn run(ctx: &mut Ctx<'_>, url: &str, auth: Option<&Auth>) -> Result<(), Stri
         .set_crypto_provider(provider())
         .clear_codecs()
         .enable_h264(true)
-        // A packet a NACK did not bring back within this (a LAN round trip is a few ms)
-        // drops its frame instead of holding the picture up to 2 s; the next key frame
-        // recovers.
-        .set_reordering_timeout_video(Some(REORDER_WAIT))
+        // An incomplete frame waits for NACK recovery and a complete successor, then expires
+        // (str0m 0.25 replaced the fixed video reordering timeout Mica set to 250 ms).
         .build(Instant::now());
     let candidate = Candidate::host(local, "udp")
         .map_err(|e| format!("cannot use this computer's address for WebRTC ({e})"))?;

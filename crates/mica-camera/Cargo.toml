@@ -18,8 +18,8 @@ serde_json = "1.0.154"
 # WebRTC (camera-streamer): str0m without a bundled crypto backend; Mica supplies a pure-Rust
 # one (RustCrypto ciphers, dimpl DTLS, the DTLS certificate made with rcgen on ring, which
 # rustls already uses), so no second C crypto library is built.
-str0m = { version = "=0.24.1", default-features = false }
-dimpl = { version = "=0.7.5", default-features = false, features = ["rust-crypto"] }
+str0m = { version = "=0.25.0", default-features = false }
+dimpl = { version = "=0.9.0", default-features = false, features = ["rust-crypto"] }
 rcgen = { version = "=0.14.10", default-features = false, features = ["ring"] }
 aes = "0.8.4"
 aes-gcm = "0.10.3"
