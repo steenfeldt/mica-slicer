@@ -2487,7 +2487,14 @@ impl App {
                         if w.starts_with("Exported ") {
                             self.notify_info(w.clone());
                         } else {
-                            self.notify_warning(w.clone());
+                            self.notify(
+                                crate::notifications::Notification::new(
+                                    crate::notifications::Level::Warning,
+                                    w.clone(),
+                                    w.clone(),
+                                )
+                                .of_project(),
+                            );
                         }
                     }
                     self.notices
@@ -2564,6 +2571,7 @@ impl App {
         self.project = None;
         self.document = Default::default();
         self.mixes = Default::default();
+        self.notifications.forget_project();
     }
 
     // ----- a project's own settings ----------------------------------------------------------
@@ -5098,6 +5106,33 @@ mod tests {
     /// File › New project: asks about unsaved changes first; then one empty plate, no undo
     /// history, no edits, and the current printer's default print and filament profiles (or
     /// the ones Settings › Slicing names, when the printer offers them).
+    #[test]
+    fn a_new_project_drops_the_last_projects_load_warnings() {
+        let ctx = egui::Context::default();
+        let mut app = core_one_app(&ctx);
+        let model = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/models/"))
+            .join("cube20.stl");
+        let mut loaded = load_files(vec![model], &app.config, app.bed.center());
+        loaded
+            .as_mut()
+            .unwrap()
+            .warnings
+            .push("Parts of this project Mica doesn't use yet were skipped".into());
+        app.finish_load(loaded);
+        app.notify_warning("The printer is offline");
+        let titles = |app: &App| -> Vec<String> {
+            let list = &app.notifications.list;
+            list.iter().map(|n| n.title.clone()).collect()
+        };
+        assert!(
+            titles(&app)
+                .iter()
+                .any(|t| t.starts_with("Parts of this project"))
+        );
+        app.new_project_now();
+        assert_eq!(titles(&app), ["The printer is offline"]);
+    }
+
     #[test]
     fn new_project_asks_then_starts_over_with_the_printers_defaults() {
         use crate::save::Pending;

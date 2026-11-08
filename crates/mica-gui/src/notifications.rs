@@ -112,6 +112,8 @@ pub struct Notification {
     /// The full message (may be the same as the title).
     pub text: String,
     pub actions: Vec<(String, Action)>,
+    /// A warning about the open project (from loading it): gone with the project.
+    pub project: bool,
     pub born: Instant,
     /// When it fades; `None` stays.
     pub life: Option<Duration>,
@@ -127,6 +129,7 @@ impl Notification {
             title: title.into(),
             text: text.into(),
             actions: Vec::new(),
+            project: false,
             born: Instant::now(),
             life: (level == Level::Info).then_some(INFO_LIFE),
         }
@@ -141,6 +144,10 @@ impl Notification {
     }
     pub fn action(mut self, label: impl Into<String>, action: Action) -> Self {
         self.actions.push((label.into(), action));
+        self
+    }
+    pub fn of_project(mut self) -> Self {
+        self.project = true;
         self
     }
     pub fn life(mut self, life: Duration) -> Self {
@@ -255,6 +262,20 @@ impl Notifications {
         } else {
             // It appears on the next sync; highlight it then.
             self.pending_focus = Some((plate, key.to_string()));
+        }
+    }
+
+    /// Drops the warnings about a project that was closed (New project, another project opened).
+    pub fn forget_project(&mut self) {
+        let gone: Vec<u64> = self
+            .list
+            .iter()
+            .filter(|n| n.project)
+            .map(|n| n.id)
+            .collect();
+        self.list.retain(|n| !n.project);
+        for id in gone {
+            self.expanded.remove(&id);
         }
     }
 

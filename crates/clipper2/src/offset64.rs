@@ -4,7 +4,7 @@
 // Changes: Rust port of the Clipper 6.4 offsetter as modified by PrusaSlicer (ShortestEdgeLength), on
 // Changes: Clipper2's Point64 paths. The finishing union runs on this crate's Clipper64 with Clipper 6.4
 // Changes: intersections; the negative-offset bounding rectangle is removed by its bounds instead of by
-// Changes: output position. Multiply-adds are fused (`mul_add`) where the reference arm64 build fuses them.
+// Changes: output position; an offset of nothing returns nothing before the bounds are taken. Multiply-adds are fused (`mul_add`) where the reference arm64 build fuses them.
 
 //! Clipper 6.4's polygon offsetter (`ClipperLib::ClipperOffset`), for PrusaSlicer-compatible offsets.
 
@@ -198,6 +198,11 @@ impl ClipperOffset64 {
     pub fn execute(&mut self, delta: f64) -> Paths64 {
         self.fix_orientations();
         self.do_offset(delta);
+        // Nothing left: Clipper 6.4's GetBounds of nothing is an empty rectangle and the
+        // result empty; the bounds of no paths here are the i64 extremes, which overflow.
+        if self.dest_polys.is_empty() {
+            return Paths64::new();
+        }
         with_clipper64_intersections(true, || {
             let mut c = Clipper64::new();
             c.set_preserve_collinear(false);
@@ -548,4 +553,25 @@ pub fn raw_offset64(
         out.extend(this);
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A contour shorter than the shortest edge kept leaves nothing to offset; shrinking it
+    /// gives nothing, as Clipper 6.4 does, instead of a frame around the i64 extremes.
+    #[test]
+    fn shrinking_a_contour_that_collapses_gives_nothing() {
+        let speck = vec![Point64::new(0, 0), Point64::new(10, 0), Point64::new(0, 10)];
+        let shrunk = raw_offset64(
+            &vec![speck],
+            -100_000.,
+            JoinType::Miter,
+            EndType::Polygon,
+            1.2,
+            0.,
+        );
+        assert!(shrunk.is_empty(), "{shrunk:?}");
+    }
 }
