@@ -490,12 +490,18 @@ impl App {
                         short: short_name(k),
                     }
                 } else if t < physical {
+                    // F6 with more filaments than tools (each plate puts it on a tool).
+                    let word = if self.filaments_beyond_tools() {
+                        "Filament"
+                    } else {
+                        "Tool"
+                    };
                     ToolChoice {
                         tool: t,
                         colour: colours[t],
                         alpha: alphas.get(t).copied().unwrap_or(255),
-                        label: format!("Tool {}", t + 1),
-                        short: format!("T{}", t + 1),
+                        label: format!("{word} {}", t + 1),
+                        short: self.filament_label(t),
                     }
                 } else {
                     ToolChoice {
@@ -515,7 +521,7 @@ impl App {
         self.tool_colours()
             .iter()
             .enumerate()
-            .map(|(t, c)| format!("T{} {}", t + 1, colour_name(*c)))
+            .map(|(t, c)| format!("{} {}", self.filament_label(t), colour_name(*c)))
             .collect()
     }
 
@@ -1031,7 +1037,11 @@ impl App {
                 let t = d.tools[i];
                 egui::ComboBox::from_id_salt(("mix-tool", i))
                     .width(96.)
-                    .selected_text(format!("T{} {}", t + 1, colour_name(colours[t])))
+                    .selected_text(format!(
+                        "{} {}",
+                        self.filament_label(t),
+                        colour_name(colours[t])
+                    ))
                     .show_ui(ui, |ui| {
                         for (k, c) in colours.iter().enumerate() {
                             ui.horizontal(|ui| {
@@ -1039,7 +1049,7 @@ impl App {
                                 if ui
                                     .selectable_label(
                                         k == t,
-                                        format!("T{} {}", k + 1, colour_name(*c)),
+                                        format!("{} {}", self.filament_label(k), colour_name(*c)),
                                     )
                                     .clicked()
                                 {

@@ -98,6 +98,17 @@ backend protocol logic stays in `mica-printhost` and is registered there.
   The slots' filaments and colors stay put, so the parts take the other slot's filament: after
   a sync put the printer's spools in different slots, a swap brings the colors back. A move
   that would make a mixed color use one tool twice is refused with the mix's name.
+- **More filaments than tools** (`filaments.rs`): a project can have more colors than the
+  printer has tools (OrcaSlicer's U1 projects with six filaments on four tools, or *Add
+  filament* under the Filaments card). The rows then read F1…Fn, and `F6→T3` where the current
+  plate prints F6 on T3. Each plate is one print job and maps the filaments it uses onto the
+  tools: a filament stays on its own tool when the printer has it, the others take the free
+  tools; right-click a row › *Print on this plate with* ▸ T1… pins it (saved with the plate,
+  `mica_filament_tools` in its metadata). A plate that uses more filaments than there are
+  tools does not slice and names them. *Remove filament* is offered for a filament beyond the
+  tools that nothing uses; the later ones move down. Sync and the printer comparison work per
+  tool of the current plate: the spool on T3 is compared with (and synced into) the filament
+  the plate prints there. Design: [project-conversion.md](project-conversion.md#filaments-and-tools-built-first).
 - **File header** (Moonraker and U1 printers, `printhost/file_header.rs`): see
   [gcode-config-identity.md](gcode-config-identity.md#per-printer-file-header).
 

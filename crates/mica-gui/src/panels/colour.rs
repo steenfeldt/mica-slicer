@@ -583,8 +583,8 @@ impl App {
         if pick.commit {
             self.remember_colour(pick.colour);
             self.last_change = Some(format!(
-                "T{} color → {}",
-                tool + 1,
+                "{} color → {}",
+                self.filament_label(tool),
                 crate::mixes::colour_name(pick.colour).to_lowercase()
             ));
         }

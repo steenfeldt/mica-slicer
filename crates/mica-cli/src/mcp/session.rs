@@ -318,7 +318,16 @@ impl Scene {
         Some(sel)
     }
 
+    /// The project's filaments, numbered like tools in every call: as many as the printer
+    /// has tools, or more (the Mica window's project with more colors than tools: each plate
+    /// prints the filaments it uses on the printer's tools).
     pub fn tools(&self) -> usize {
+        self.printer_tools()
+            .max(self.config.vector_len("filament_colour"))
+    }
+
+    /// The printer's tools.
+    pub fn printer_tools(&self) -> usize {
         self.config.vector_len("nozzle_diameter").max(1)
     }
 
@@ -1680,7 +1689,16 @@ impl Scene {
             c.len()
         };
         let mut notes = vec![];
-        if self.tools() < 2 {
+        if self.tools() > self.printer_tools() {
+            notes.push(format!(
+                "this project has {} filaments for the printer's {} tools: each plate prints \
+                 the filaments it uses on the tools, at most {} per plate",
+                self.tools(),
+                self.printer_tools(),
+                self.printer_tools()
+            ));
+        }
+        if self.printer_tools() < 2 {
             notes.push(
                 "single-tool printer: color painting has no effect; reopen with printer \"U1\" or \"XL\""
                     .to_string(),
@@ -1699,7 +1717,7 @@ impl Scene {
                 "name": self.printer_name(),
                 "vendor": self.args.vendor,
                 "print_profile": self.config.string("print_settings_id").unwrap_or(&self.args.print),
-                "tools": self.tools(),
+                "tools": self.printer_tools(),
             },
             "filaments": self.filament_json(),
             "mixes": self.mix_info(false),

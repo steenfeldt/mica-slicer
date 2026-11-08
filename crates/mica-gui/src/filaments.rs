@@ -17,6 +17,32 @@ use mica_core::full_spectrum::FullSpectrum;
 use mica_profiles::orca;
 use std::collections::{BTreeMap, BTreeSet};
 
+/// What plates name, by plate id, epoch, configuration generation and with/without settings.
+pub type RefCache = std::collections::HashMap<(u64, u64, u64, bool), BTreeSet<usize>>;
+
+/// A plate's chosen tools in its metadata (`Metadata/mica.json` through the plate's
+/// metadata, which other slicers ignore): `6:2 5:3`, one-based filament:tool.
+pub const PLATE_METADATA_KEY: &str = "mica_filament_tools";
+
+/// `pins` (zero-based filament -> tool) as [`PLATE_METADATA_KEY`]'s value.
+pub fn pins_text(pins: &BTreeMap<usize, usize>) -> String {
+    pins.iter()
+        .map(|(f, t)| format!("{}:{}", f + 1, t + 1))
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+/// [`pins_text`] read back; entries that are not `filament:tool` are skipped.
+pub fn parse_pins(text: &str) -> BTreeMap<usize, usize> {
+    text.split_whitespace()
+        .filter_map(|e| {
+            let (f, t) = e.split_once(':')?;
+            let (f, t): (usize, usize) = (f.parse().ok()?, t.parse().ok()?);
+            (f > 0 && t > 0).then(|| (f - 1, t - 1))
+        })
+        .collect()
+}
+
 /// Whether `key` holds one value per filament (one per tool in a plate's configuration).
 pub fn is_filament_key(key: &str, dialect: Option<orca::Dialect>) -> bool {
     option_defs().get(key).map_or_else(
@@ -81,7 +107,8 @@ impl ToolMap {
 
 /// The tools for a plate that uses the filaments `used` (zero-based) out of `filaments`, on a
 /// printer with `tools` tools, with the mixed colors `mixes` (their one-based numbers, after
-/// the filaments; on the plate they follow the tools): a used filament
+/// the filaments; on the plate they follow the tools): a filament on the tool chosen for it
+/// (`pins`, filament -> tool) when that tool is free, else a used filament
 /// stays on its own tool when the printer has it, the others take the free tools in order,
 /// and the tools left over keep their own filament where they can (their settings still go
 /// into the G-code's per-tool values). `Err` lists the filaments that found no tool.
@@ -90,14 +117,30 @@ pub fn assign(
     filaments: usize,
     tools: usize,
     mixes: &[usize],
+    pins: &BTreeMap<usize, usize>,
 ) -> Result<ToolMap, Vec<usize>> {
     let tools = tools.max(1);
     let mut slots: Vec<Option<usize>> = vec![None; tools];
-    for &f in used.iter().filter(|&&f| f < tools) {
-        slots[f] = Some(f);
+    let mut placed = BTreeSet::new();
+    for (&f, &t) in pins {
+        if used.contains(&f) && t < tools && slots[t].is_none() {
+            slots[t] = Some(f);
+            placed.insert(f);
+        }
+    }
+    let own: Vec<usize> = used
+        .iter()
+        .copied()
+        .filter(|&f| f < tools && !placed.contains(&f))
+        .collect();
+    for f in own {
+        if slots[f].is_none() {
+            slots[f] = Some(f);
+            placed.insert(f);
+        }
     }
     let mut unplaced = Vec::new();
-    for &f in used.iter().filter(|&&f| f >= tools) {
+    for &f in used.iter().filter(|&&f| !placed.contains(&f)) {
         match slots.iter().position(Option::is_none) {
             Some(t) => slots[t] = Some(f),
             None => unplaced.push(f),
@@ -179,6 +222,21 @@ impl App {
     /// settings of the plate and of the print where they print something (support tools with
     /// supports or a raft, the tower's tool with a tower).
     fn plate_references(&self, i: usize, settings: bool) -> BTreeSet<usize> {
+        let plate = self.plates.plate(i);
+        let key = (plate.id, plate.epoch, self.config_generation, settings);
+        if let Some(hit) = self.filament_refs.borrow().get(&key) {
+            return hit.clone();
+        }
+        let found = self.find_references(i, settings);
+        let mut cache = self.filament_refs.borrow_mut();
+        if cache.len() > 64 {
+            cache.clear();
+        }
+        cache.insert(key, found.clone());
+        found
+    }
+
+    fn find_references(&self, i: usize, settings: bool) -> BTreeSet<usize> {
         let mut used: BTreeSet<usize> = BTreeSet::new();
         let mut add = |t: usize| {
             if t > 0 {
@@ -334,6 +392,7 @@ impl App {
             filaments,
             tools,
             &self.mixes.list.iter().map(|m| m.id).collect::<Vec<_>>(),
+            &self.plates.plate(i).filament_tools,
         )
         .map_err(|_| {
             let names: Vec<String> = used.iter().map(|f| format!("F{}", f + 1)).collect();
@@ -348,6 +407,142 @@ impl App {
     }
 }
 
+impl App {
+    /// The tool filament `filament` prints on in plate `plate` (zero-based), `None` when the
+    /// plate does not use it and the printer has no tool of that number. A plate that cannot
+    /// slice (more filaments than tools) keeps filament n on tool n.
+    pub(crate) fn tool_of(&self, plate: usize, filament: usize) -> Option<usize> {
+        match self.plate_tools(plate) {
+            Ok(m) => m.slots.iter().position(|&f| f == filament),
+            Err(_) => (filament < self.profiles.tool_count()).then_some(filament),
+        }
+    }
+
+    /// The filament on tool `tool` in plate `plate`.
+    pub(crate) fn filament_on(&self, plate: usize, tool: usize) -> usize {
+        self.plate_tools(plate)
+            .ok()
+            .and_then(|m| m.slots.get(tool).copied())
+            .unwrap_or(tool)
+    }
+
+    /// Whether the project has more filaments than the printer has tools: the Filaments card
+    /// and messages then say F1…Fn, and which tool each one is on.
+    pub(crate) fn filaments_beyond_tools(&self) -> bool {
+        self.filament_count() > self.profiles.tool_count()
+    }
+
+    /// `F6` when filaments and tools differ, else `T6`.
+    pub(crate) fn filament_label(&self, filament: usize) -> String {
+        let letter = if self.filaments_beyond_tools() {
+            'F'
+        } else {
+            'T'
+        };
+        format!("{letter}{}", filament + 1)
+    }
+
+    /// Whether any plate prints with filament `f` (also through a mixed color).
+    pub(crate) fn filament_in_use(&self, f: usize) -> bool {
+        (0..self.plates.len()).any(|i| self.plate_filaments(i, true).contains(&f))
+    }
+
+    /// Prints filament `f` on tool `tool` on the current plate (`None`: wherever it fits). One
+    /// undo step.
+    pub(crate) fn pin_filament(&mut self, f: usize, tool: Option<usize>) {
+        let i = self.plates.current;
+        if self.plates.plate(i).filament_tools.get(&f).copied() == tool {
+            return;
+        }
+        self.record("Choose tool");
+        let pins = &mut self.plates.plates[i].filament_tools;
+        match tool {
+            Some(t) => {
+                // One filament per tool: whatever was chosen for that tool goes back to automatic.
+                pins.retain(|_, v| *v != t);
+                pins.insert(f, t);
+            }
+            None => {
+                pins.remove(&f);
+            }
+        }
+        self.plates.plates[i].invalidate();
+        self.changed();
+        self.status = match tool {
+            Some(t) => format!(
+                "{} prints on T{} on this plate",
+                self.filament_label(f),
+                t + 1
+            ),
+            None => format!("{} prints on a free tool", self.filament_label(f)),
+        };
+    }
+
+    /// A new filament at the end, with the last filament's preset and its own color. One undo
+    /// step; mixed colors move up by one.
+    pub(crate) fn add_filament(&mut self) {
+        self.record("Add filament");
+        let last = self.profiles.filaments.last().cloned().unwrap_or_default();
+        self.profiles.filaments.push(last);
+        let n = self.profiles.filaments.len();
+        self.overlays.resize(n);
+        self.fit_mixes_to_printer();
+        self.settings_changed();
+        self.status = format!("Added {}", self.filament_label(n - 1));
+    }
+
+    /// Removes filament `f`, which no plate uses and which is beyond the printer's tools; the
+    /// later ones move down by one. One undo step.
+    pub(crate) fn remove_filament(&mut self, f: usize) -> Result<(), String> {
+        let tools = self.profiles.tool_count();
+        if f < tools || f >= self.filament_count() {
+            return Err(format!("the printer's {tools} tools each keep a filament"));
+        }
+        if self.filament_in_use(f) {
+            return Err(format!("{} is in use", self.filament_label(f)));
+        }
+        if self
+            .mixes
+            .list
+            .iter()
+            .any(|m| m.components.iter().any(|c| c.extruder == f + 1))
+        {
+            return Err(format!("a mixed color uses {}", self.filament_label(f)));
+        }
+        let label = self.filament_label(f);
+        self.record("Remove filament");
+        let count = self.filament_count();
+        let map: BTreeMap<usize, usize> = (f + 2..=count).map(|n| (n, n - 1)).collect();
+        self.renumber_tools(&map);
+        for m in &mut self.mixes.list {
+            for c in &mut m.components {
+                c.extruder = map.get(&c.extruder).copied().unwrap_or(c.extruder);
+            }
+        }
+        for plate in &mut self.plates.plates {
+            plate.filament_tools = std::mem::take(&mut plate.filament_tools)
+                .into_iter()
+                .filter(|(g, _)| *g != f)
+                .map(|(g, t)| (if g > f { g - 1 } else { g }, t))
+                .collect();
+            for item in &mut plate.custom_gcode.items {
+                item.extruder = map.get(&item.extruder).copied().unwrap_or(item.extruder);
+            }
+        }
+        self.profiles.filaments.remove(f);
+        if f < self.overlays.filaments.len() {
+            self.overlays.filaments.remove(f);
+        }
+        if f < self.overlays.colours.len() {
+            self.overlays.colours.remove(f);
+        }
+        self.fit_mixes_to_printer();
+        self.settings_changed();
+        self.status = format!("Removed {label}");
+        Ok(())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -358,7 +553,7 @@ mod tests {
 
     #[test]
     fn filaments_that_fit_stay_on_their_own_tools() {
-        let m = assign(&set(&[0, 2]), 4, 4, &[]).unwrap();
+        let m = assign(&set(&[0, 2]), 4, 4, &[], &BTreeMap::new()).unwrap();
         assert_eq!(m.slots, [0, 1, 2, 3]);
         assert!(m.is_identity());
     }
@@ -366,7 +561,7 @@ mod tests {
     #[test]
     fn extra_filaments_take_the_free_tools() {
         // F5 and F6 on a 4-tool printer whose plate also uses F1 and F3.
-        let m = assign(&set(&[0, 2, 4, 5]), 6, 4, &[]).unwrap();
+        let m = assign(&set(&[0, 2, 4, 5]), 6, 4, &[], &BTreeMap::new()).unwrap();
         assert_eq!(m.slots, [0, 4, 2, 5]);
         assert_eq!(m.map, BTreeMap::from([(5, 2), (6, 4)]));
     }
@@ -374,13 +569,26 @@ mod tests {
     #[test]
     fn mixed_colors_follow_the_tools() {
         // Six filaments, two mixes (M1 = 7, M2 = 8) on a 4-tool printer: M1 = 5, M2 = 6.
-        let m = assign(&set(&[0]), 6, 4, &[7, 8]).unwrap();
+        let m = assign(&set(&[0]), 6, 4, &[7, 8], &BTreeMap::new()).unwrap();
         assert_eq!(m.map, BTreeMap::from([(7, 5), (8, 6)]));
     }
 
     #[test]
+    fn a_chosen_tool_wins_over_the_automatic_one() {
+        let pins = BTreeMap::from([(4, 3), (0, 1)]);
+        let m = assign(&set(&[0, 1, 4]), 6, 4, &[], &pins).unwrap();
+        // F5 on T4 and F1 on T2 as chosen; F2 takes the free T1.
+        assert_eq!(m.slots[..2], [1, 0]);
+        assert_eq!(m.slots[3], 4);
+        assert_eq!(parse_pins(&pins_text(&pins)), pins);
+    }
+
+    #[test]
     fn too_many_filaments_on_one_plate_are_named() {
-        assert_eq!(assign(&set(&[0, 1, 2, 3, 4]), 5, 4, &[]), Err(vec![4]));
+        assert_eq!(
+            assign(&set(&[0, 1, 2, 3, 4]), 5, 4, &[], &BTreeMap::new()),
+            Err(vec![4])
+        );
     }
 
     #[test]
@@ -389,7 +597,7 @@ mod tests {
         c.set_raw("nozzle_diameter", "0.4,0.4").unwrap();
         c.set_raw("temperature", "200,210,220").unwrap();
         c.set_raw("support_material_extruder", "3").unwrap();
-        let tools = assign(&set(&[0, 2]), 3, 2, &[]).unwrap();
+        let tools = assign(&set(&[0, 2]), 3, 2, &[], &BTreeMap::new()).unwrap();
         let t = to_tools(&c, &tools, None);
         assert_eq!(t.raw("temperature").unwrap(), "200,220");
         assert_eq!(t.raw("support_material_extruder").unwrap(), "2");

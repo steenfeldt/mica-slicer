@@ -146,6 +146,7 @@ pub(crate) struct PlateState {
     pub tower: Option<[f64; 3]>,
     pub calibration: Option<crate::calibration::PlateJob>,
     pub custom_gcode: mica_core::custom_gcode::Info,
+    pub filament_tools: BTreeMap<usize, usize>,
 }
 
 /// Everything undo restores.
@@ -160,6 +161,9 @@ pub struct Snapshot {
     overlays: Overlays,
     /// The project's mixed colors.
     mixes: Vec<mica_core::full_spectrum::VirtualExtruder>,
+    /// The filaments' presets: restored when an undo step added or removed a filament (a
+    /// preset switch alone is not an undo step).
+    filaments: Vec<String>,
 }
 
 impl crate::state::undo::Retained for Snapshot {
@@ -316,6 +320,9 @@ pub struct App {
     /// The global configuration on another bed type, for plates with their own (built on
     /// first use, cleared with the configuration).
     bed_configs: std::cell::RefCell<std::collections::HashMap<String, Result<Config, String>>>,
+    /// What each plate names ([`crate::filaments`]), by plate id, epoch, configuration
+    /// generation and with/without settings: read every frame by the Filaments card.
+    pub(crate) filament_refs: std::cell::RefCell<crate::filaments::RefCache>,
     /// Completed slices by what determines their G-code (see `slice_cache`).
     pub(crate) slice_cache: crate::slice_cache::SliceCache,
     /// The inputs of the running job: `(request, inputs)`.
@@ -704,6 +711,7 @@ impl App {
             tower_cache: Default::default(),
             config_generation: 0,
             bed_configs: Default::default(),
+            filament_refs: Default::default(),
             slice_cache: Default::default(),
             job_inputs: None,
             restored: vec![],
@@ -956,6 +964,7 @@ impl App {
                 tower: p.tower_placement,
                 calibration: p.calibration.clone(),
                 custom_gcode: p.custom_gcode.clone(),
+                filament_tools: p.filament_tools.clone(),
             })
             .collect()
     }
@@ -970,14 +979,20 @@ impl App {
             tower_selected: self.tower_selected,
             overlays: self.overlays.clone(),
             mixes: self.mixes.list.clone(),
+            filaments: self.profiles.filaments.clone(),
         }
     }
 
     fn restore(&mut self, s: Snapshot) {
-        let overlays_changed = s.overlays != self.overlays;
+        let filaments_changed = s.filaments.len() != self.profiles.filaments.len();
+        if filaments_changed {
+            self.profiles.filaments = s.filaments.clone();
+        }
+        let overlays_changed = s.overlays != self.overlays || filaments_changed;
         // Colours alone do not change toolpaths: slices and a running job stay. Mixed colors do.
-        let settings_changed =
-            !s.overlays.same_but_colours(&self.overlays) || s.mixes != self.mixes.list;
+        let settings_changed = !s.overlays.same_but_colours(&self.overlays)
+            || s.mixes != self.mixes.list
+            || filaments_changed;
         if s.mixes != self.mixes.list {
             self.mixes.list = s.mixes.clone();
             self.mixes.draft = None;
@@ -1018,6 +1033,7 @@ impl App {
                 plate.tower_placement = p.tower;
                 plate.calibration = p.calibration;
                 plate.custom_gcode = p.custom_gcode;
+                plate.filament_tools = p.filament_tools;
                 plate
             })
             .collect();

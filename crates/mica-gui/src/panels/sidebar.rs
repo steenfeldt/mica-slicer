@@ -629,6 +629,21 @@ impl App {
         let mut mix_draft = self.mixes.draft.clone();
         let mut mix_acts = Vec::new();
         let mut remap: Option<crate::tool_remap::ToolRemap> = None;
+        // More filaments than tools: rows say F1…Fn and which tool each is on for this plate.
+        let physical = self.profiles.tool_count();
+        let beyond = self.filaments_beyond_tools();
+        let labels: Vec<String> = (0..tools).map(|f| self.filament_label(f)).collect();
+        let on_tool: Vec<Option<usize>> = (0..tools)
+            .map(|f| self.tool_of(self.plates.current, f))
+            .collect();
+        let used = self.plate_filaments(self.plates.current, true);
+        let pins = self.plates.current().filament_tools.clone();
+        let removable: Vec<bool> = (0..tools)
+            .map(|f| f >= physical && !self.filament_in_use(f))
+            .collect();
+        let mut pin: Option<(usize, Option<usize>)> = None;
+        let mut remove: Option<usize> = None;
+        let mut add = false;
         card(ui, |ui| {
             widgets::card_header(ui, if tools > 1 { "Filaments" } else { "Filament" }, |ui| {
                 if tools == 1
@@ -750,8 +765,15 @@ impl App {
                                     id,
                                     |ui| {
                                         if tools > 1 {
+                                            // `F6→T2`: the tool it prints on for this plate.
+                                            let text = match on_tool[tool] {
+                                                Some(t) if beyond && used.contains(&tool) => {
+                                                    format!("{}→T{}", labels[tool], t + 1)
+                                                }
+                                                _ => labels[tool].clone(),
+                                            };
                                             ui.label(
-                                                egui::RichText::new(format!("T{}", tool + 1))
+                                                egui::RichText::new(text)
                                                     .font(theme::mono(12.))
                                                     .color(p.muted),
                                             );
@@ -787,10 +809,30 @@ impl App {
                         Some(full) => response.on_hover_text(full),
                         None => response,
                     };
-                    // Right-click: what prints with this tool moves to another one.
+                    // Right-click: what prints with this filament moves to another one; with
+                    // more filaments than tools, the tool it prints on for this plate.
                     if tools > 1 {
                         response.context_menu(|ui| {
                             use crate::tool_remap::ToolRemap;
+                            if beyond {
+                                ui.menu_button("Print on this plate with", |ui| {
+                                    let auto = !pins.contains_key(&tool);
+                                    if ui.selectable_label(auto, "Any free tool").clicked() {
+                                        pin = Some((tool, None));
+                                        ui.close();
+                                    }
+                                    for t in 0..physical {
+                                        let chosen = pins.get(&tool) == Some(&t);
+                                        if ui
+                                            .selectable_label(chosen, format!("T{}", t + 1))
+                                            .clicked()
+                                        {
+                                            pin = Some((tool, Some(t)));
+                                            ui.close();
+                                        }
+                                    }
+                                });
+                            }
                             for (title, make) in [
                                 (
                                     "Swap with",
@@ -806,7 +848,7 @@ impl App {
                                         let clicked = ui
                                             .horizontal(|ui| {
                                                 swatch(ui, *c, 12.);
-                                                ui.button(format!("T{}", t + 1))
+                                                ui.button(labels[t].clone())
                                             })
                                             .inner
                                             .clicked();
@@ -816,6 +858,10 @@ impl App {
                                         }
                                     }
                                 });
+                            }
+                            if removable[tool] && ui.button("Remove filament").clicked() {
+                                remove = Some(tool);
+                                ui.close();
                             }
                         });
                     }
@@ -827,7 +873,7 @@ impl App {
                     }
                     if let Some(square) = &square {
                         let title = if tools > 1 {
-                            format!("Color of T{}", tool + 1)
+                            format!("Color of {}", labels[tool])
                         } else {
                             "Filament color".to_string()
                         };
@@ -947,6 +993,19 @@ impl App {
                     popover_action = Some((tool, a));
                 }
             }
+            // More colors than the printer has tools: each plate prints the ones it uses.
+            if physical > 1 {
+                ui.add_space(6.);
+                if widgets::link(ui, "Add filament")
+                    .on_hover_text(
+                        "Another color for this project. Each plate prints the filaments it \
+                         uses on the printer's tools",
+                    )
+                    .clicked()
+                {
+                    add = true;
+                }
+            }
             // ColorMix can be switched off in Settings › Features.
             if self.prefs.features.color_mix {
                 self.mixed_colors_section(ui, &mut mix_draft, &mut mix_acts);
@@ -958,6 +1017,17 @@ impl App {
             && let Err(e) = self.remap_tool(r, None)
         {
             self.notify_error("Tools not changed", e);
+        }
+        if let Some((f, t)) = pin {
+            self.pin_filament(f, t);
+        }
+        if let Some(f) = remove
+            && let Err(e) = self.remove_filament(f)
+        {
+            self.notify_error("Filament not removed", e);
+        }
+        if add {
+            self.add_filament();
         }
         if let Some((tool, action)) = popover_action {
             let id = ui

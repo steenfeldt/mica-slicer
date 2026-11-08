@@ -125,8 +125,16 @@ impl App {
         self.plates.invalidate_all();
         self.changed();
         self.status = match remap {
-            ToolRemap::Swap(..) => format!("T{} and T{} swapped", a + 1, b + 1),
-            ToolRemap::Move(..) => format!("T{} moved to T{}", a + 1, b + 1),
+            ToolRemap::Swap(..) => format!(
+                "{} and {} swapped",
+                self.filament_label(a),
+                self.filament_label(b)
+            ),
+            ToolRemap::Move(..) => format!(
+                "{} moved to {}",
+                self.filament_label(a),
+                self.filament_label(b)
+            ),
         };
         Ok(())
     }

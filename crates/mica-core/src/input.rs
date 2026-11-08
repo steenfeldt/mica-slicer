@@ -504,9 +504,12 @@ pub fn load_with_plate(
         let selected = plates::select(&mut project, plate, c, dimensions)?;
         let towers = mapper.tower_placements(&project)?;
         let count = match mapper.tool_count(&project) {
+            // An editor keeps them as filaments; each plate prints the ones it uses on the
+            // printer's tools.
             Some(n) if n > count => {
-                warnings.push(format!(
-                    "{}: the project uses {n} tools, the selected printer has {count}",
+                notes.push(format!(
+                    "{}: {n} filaments for the printer's {count} tools; each plate prints the \
+                     ones it uses on the tools",
                     path.file_name().unwrap_or_default().to_string_lossy()
                 ));
                 n

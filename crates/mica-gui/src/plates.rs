@@ -37,6 +37,9 @@ pub struct Plate {
     pub overrides: BTreeMap<String, String>,
     /// A locked plate keeps its layout: no arrange, no moving or deleting objects.
     pub locked: bool,
+    /// The tools chosen for filaments on this plate (zero-based filament -> tool); the others
+    /// are placed automatically (`crate::filaments::assign`).
+    pub filament_tools: BTreeMap<usize, usize>,
     /// A project's raw per-plate metadata (Orca's `filament_maps`, thumbnails…), kept for the
     /// plate settings page and a future project export; not applied.
     pub metadata: BTreeMap<String, String>,
@@ -162,6 +165,7 @@ impl Plate {
             objects: vec![],
             overrides: BTreeMap::new(),
             locked: false,
+            filament_tools: BTreeMap::new(),
             metadata: BTreeMap::new(),
             tower_placement: None,
             calibration: None,
@@ -189,6 +193,9 @@ impl Plate {
         // A calibration plate saved by Mica: its job comes back from Mica's own metadata.
         if let Some(text) = p.metadata.remove(crate::calibration::PLATE_METADATA_KEY) {
             p.calibration = crate::calibration::PlateJob::from_metadata(&text);
+        }
+        if let Some(text) = p.metadata.remove(crate::filaments::PLATE_METADATA_KEY) {
+            p.filament_tools = crate::filaments::parse_pins(&text);
         }
         p
     }

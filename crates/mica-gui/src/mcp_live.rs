@@ -931,7 +931,7 @@ impl App {
         let tools = self.filament_count();
         if wanted.len() > tools {
             return Err(format!(
-                "{} colors given, but this printer has {tools} tool(s)",
+                "{} colors given, but this project has {tools} filament(s)",
                 wanted.len()
             ));
         }
@@ -979,7 +979,8 @@ impl App {
             ),
             "unsaved_changes": self.mcp_unsaved(),
             "printer": self.profiles.printer,
-            "tools": self.filament_count(),
+            "tools": self.profiles.tool_count(),
+            "filaments": self.filament_count(),
             "plates": self.plates.len(),
             "current_plate": self.plates.current + 1,
             "objects": objects,
@@ -1075,7 +1076,7 @@ impl App {
         let (from, to) = (a.from as usize, a.to as usize);
         if from == to || !(1..=tools).contains(&from) || !(1..=tools).contains(&to) {
             return Err(format!(
-                "from and to must be two different physical tools 1..={tools}"
+                "from and to must be two different filaments 1..={tools}"
             ));
         }
         let swap = a.swap.unwrap_or(false);

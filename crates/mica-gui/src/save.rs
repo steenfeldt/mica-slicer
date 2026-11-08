@@ -678,6 +678,13 @@ impl App {
             // Calibration plates keep their test, tool, parameters and reading in Mica's own
             // metadata entry (`Metadata/mica.json`), which other slicers ignore.
             metadata.remove(crate::calibration::PLATE_METADATA_KEY);
+            metadata.remove(crate::filaments::PLATE_METADATA_KEY);
+            if !plate.filament_tools.is_empty() {
+                metadata.insert(
+                    crate::filaments::PLATE_METADATA_KEY.into(),
+                    crate::filaments::pins_text(&plate.filament_tools),
+                );
+            }
             if let Some(job) = &plate.calibration {
                 metadata.insert(
                     crate::calibration::PLATE_METADATA_KEY.into(),

@@ -31,9 +31,11 @@ impl App {
             .filter(|s| !s.is_empty())
     }
 
-    /// What the linked printer has loaded on `tool`, next to the project's filament
-    /// (`None` when no printer is linked or it has not said).
-    pub(crate) fn printer_filament(&self, tool: usize) -> Option<PrinterFilament> {
+    /// What the linked printer has loaded on the tool filament `filament` prints on in the
+    /// current plate, next to the project's filament (`None` when no printer is linked, it
+    /// has not said, or the plate does not use the filament).
+    pub(crate) fn printer_filament(&self, filament: usize) -> Option<PrinterFilament> {
+        let tool = self.tool_of(self.plates.current, filament)?;
         let (i, loaded) = self.linked_loaded()?;
         let f = loaded.iter().find(|f| f.tool as usize == tool)?;
         let printer = self.printers.list.get(i)?;
@@ -44,8 +46,8 @@ impl App {
             .map(str::trim)
             .filter(|m| !m.is_empty())
             .map(String::from);
-        let project_colour = self.tool_colours().get(tool).copied();
-        let project_material = self.project_material(tool);
+        let project_colour = self.tool_colours().get(filament).copied();
+        let project_material = self.project_material(filament);
         let colour_differs = matches!((loaded_colour, project_colour),
             (Some(a), Some(b)) if !mica_printhost::colour::same_colour(a, b));
         let type_differs = matches!((&loaded_material, &project_material),
@@ -56,7 +58,7 @@ impl App {
             .get(&(printer.id, tool))
             .is_some_and(|s| *s == signature);
         Some(PrinterFilament {
-            tool,
+            filament,
             printer: printer.name.clone(),
             slot: if printer.kind == crate::printhost::config::Kind::SnapmakerU1 {
                 format!("slot {}", tool + 1)
@@ -73,9 +75,12 @@ impl App {
         })
     }
 
-    /// "Ignore": the difference on `tool` is not shown again until the printer reports
-    /// another filament there.
-    pub(crate) fn ignore_filament_difference(&mut self, tool: usize) {
+    /// "Ignore": the difference on the tool of `filament` is not shown again until the printer
+    /// reports another filament there.
+    pub(crate) fn ignore_filament_difference(&mut self, filament: usize) {
+        let Some(tool) = self.tool_of(self.plates.current, filament) else {
+            return;
+        };
         let Some((i, loaded)) = self.linked_loaded() else {
             return;
         };
@@ -87,13 +92,17 @@ impl App {
         self.filament_ignored.insert(key, signature);
     }
 
-    /// "Use printer's color": this tool's color becomes the loaded one (one undo step).
-    pub(crate) fn use_printer_colour(&mut self, tool: usize) {
-        let Some(c) = self.printer_filament(tool).and_then(|f| f.loaded_colour) else {
+    /// "Use printer's color": this filament's color becomes the one loaded on its tool (one
+    /// undo step).
+    pub(crate) fn use_printer_colour(&mut self, filament: usize) {
+        let Some(c) = self
+            .printer_filament(filament)
+            .and_then(|f| f.loaded_colour)
+        else {
             return;
         };
         self.set_filament_colour(
-            tool,
+            filament,
             super::colour::Pick {
                 colour: c,
                 alpha: None,
@@ -102,8 +111,11 @@ impl App {
         );
     }
 
-    /// "Use printer's filament": this tool's color and material from the printer.
-    pub(crate) fn use_printer_filament(&mut self, tool: usize) {
+    /// "Use printer's filament": this filament's color and material from its tool.
+    pub(crate) fn use_printer_filament(&mut self, filament: usize) {
+        let Some(tool) = self.tool_of(self.plates.current, filament) else {
+            return;
+        };
         let Some((i, loaded)) = self.linked_loaded() else {
             return;
         };
@@ -163,8 +175,8 @@ impl App {
         }
     }
 
-    /// Sets each tool's colour (and material preset when one matches) from the printer. One
-    /// undo step. Returns how many tools changed.
+    /// Sets the colour (and material preset when one matches) of the filament on each tool of
+    /// the current plate from the printer. One undo step. Returns how many filaments changed.
     pub(crate) fn apply_loaded_filaments(
         &mut self,
         printer: usize,
@@ -180,18 +192,20 @@ impl App {
             self.notify_warning(format!("{name} does not report what is loaded"));
             return 0;
         }
-        let tools = self.filament_count();
+        let tools = self.profiles.tool_count();
+        let filaments = self.filament_count();
         let mut changed = 0;
         let mut colours = 0;
         let mut materials = 0;
         let mut unmatched = vec![];
         self.record("Sync filaments from printer");
-        self.overlays.resize(tools);
+        self.overlays.resize(filaments);
         for f in loaded {
-            let t = f.tool as usize;
-            if t >= tools {
+            if f.tool as usize >= tools {
                 continue;
             }
+            // The filament the current plate prints on that tool.
+            let t = self.filament_on(self.plates.current, f.tool as usize);
             let mut this = false;
             if let Some(rgba) = f
                 .colour
@@ -237,7 +251,7 @@ impl App {
                             this = true;
                         }
                     }
-                    None => unmatched.push(format!("T{} {material}", t + 1)),
+                    None => unmatched.push(format!("{} {material}", self.filament_label(t))),
                 }
             }
             if this {
@@ -275,7 +289,8 @@ fn loaded_signature(f: &LoadedFilament) -> String {
 /// One tool of the Filament card next to what the linked printer has loaded.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PrinterFilament {
-    pub tool: usize,
+    /// The project's filament (the Filament card's row).
+    pub filament: usize,
     pub printer: String,
     /// `slot 2` (U1) or `T2`.
     pub slot: String,
