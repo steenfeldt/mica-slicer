@@ -573,7 +573,7 @@ impl App {
             AddPick::DeleteRecipe(k) => self.delete_recipe(k),
             AddPick::Model => self.run_command(Command::AddModel, ctx),
             AddPick::Text => self.add_text(),
-            AddPick::Svg => self.pick_svg_for_selection(),
+            AddPick::Svg => self.pick_svg_for_selection(ctx),
             AddPick::Shape(m, add_as) => self.add_builtin(m, add_as),
         }
     }

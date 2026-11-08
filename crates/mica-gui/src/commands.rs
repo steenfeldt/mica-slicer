@@ -778,7 +778,7 @@ impl App {
             Command::AddSvg => {
                 if primary.is_some() {
                     self.select(primary, false);
-                    self.pick_svg_for_selection();
+                    self.pick_svg_for_selection(ctx);
                 }
             }
             Command::EditText => {
@@ -866,7 +866,7 @@ impl App {
             Command::AddHeightRange => self.add_height_range(),
             Command::SplitToObjects => self.split(false),
             Command::SplitToParts => self.split(true),
-            Command::ExportStl => self.export_stl(),
+            Command::ExportStl => self.export_stl(ctx),
             Command::BakeTexture => {
                 self.bake_texture();
             }
@@ -1167,7 +1167,7 @@ impl App {
     }
 
     /// "Export as STL…": the selection (placed, merged) into a binary STL.
-    pub(crate) fn export_stl(&mut self) {
+    pub(crate) fn export_stl(&mut self, ctx: &egui::Context) {
         let sel = self.selection();
         if sel.is_empty() {
             return;
@@ -1183,24 +1183,28 @@ impl App {
             self.status = format!("Export as STL: {} triangles", merged.faces.len());
             return;
         }
-        let Some(path) = rfd::FileDialog::new()
+        let dialog = rfd::AsyncFileDialog::new()
             .set_file_name(format!("{stem}.stl"))
-            .add_filter("STL", &["stl"])
-            .save_file()
-        else {
-            return;
-        };
-        let result = std::fs::File::create(&path).and_then(|f| {
-            let mut w = std::io::BufWriter::new(f);
-            mica_core::mesh_edit::write_stl(&merged, &stem, &mut w)
-        });
-        match result {
-            Ok(()) => self.notify_info(format!("Exported {}", path.display())),
-            Err(e) => self.notify_error(
-                "The STL was not exported",
-                format!("Export to {} failed: {e}", path.display()),
-            ),
-        }
+            .add_filter("STL", &["stl"]);
+        self.ask_paths(
+            ctx,
+            dialog,
+            crate::file_dialog::Ask::Save,
+            move |app, paths, _| {
+                let path = &paths[0];
+                let result = std::fs::File::create(path).and_then(|f| {
+                    let mut w = std::io::BufWriter::new(f);
+                    mica_core::mesh_edit::write_stl(&merged, &stem, &mut w)
+                });
+                match result {
+                    Ok(()) => app.notify_info(format!("Exported {}", path.display())),
+                    Err(e) => app.notify_error(
+                        "The STL was not exported",
+                        format!("Export to {} failed: {e}", path.display()),
+                    ),
+                }
+            },
+        );
     }
 }
 

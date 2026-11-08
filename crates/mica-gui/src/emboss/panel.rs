@@ -303,7 +303,7 @@ impl App {
     }
 
     /// "Add SVG…": a file dialog, then the file's shapes raised on the selected object.
-    pub(crate) fn pick_svg_for_selection(&mut self) {
+    pub(crate) fn pick_svg_for_selection(&mut self, ctx: &egui::Context) {
         let Some(i) = self
             .selected
             .filter(|&i| i < self.plates.current().objects.len())
@@ -311,13 +311,19 @@ impl App {
             self.status = "Select a model first, then add the SVG to it".into();
             return;
         };
-        if let Some(path) = rfd::FileDialog::new()
+        let dialog = rfd::AsyncFileDialog::new()
             .add_filter("SVG", &["svg"])
-            .set_title("Choose an SVG file")
-            .pick_file()
-        {
-            self.add_svg_volume(i, &path);
-        }
+            .set_title("Choose an SVG file");
+        self.ask_paths(
+            ctx,
+            dialog,
+            crate::file_dialog::Ask::File,
+            move |app, paths, _| {
+                if i < app.plates.current().objects.len() {
+                    app.add_svg_volume(i, &paths[0]);
+                }
+            },
+        );
     }
 
     /// An SVG file's shapes as a raised part on object `i` (one undo step), with the card
@@ -970,13 +976,15 @@ impl App {
                 }
                 Edit::Kind(k) => self.set_emboss_kind(k),
                 Edit::Svg => {
-                    if let Some(path) = rfd::FileDialog::new()
+                    let dialog = rfd::AsyncFileDialog::new()
                         .add_filter("SVG", &["svg"])
-                        .set_title("Choose an SVG file")
-                        .pick_file()
-                    {
-                        self.emboss_svg_file(&path);
-                    }
+                        .set_title("Choose an SVG file");
+                    self.ask_paths(
+                        ctx,
+                        dialog,
+                        crate::file_dialog::Ask::File,
+                        |app, paths, _| app.emboss_svg_file(&paths[0]),
+                    );
                 }
                 Edit::Delete => self.delete_emboss(),
                 Edit::Close => self.close_emboss(),

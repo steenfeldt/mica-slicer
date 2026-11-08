@@ -14,6 +14,7 @@
 //! background slicing (manual and automatic), and the top-level window layout. The panels
 //! themselves live in `panels/`.
 
+use crate::file_dialog::Ask;
 use crate::{
     overlays::{Overlays, Target},
     panels::profiles::{PresetKind, Profiles},
@@ -338,6 +339,8 @@ pub struct App {
     /// What each plate names ([`crate::filaments`]), by plate id, epoch, configuration
     /// generation and with/without settings: read every frame by the Filaments card.
     pub(crate) filament_refs: std::cell::RefCell<crate::filaments::RefCache>,
+    /// The native file dialog on screen (a sheet on macOS) and what its answer does.
+    pub(crate) file_dialog: Option<crate::file_dialog::Pending>,
     /// Completed slices by what determines their G-code (see `slice_cache`).
     pub(crate) slice_cache: crate::slice_cache::SliceCache,
     /// The inputs of the running job: `(request, inputs)`.
@@ -727,6 +730,7 @@ impl App {
             config_generation: 0,
             bed_configs: Default::default(),
             filament_refs: Default::default(),
+            file_dialog: None,
             slice_cache: Default::default(),
             job_inputs: None,
             restored: vec![],
@@ -2375,17 +2379,16 @@ impl App {
             self.status = "Opening needs the file dialog; pass files in headless mode".into();
             return;
         }
-        if let Some(paths) = rfd::FileDialog::new()
+        let dialog = rfd::AsyncFileDialog::new()
             .add_filter(
                 "Models, projects and G-code",
                 &["stl", "3mf", "gcode", "bgcode"],
             )
             .add_filter("Models", &["stl", "3mf"])
-            .add_filter("G-code", &["gcode", "bgcode"])
-            .pick_files()
-        {
-            self.load(paths, ctx);
-        }
+            .add_filter("G-code", &["gcode", "bgcode"]);
+        self.ask_paths(ctx, dialog, Ask::Files, |app, paths, ctx| {
+            app.load(paths, ctx)
+        });
     }
 
     /// "Add model…" (⌘I): models join the current plate, a project's models come in on new
@@ -2395,12 +2398,10 @@ impl App {
             self.status = "Adding needs the file dialog; pass files in headless mode".into();
             return;
         }
-        if let Some(paths) = rfd::FileDialog::new()
-            .add_filter("Models and projects", &["stl", "3mf"])
-            .pick_files()
-        {
-            self.add_models(paths, ctx);
-        }
+        let dialog = rfd::AsyncFileDialog::new().add_filter("Models and projects", &["stl", "3mf"]);
+        self.ask_paths(ctx, dialog, Ask::Files, |app, paths, ctx| {
+            app.add_models(paths, ctx)
+        });
     }
 
     /// Adds files to the open project: STLs on the current plate, a project's plates after
@@ -3445,36 +3446,42 @@ impl App {
         }
         let Some(f) = self.finished() else { return };
         let stem = self.export_stem();
-        let mut dialog = rfd::FileDialog::new().set_file_name(if f.binary {
+        let binary = f.binary;
+        // The slice's temp job stays alive until the export's copy finishes.
+        let job = f.preview.job.clone();
+        let mut dialog = rfd::AsyncFileDialog::new().set_file_name(if binary {
             format!("{stem}.bgcode")
         } else {
             format!("{stem}.gcode")
         });
-        if f.binary {
+        if binary {
             dialog = dialog.add_filter("Prusa binary G-code", &["bgcode"]);
         }
         dialog = dialog.add_filter("Text G-code", &["gcode"]);
-        if let Some(mut path) = dialog.save_file() {
+        self.ask_paths(ctx, dialog, Ask::Save, move |app, paths, ctx| {
+            let mut path = paths[0].clone();
             if path.extension().is_none() {
-                path.set_extension(if f.binary { "bgcode" } else { "gcode" });
+                path.set_extension(if binary { "bgcode" } else { "gcode" });
             }
             let extension = path
                 .extension()
                 .unwrap_or_default()
                 .to_string_lossy()
                 .to_lowercase();
-            if !matches!(extension.as_str(), "gcode" | "bgcode")
-                || extension == "bgcode" && !f.binary
+            if !matches!(extension.as_str(), "gcode" | "bgcode") || extension == "bgcode" && !binary
             {
-                self.notify_warning("Choose .gcode, or .bgcode for a Prusa printer");
+                app.notify_warning("Choose .gcode, or .bgcode for a Prusa printer");
                 return;
             }
-            let job = f.preview.job.clone();
+            if app.loading.is_some() {
+                app.notify_warning("Mica is busy; export again in a moment");
+                return;
+            }
             let source = job.path.join(format!("print.{extension}"));
-            // Copy large exports off the UI thread. Retain the temp job until the copy finishes.
+            // Copy large exports off the UI thread.
             let (tx, rx) = mpsc::channel();
-            self.loading = Some(rx);
-            self.status = "Exporting…".into();
+            app.loading = Some(rx);
+            app.status = "Exporting…".into();
             let ctx = ctx.clone();
             std::thread::spawn(move || {
                 let result = std::fs::copy(source, &path)
@@ -3497,7 +3504,7 @@ impl App {
                 let _ = tx.send(result);
                 ctx.request_repaint();
             });
-        }
+        });
     }
 
     pub(crate) fn poll(&mut self, ctx: &egui::Context) {
@@ -4505,6 +4512,7 @@ impl App {
         self.follow_system_theme(&ctx);
         self.sync_view_prefs();
         self.poll(&ctx);
+        self.poll_file_dialog(&ctx);
         self.poll_mcp(&ctx);
         self.poll_updater(&ctx);
         self.poll_prusa_download(&ctx);

@@ -2544,12 +2544,14 @@ impl App {
                 }
             }
             Act::PickFolder => {
-                if !self.headless
-                    && let Some(dir) = rfd::FileDialog::new()
-                        .set_title("Add a library folder")
-                        .pick_folder()
-                {
-                    self.library.add_folder(&dir);
+                if !self.headless {
+                    let dialog = rfd::AsyncFileDialog::new().set_title("Add a library folder");
+                    self.ask_paths(
+                        ctx,
+                        dialog,
+                        crate::file_dialog::Ask::Folder,
+                        |app, dirs, _| app.library.add_folder(&dirs[0]),
+                    );
                 }
             }
             Act::RemoveFolder(path) => {

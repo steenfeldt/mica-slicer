@@ -386,20 +386,34 @@ impl App {
                     .color(p.muted),
                 );
             });
-        if import
-            && let Some(path) = rfd::FileDialog::new()
+        if import {
+            let dialog = rfd::AsyncFileDialog::new()
                 .add_filter("Images", &["png", "jpg", "jpeg"])
-                .set_title("Choose a texture image")
-                .pick_file()
-        {
-            match import_image(&path) {
-                Ok(value) => {
-                    st.filter = Filter::Category(Category::Custom);
-                    st.import_error = None;
-                    pick = Some((value, 10.));
-                }
-                Err(e) => st.import_error = Some(format!("{}: {e}", path.display())),
-            }
+                .set_title("Choose a texture image");
+            self.ask_paths(
+                ctx,
+                dialog,
+                crate::file_dialog::Ask::File,
+                |_, paths, ctx| {
+                    let path = &paths[0];
+                    let mut st: GalleryState =
+                        ctx.data(|d| d.get_temp(gallery_id())).unwrap_or_default();
+                    match import_image(path) {
+                        Ok(value) => {
+                            st.filter = Filter::Category(Category::Custom);
+                            st.import_error = None;
+                            if let Some(target) = st.target {
+                                ctx.data_mut(|d| {
+                                    d.insert_temp(target.with("picked"), (value, 10.))
+                                });
+                            }
+                            st.open = false;
+                        }
+                        Err(e) => st.import_error = Some(format!("{}: {e}", path.display())),
+                    }
+                    ctx.data_mut(|d| d.insert_temp(gallery_id(), st));
+                },
+            );
         }
         if let Some(v) = star {
             let favs = &mut self.prefs.texture_favorites;

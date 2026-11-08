@@ -15,6 +15,7 @@
 //! `Slic3r_PE.config`; a Prusa printer saved in Orca flavour (or the other way round) goes
 //! through the conservative dialect translation of `mica_core::threemf::translate`.
 
+use crate::file_dialog::Ask;
 use crate::{
     app::{App, PlateState},
     overlays::{Overlay, Overlays},
@@ -978,28 +979,34 @@ impl App {
                         "Saving needs the file dialog; use --save in headless mode".into();
                     return;
                 }
-                let mut picker = rfd::FileDialog::new()
+                let mut picker = rfd::AsyncFileDialog::new()
                     .set_file_name(format!("{name}.3mf"))
                     .add_filter("3MF project", &["3mf"]);
-                if let Some(dir) = self.document.path.as_ref().and_then(|p| p.parent()) {
+                // The project's folder, while it still exists (it may have been moved).
+                if let Some(dir) = self
+                    .document
+                    .path
+                    .as_ref()
+                    .and_then(|p| p.parent())
+                    .filter(|d| d.is_dir())
+                {
                     picker = picker.set_directory(dir);
                 }
-                let Some(path) = picker.save_file() else {
-                    return;
-                };
-                match self.save_project_to(&path, flavour) {
-                    Ok(()) => {
-                        self.dialogs.save_project = None;
-                        if let Some(pending) = then {
-                            self.proceed(pending, ctx);
+                self.ask_paths(ctx, picker, Ask::Save, move |app, paths, ctx| {
+                    match app.save_project_to(&paths[0], flavour) {
+                        Ok(()) => {
+                            app.dialogs.save_project = None;
+                            if let Some(pending) = then {
+                                app.proceed(pending, ctx);
+                            }
+                        }
+                        Err(e) => {
+                            if let Some(d) = &mut app.dialogs.save_project {
+                                d.error = Some(e);
+                            }
                         }
                     }
-                    Err(e) => {
-                        if let Some(d) = &mut self.dialogs.save_project {
-                            d.error = Some(e);
-                        }
-                    }
-                }
+                });
             }
             Some(false) => self.dialogs.save_project = None,
             None => {}

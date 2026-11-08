@@ -24,6 +24,7 @@ mod emboss;
 mod filaments;
 #[cfg(test)]
 mod filaments_tests;
+mod file_dialog;
 mod gcode_doc;
 mod import;
 #[cfg(test)]

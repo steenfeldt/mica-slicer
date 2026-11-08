@@ -514,12 +514,13 @@ impl App {
             self.status = "Exporting needs the file dialog".into();
             return;
         }
-        if let Some(dir) = rfd::FileDialog::new()
-            .set_title("Export all plates into a folder")
-            .pick_folder()
-        {
-            self.export_all_to(dir, ctx);
-        }
+        let dialog = rfd::AsyncFileDialog::new().set_title("Export all plates into a folder");
+        self.ask_paths(
+            ctx,
+            dialog,
+            crate::file_dialog::Ask::Folder,
+            |app, mut dirs, ctx| app.export_all_to(dirs.remove(0), ctx),
+        );
     }
 
     /// Whether Export all plates can run now.

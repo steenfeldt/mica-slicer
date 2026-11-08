@@ -314,19 +314,23 @@ impl App {
             .map(|e| e.to_string_lossy().to_string())
             .unwrap_or_else(|| "gcode".into());
         let source = doc.path.clone();
-        let Some(mut target) = rfd::FileDialog::new()
+        let dialog = rfd::AsyncFileDialog::new()
             .set_file_name(&doc.name)
-            .add_filter("G-code", &[ext.as_str()])
-            .save_file()
-        else {
-            return;
-        };
-        if target.extension().is_none() {
-            target.set_extension(&ext);
-        }
-        if let Err(e) = self.copy_gcode(&source, &target, ctx) {
-            self.notify_error("The copy was not saved", e);
-        }
+            .add_filter("G-code", &[ext.as_str()]);
+        self.ask_paths(
+            ctx,
+            dialog,
+            crate::file_dialog::Ask::Save,
+            move |app, paths, ctx| {
+                let mut target = paths[0].clone();
+                if target.extension().is_none() {
+                    target.set_extension(&ext);
+                }
+                if let Err(e) = app.copy_gcode(&source, &target, ctx) {
+                    app.notify_error("The copy was not saved", e);
+                }
+            },
+        );
     }
 
     /// Copies the opened file to `target` on a thread (never onto itself).
