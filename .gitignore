@@ -6,6 +6,9 @@
 /out
 /.claude/
 /dist
+/fuzz/artifacts
+/fuzz/target
+/fuzz/corpus
 
 # Local-only files
 .env

@@ -1,0 +1,25 @@
+[package]
+name = "mica-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+rust-version = "1.99"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+mica-core = { path = "../crates/mica-core" }
+zip = { version = "=9.4.2", default-features = false, features = ["deflate-flate2"] }
+
+[[bin]]
+name = "threemf"
+path = "fuzz_targets/threemf.rs"
+test = false
+doc = false
+bench = false
+
+# Keep fuzz-only dependencies and nightly instrumentation out of normal workspace builds.
+[workspace]
+members = ["."]

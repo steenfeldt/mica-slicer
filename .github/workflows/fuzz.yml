@@ -1,0 +1,53 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Provenance: original
+name: Security fuzzing
+
+on:
+  pull_request:
+    paths:
+      - "Cargo.lock"
+      - "crates/mica-core/src/threemf/**"
+      - "fuzz/**"
+      - ".github/workflows/fuzz.yml"
+  push:
+    paths:
+      - "Cargo.lock"
+      - "crates/mica-core/src/threemf/**"
+      - "fuzz/**"
+      - ".github/workflows/fuzz.yml"
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  threemf:
+    name: 3MF parser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      FUZZ_SECONDS: ${{ github.event_name == 'schedule' && '300' || '45' }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@nightly
+      - name: Install cargo-fuzz
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz
+      - name: Fuzz 3MF and ZIP input
+        run: >-
+          cargo +nightly fuzz run threemf fuzz/corpus-seed/threemf --
+          -dict=fuzz/dictionaries/threemf.dict
+          -max_len=262144
+          -rss_limit_mb=2048
+          -timeout=5
+          -max_total_time=${FUZZ_SECONDS}
+      - name: Upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: threemf-fuzz-artifacts
+          path: fuzz/artifacts/threemf
+          if-no-files-found: ignore
