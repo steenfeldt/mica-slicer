@@ -134,6 +134,10 @@ pub fn prepare_plate<'o>(
             crate::safety::placement(&o.mesh, &o.config).map_err(|e| format!("{}: {e}", o.name))?;
         for warning in found {
             let warning = format!("{}: {warning}", o.name);
+            if warning.contains(crate::safety::TOUCHING) {
+                notes.push(warning);
+                continue;
+            }
             if warning.contains(crate::safety::BELOW_BED) {
                 preflight.push(warning.clone());
             }

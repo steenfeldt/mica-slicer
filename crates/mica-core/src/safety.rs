@@ -212,6 +212,9 @@ pub fn bed_shape_problem(bed: &[(f64, f64)]) -> Option<String> {
 
 /// The start of [`placement`]'s warning about a model that reaches below the bed.
 pub const BELOW_BED: &str = "model extends below the bed";
+/// The start of [`placement`]'s note about a closed surface touching itself along edges: a
+/// note, not a warning.
+pub const TOUCHING: &str = "the model's surface touches itself";
 
 /// Cheap placement checks before slicing. The G-code validator checks actual path polygons later.
 pub fn placement(mesh: &TriangleMesh, c: &Config) -> Result<Vec<String>, String> {
@@ -307,10 +310,19 @@ pub fn placement(mesh: &TriangleMesh, c: &Config) -> Result<Vec<String>, String>
             parents[ra] = rb;
         }
     }
-    let open = edges.values().filter(|&&n| n != 2).count();
+    // An edge on an odd number of triangles leaves the surface open (a hole, a doubled
+    // triangle); one on 4, 6, ... is two closed sheets meeting along it (a sculpt pinched at an
+    // edge), which slices as closed.
+    let open = edges.values().filter(|&&n| n % 2 == 1).count();
+    let touching = edges.values().filter(|&&n| n > 2 && n % 2 == 0).count();
     if open > 0 {
         warnings.push(format!(
-            "model has {open} open/non-manifold edges; inspect repaired contours before printing"
+            "model has {open} open or non-manifold edges; inspect repaired contours before printing"
+        ));
+    }
+    if touching > 0 {
+        warnings.push(format!(
+            "{TOUCHING}: {touching} edges where it meets itself; this usually prints fine"
         ));
     }
     let mut shells = std::collections::HashMap::<usize, [[f32; 3]; 2]>::new();

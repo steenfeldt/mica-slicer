@@ -54,6 +54,45 @@ fn open_and_nonmanifold_meshes_produce_diagnostics_without_panics() {
         assert!(std::panic::catch_unwind(|| try_prepare_object(&mesh, &settings())).is_ok());
     }
 }
+/// Two closed cubes sharing one edge: the edge is on four triangles, a note that the surface
+/// touches itself rather than an open-edge warning.
+#[test]
+fn surfaces_touching_along_an_edge_are_a_note_not_open_edges() {
+    let mut a = cube();
+    let mut b = cube();
+    let (min, max) = b.bounds();
+    b.translate([max[0] - min[0], max[1] - min[1], 0.]);
+    // Weld b's corner edge onto a's: the vertices at a's (max x, max y) become b's (min x, min y).
+    let base = a.vertices.len() as u32;
+    let shared: Vec<(u32, u32)> = (0..b.vertices.len() as u32)
+        .filter_map(|i| {
+            let v = b.vertices[i as usize];
+            a.vertices
+                .iter()
+                .position(|w| *w == v)
+                .map(|j| (i, j as u32))
+        })
+        .collect();
+    assert_eq!(shared.len(), 2, "the cubes share one edge");
+    a.vertices.extend(b.vertices);
+    a.faces.extend(b.faces.into_iter().map(|f| {
+        f.map(|i| {
+            shared
+                .iter()
+                .find(|(k, _)| *k == i)
+                .map_or(i + base, |(_, j)| *j)
+        })
+    }));
+    a.place_on_bed(100., 100.);
+    let found = mica_core::safety::placement(&a, &Config::defaults()).unwrap();
+    assert!(
+        found
+            .iter()
+            .any(|w| w.starts_with(mica_core::safety::TOUCHING) && w.contains(" 1 edges")),
+        "{found:?}"
+    );
+    assert!(!found.iter().any(|w| w.contains("open")), "{found:?}");
+}
 #[test]
 fn intersecting_shells_are_sliced_without_panicking() {
     let mut a = cube();

@@ -173,7 +173,8 @@ wall/raft/skin counts and a 100,000-layer allocation limit before geometry work.
 receive the same validation. Configuration numeric parsing rejects NaN/infinity. CLI unknown
 setting names error while known Mica tower coordinates remain supported.
 
-CLI preflight reports open/non-manifold edges, potentially intersecting shell bounds, sub-mm
+CLI preflight reports open/non-manifold edges (an edge on an odd number of triangles; a closed
+surface touching itself along an edge, on 4, 6, ..., is only a note), potentially intersecting shell bounds, sub-mm
 models, partially below-bed models and zero-walls/zero-infill settings. It rejects out-of-volume
 and entirely below-bed models. Shell bounds are a conservative diagnostic, not a full triangle
 self-intersection/repair algorithm; intersecting closed shells can be intentionally unioned.
