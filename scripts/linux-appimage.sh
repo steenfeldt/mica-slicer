@@ -19,6 +19,11 @@ profile="$1"
 version="$2"
 out="$3"
 rust_version="$4"
+# On a Linux host the bind mounts keep root's ownership: hand everything this script writes
+# there back to the host user (scripts/release.sh passes HOST_UID/HOST_GID), even on failure.
+if [ -n "${HOST_UID:-}" ] && [ "$HOST_UID" != 0 ]; then
+  trap 'chown -R "$HOST_UID:${HOST_GID:-$HOST_UID}" "$out" /src/target/linux-container 2>/dev/null || true' EXIT
+fi
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq >/dev/null
 apt-get install -y -qq --no-install-recommends ca-certificates curl build-essential pkg-config \

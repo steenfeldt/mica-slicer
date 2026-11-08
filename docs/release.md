@@ -1,7 +1,7 @@
 # Releasing tester builds
 
 `scripts/release.sh` builds Mica Slicer for macOS (Apple Silicon only, arm64, macOS 14 or later; `.app` in a
-`.dmg`), Windows (NSIS installer, cross-built from the Mac with `cargo-xwin`) and Linux
+`.dmg`), Windows (NSIS installer, cross-built with `cargo-xwin`) and Linux
 (AppImage, built in an Ubuntu 22.04 Docker container), signs everything and writes the update
 manifest. Publishing has two parts: the packages go to a **GitHub pre-release** of
 `github.com/steenfeldt/mica-slicer` (Mica is alpha, pre-release software), and the manifest is a static file of the **website**
@@ -18,7 +18,12 @@ scripts/release.sh --dry-run                       # everything except signing/n
 scripts/release.sh --version 0.1.0                 # build + sign; prints the publishing commands
 scripts/release.sh --prebuilt --publish            # then: GitHub pre-release + manifest into the website repo
 scripts/release.sh --dry-run --platforms macos --profile fast   # quick local package
+scripts/release.sh --build-only --platforms windows,linux        # on a Linux machine: build, don't sign
+scripts/release.sh --version 0.1.0 --prebuilt windows,linux      # on the Mac: build macOS, sign all three
 ```
+
+Windows and Linux can be built on the Mac (Linux then runs emulated, ~40 minutes from cold)
+or on a Linux x86_64 machine; see "Building Windows and Linux on a Linux machine".
 
 Without `--publish` the script never publishes anything: it prints the exact commands instead.
 
@@ -218,7 +223,7 @@ named "Mica Slicer".
 
 ## Windows and Linux packages: building and checking them
 
-Both are built on the Mac. The first tested dry runs (October 2026, `--profile fast`, version
+Both can be built on the Mac, as here, or on a Linux machine (next section). The first tested dry runs (October 2026, `--profile fast`, version
 0.0.1) and what was checked:
 
 ```sh
@@ -264,6 +269,45 @@ stays in the settings folder rather than a cache folder on purpose: a cleaned ca
 take the Prusa printers away offline. On Windows the home folder is `USERPROFILE` (`HOME` is
 normally unset there; before this, Windows builds found no PrusaSlicer/OrcaSlicer presets to
 import and wrote crash logs to the temporary folder).
+
+## Building Windows and Linux on a Linux machine
+
+On Apple Silicon the Linux container runs emulated, and both cross builds leave several GB in
+`target/`. A Linux x86_64 machine builds them natively instead; the Mac still builds macOS and
+signs everything, so the update signing key and the Developer ID stay on the Mac.
+
+1. Commit and push the release state (version bump, `CHANGELOG.md`), as in "Publishing a
+   release", step 1. Both machines build that same commit.
+2. On the Linux machine, in a clean checkout at that commit (with the pinned upstream:
+   `scripts/fetch-upstream.sh --profiles orca`):
+   ```sh
+   scripts/release.sh --build-only --platforms windows,linux
+   ```
+   It builds and packages like a normal run but writes no update signatures and no manifest.
+   Next to each package it writes `<package>.build` (commit, profile, dry run or not, host)
+   and at the end prints the `scp` command that copies the packages to the Mac.
+3. On the Mac, copy them into `dist/X.Y.Z/` (the printed command), then:
+   ```sh
+   scripts/release.sh --version X.Y.Z --prebuilt windows,linux
+   ```
+   This builds, signs and notarizes macOS as usual and takes Windows and Linux from
+   `dist/X.Y.Z/`. Each must have its `.build` file with this checkout's commit and the same
+   profile, and a real release refuses `--dry-run` packages; the script then writes their
+   update signatures with the Mac's key and one `latest.json` for all three platforms.
+4. Publish as usual: `scripts/release.sh --prebuilt --publish`.
+
+On Linux the Docker container runs as root; the script passes the host user's IDs so the
+container hands `dist/` and `target/linux-container` back to that user when it ends. The
+Windows build finds Debian/Ubuntu's versioned LLVM (`/usr/lib/llvm-<N>/bin`, newest first).
+Setup there, once:
+
+```sh
+sudo apt install build-essential pkg-config clang lld llvm nsis docker.io python3
+curl -fsSL https://sh.rustup.rs | sh        # rustup, then a new shell
+rustup target add x86_64-pc-windows-msvc
+cargo install --locked cargo-packager@0.11.8 cargo-xwin
+sudo usermod -aG docker "$USER"              # Docker without sudo (log in again)
+```
 
 ## One-time setup (maintainer)
 

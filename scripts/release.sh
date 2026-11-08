@@ -4,8 +4,8 @@
 # $MICA_WEBSITE_DIR, default ../mica-website): its site/updates/<channel>/latest.json.
 # One-time setup and every variable are described in docs/release.md.
 #
-#   scripts/release.sh [--dry-run] [--prebuilt] [--publish] [--version X.Y.Z]
-#                      [--platforms macos,windows,linux] [--profile release]
+#   scripts/release.sh [--dry-run] [--prebuilt [PLATFORMS]] [--build-only] [--publish]
+#                      [--version X.Y.Z] [--platforms macos,windows,linux] [--profile release]
 #
 #   (default)    build, sign and package; write dist/<version>/ (packages, their .sig update
 #                signatures, latest.json, release-notes.md) and PRINT the publishing commands
@@ -17,7 +17,17 @@
 #                there (the deploy stays a manual step).
 #   --prebuilt   skip building: use the packages and .sig files already in dist/<version>/
 #                (e.g. `--prebuilt --publish` after checking a default run's packages)
-#   --dry-run    everything except code signing, notarization and update signatures: unsigned
+#   --prebuilt windows,linux
+#                build the other platforms as usual, but take these from dist/<version>/,
+#                as made by a --build-only run on another machine (each with its .build file:
+#                same commit, same profile, not a dry run), and sign them here. The manifest
+#                then covers all of them. See docs/release.md, "Building Windows and Linux on a
+#                Linux machine".
+#   --build-only build and package, but write no update signatures and no manifest: the
+#                packages (and a .build provenance file each) are copied to the machine
+#                that signs the release and picked up there with --prebuilt PLATFORMS. Builds
+#                the committed version (no --version).
+#   --dry-run   everything except code signing, notarization and update signatures: unsigned
 #                (ad-hoc signed on macOS) local test packages, never publishable. With
 #                CARGO_PACKAGER_SIGN_PRIVATE_KEY set, it still writes update signatures (a
 #                throwaway test key, for updater tests).
@@ -59,6 +69,8 @@ cd "$root"
 dry_run=0
 publish=0
 prebuilt=0
+imported=""    # --prebuilt PLATFORMS: taken from dist/ while the rest is built
+build_only=0
 new_version=""
 platforms="macos,windows,linux"
 profile="release"
@@ -66,12 +78,14 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --dry-run) dry_run=1 ;;
     --publish) publish=1 ;;
-    --prebuilt) prebuilt=1 ;;
+    --prebuilt)
+      if [ $# -gt 1 ] && [ "${2#-}" = "$2" ]; then imported="$2"; shift; else prebuilt=1; fi ;;
+    --build-only) build_only=1 ;;
     --version) new_version="$2"; shift ;;
     --notes) echo "--notes is gone: write the release notes in CHANGELOG.md (## X.Y.Z)" >&2; exit 2 ;;
     --platforms) platforms="$2"; shift ;;
     --profile) profile="$2"; shift ;;
-    -h|--help) sed -n '2,52p' "$0"; exit 0 ;;
+    -h|--help) awk 'NR > 1 && /^set -euo/ { exit } NR > 1' "$0"; exit 0 ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -81,6 +95,7 @@ say() { printf '\n==> %s\n' "$*"; }
 die() { printf 'error: %s\n' "$*" >&2; exit 1; }
 skip() { printf 'SKIPPED: %s\n' "$*"; skipped="$skipped\n  - $*"; }
 want() { case ",$platforms," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
+is_imported() { case ",$imported," in *",$1,"*) return 0 ;; *) return 1 ;; esac; }
 need() { command -v "$1" >/dev/null 2>&1 || die "$1 is not installed ($2)"; }
 skipped=""
 
@@ -91,6 +106,14 @@ export PATH="/opt/homebrew/opt/rustup/bin:$HOME/.cargo/bin:$PATH"
 export MICA_PACKAGED=1
 [ $dry_run = 1 ] && [ $publish = 1 ] && die "--dry-run packages are never published; drop one of --dry-run and --publish"
 [ $prebuilt = 1 ] && [ -n "$new_version" ] && die "--prebuilt publishes the current version; set the version when building"
+if [ $build_only = 1 ]; then
+  [ $publish = 0 ] && [ $prebuilt = 0 ] && [ -z "$imported" ] \
+    || die "--build-only only builds; publish from the machine that signs, with --prebuilt"
+  [ -z "$new_version" ] || die "--build-only builds the committed version; commit the version bump first"
+fi
+for p in ${imported//,/ }; do
+  case "$p" in macos|windows|linux) ;; *) die "--prebuilt: unknown platform $p (macos, windows, linux)" ;; esac
+done
 need cargo "rustup"
 [ $prebuilt = 1 ] || need cargo-packager "cargo install --locked cargo-packager@0.11.8"
 need python3 "Xcode command line tools"
@@ -143,7 +166,9 @@ fi
 version="$(cargo metadata --no-deps --format-version 1 --offline \
   | python3 -I -c 'import json,sys; print(next(p["version"] for p in json.load(sys.stdin)["packages"] if p["name"]=="mica-gui"))')"
 mode="$( [ $prebuilt = 1 ] && echo 'prebuilt packages' || echo "profile $profile")"
-say "Mica Slicer $version, channel $channel, $mode$( [ $dry_run = 1 ] && echo ', DRY RUN')$( [ $publish = 1 ] && echo ', PUBLISH')"
+[ -n "$imported" ] && mode="$mode, prebuilt $imported"
+say "Mica Slicer $version, channel $channel, $mode$( [ $dry_run = 1 ] && echo ', DRY RUN')$( [ $build_only = 1 ] && echo ', BUILD ONLY')$( [ $publish = 1 ] && echo ', PUBLISH')"
+head_commit="$(git rev-parse HEAD)"
 if notes="$(changelog_notes "$version" 2>/dev/null)"; then
   have_notes=1
 elif [ $dry_run = 1 ]; then
@@ -252,6 +277,8 @@ check_no_openh264() {
 sign_update() {  # $1 file → writes $1.sig (base64 minisign signature); none in a dry run without a key
   local file="$1"
   rm -f "$file.sig"
+  # Signed later, on the machine that imports it with --prebuilt PLATFORMS.
+  [ $build_only = 0 ] || return 0
   if [ -z "${CARGO_PACKAGER_SIGN_PRIVATE_KEY:-}" ]; then
     [ $dry_run = 1 ] || die "CARGO_PACKAGER_SIGN_PRIVATE_KEY is not set (docs/release.md, step 3)"
     return
@@ -270,7 +297,28 @@ add_package() {  # platform file format: an update package and its signature, if
   manifest_entries+=("$1=$(basename "$2"):$3")
   artifacts+=("$2")
   [ -f "$2.sig" ] && artifacts+=("$2.sig")
+  [ $build_only = 0 ] || write_build_info "$2"
   return 0
+}
+
+# A --build-only package's provenance (<file>.build), checked where it is imported.
+write_build_info() {
+  printf 'commit=%s\nprofile=%s\ndry_run=%s\nhost=%s\n' \
+    "$head_commit" "$profile" "$dry_run" "$(uname -n)" >"$1.build"
+}
+check_build_info() {  # $1 package
+  local info="$1.build" name
+  name="$(basename "$1")"
+  [ -f "$info" ] || die "$name has no $(basename "$info"); build it with --build-only"
+  local commit prof dry host
+  commit="$(sed -n 's/^commit=//p' "$info")"
+  prof="$(sed -n 's/^profile=//p' "$info")"
+  dry="$(sed -n 's/^dry_run=//p' "$info")"
+  host="$(sed -n 's/^host=//p' "$info")"
+  [ "$commit" = "$head_commit" ] || die "$name was built from $commit; this checkout is at $head_commit"
+  [ "$prof" = "$profile" ] || die "$name was built with profile $prof; this run uses $profile"
+  if [ $dry_run = 0 ] && [ "$dry" != 0 ]; then die "$name is a --dry-run package"; fi
+  echo "ok: $name built on $host from ${commit:0:12}, profile $prof"
 }
 
 # dmgbuild (pinned with hashes in the requirements file) in a private virtual environment,
@@ -361,15 +409,17 @@ build_macos() {
 build_windows() {
   say "Windows: x86_64 binary (cargo-xwin)"
   if ! command -v cargo-xwin >/dev/null 2>&1; then skip "Windows: cargo-xwin is not installed"; return; fi
-  if ! command -v makensis >/dev/null 2>&1; then skip "Windows: makensis is not installed (brew install makensis)"; return; fi
-  # cargo-xwin needs clang-cl, llvm-lib and lld-link: Homebrew's LLVM (keg-only).
+  if ! command -v makensis >/dev/null 2>&1; then skip "Windows: makensis is not installed (brew install makensis / apt install nsis)"; return; fi
+  # cargo-xwin needs clang-cl, llvm-lib and lld-link: Homebrew's LLVM (keg-only) on macOS,
+  # the versioned /usr/lib/llvm-<N>/bin of Debian and Ubuntu (newest first) on Linux.
   local d
-  for d in /opt/homebrew/opt/llvm/bin /opt/homebrew/opt/llvm@*/bin /opt/homebrew/opt/lld/bin /opt/homebrew/opt/lld@*/bin; do
+  for d in /opt/homebrew/opt/llvm/bin /opt/homebrew/opt/llvm@*/bin /opt/homebrew/opt/lld/bin /opt/homebrew/opt/lld@*/bin \
+    $(ls -d /usr/lib/llvm-*/bin 2>/dev/null | sort -t- -k2 -n -r); do
     [ -d "$d" ] && PATH="$PATH:$d"
   done
   if ! command -v clang-cl >/dev/null 2>&1 || ! command -v lld-link >/dev/null 2>&1 \
     || ! command -v llvm-readobj >/dev/null 2>&1; then
-    skip "Windows: clang-cl / lld-link / llvm-readobj not found (brew install llvm lld)"; return
+    skip "Windows: clang-cl / lld-link / llvm-readobj not found (brew install llvm lld / apt install clang lld llvm)"; return
   fi
   rustup target add x86_64-pc-windows-msvc >/dev/null
   # The C runtime linked in statically: the installer ships no Visual C++ Redistributable, and
@@ -423,12 +473,14 @@ build_linux() {
   local rust
   rust="$(rustc --version | cut -d' ' -f2)"
   # Toolchain, registry and appimagetool are cached in Docker volumes between runs. The output
-  # folder is mounted on its own: MICA_RELEASE_DIST may be outside the repository.
+  # folder is mounted on its own: MICA_RELEASE_DIST may be outside the repository. The
+  # container runs as root; HOST_UID/HOST_GID give its output back to this user afterwards
+  # (on Linux, Docker keeps root's ownership in bind mounts).
   docker run --rm --platform linux/amd64 \
     -v "$root:/src" -v "$out:/out" -v mica-release-cargo:/opt/cargo \
     -v mica-release-rustup:/opt/rustup -v mica-release-tools:/opt/cache \
     -e CARGO_HOME=/opt/cargo -e RUSTUP_HOME=/opt/rustup -e MICA_PACKAGED=1 \
-    -e MICA_UPDATE_PUBKEY \
+    -e MICA_UPDATE_PUBKEY -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
     ubuntu:22.04 sh /src/scripts/linux-appimage.sh "$profile" "$version" /out "$rust"
   local image="MicaSlicer_${version}_x86_64.AppImage"
   [ -f "$out/$image" ] || die "no AppImage was made"
@@ -437,28 +489,65 @@ build_linux() {
   add_package linux-x86_64 "$dist/$image" appimage
 }
 
-# Packages an earlier run left in dist/<version>/.
+# Packages an earlier run left in dist/<version>/. With --prebuilt PLATFORMS (packages from a
+# --build-only run elsewhere), each must match this checkout and is signed here.
 use_prebuilt() {  # platform file format [extra asset]
   local file="$dist/$2"
-  if [ ! -f "$file" ]; then skip "$1: no $2 in $dist"; return; fi
-  if [ -f "$file.sig" ]; then update_keys "$file.sig"; fi
+  if [ -n "$imported" ]; then
+    [ -f "$file" ] || die "$1: no $2 in $dist (copy it from the --build-only machine)"
+    check_build_info "$file"
+    sign_update "$file"
+  else
+    if [ ! -f "$file" ]; then skip "$1: no $2 in $dist"; return; fi
+    if [ -f "$file.sig" ]; then update_keys "$file.sig"; fi
+  fi
   add_package "$1" "$file" "$3"
   if [ -n "${4:-}" ]; then
     [ -f "$dist/$4" ] && artifacts+=("$dist/$4") || skip "$1: no $4 in $dist"
   fi
 }
 
+prebuilt_macos() { use_prebuilt macos-aarch64 "MicaSlicer_${version}_arm64.app.tar.gz" app "MicaSlicer_${version}_arm64.dmg"; }
+prebuilt_windows() { use_prebuilt windows-x86_64 "MicaSlicer_${version}_x64-setup.exe" nsis; }
+prebuilt_linux() { use_prebuilt linux-x86_64 "MicaSlicer_${version}_x86_64.AppImage" appimage; }
+
 if [ $prebuilt = 1 ]; then
   say "Using the packages in $dist"
-  want macos && use_prebuilt macos-aarch64 "MicaSlicer_${version}_arm64.app.tar.gz" app "MicaSlicer_${version}_arm64.dmg"
-  want windows && use_prebuilt windows-x86_64 "MicaSlicer_${version}_x64-setup.exe" nsis
-  want linux && use_prebuilt linux-x86_64 "MicaSlicer_${version}_x86_64.AppImage" appimage
+  want macos && prebuilt_macos
+  want windows && prebuilt_windows
+  want linux && prebuilt_linux
 else
-  want macos && { if [ "$(uname)" = Darwin ]; then build_macos; else skip "macOS: needs a Mac"; fi; }
-  want windows && build_windows
-  want linux && build_linux
+  for p in macos windows linux; do
+    want $p || continue
+    if is_imported $p; then
+      say "$p: the package in $dist (prebuilt)"
+      prebuilt_$p
+      continue
+    fi
+    case $p in
+      macos) if [ "$(uname)" = Darwin ]; then build_macos; else skip "macOS: needs a Mac"; fi ;;
+      windows) build_windows ;;
+      linux) build_linux ;;
+    esac
+  done
 fi
 [ ${#manifest_entries[@]} -gt 0 ] || die "no packages to release"
+
+if [ $build_only = 1 ]; then
+  say "Built (no update signatures, no manifest): $dist"
+  ls -lh "$dist" | sed -n '2,$p'
+  if [ -n "$skipped" ]; then printf '\nSkipped:%b\n' "$skipped"; fi
+  files=()
+  for a in "${artifacts[@]}"; do
+    files+=("$(uname -n):$a")
+    [ -f "$a.build" ] && files+=("$(uname -n):$a.build")
+  done
+  say "Next, on the machine that signs (same commit, ${head_commit:0:12}), from its repository:"
+  printf '  mkdir -p dist/%s && scp %s dist/%s/\n' "$version" "$(printf '%q ' "${files[@]}")" "$version"
+  printf '  scripts/release.sh --prebuilt %s%s\n' "$(printf '%s\n' "${manifest_entries[@]%%-*}" | paste -sd, -)" \
+    "$( [ $dry_run = 1 ] && echo ' --dry-run')$( [ "$profile" != release ] && echo " --profile $profile")"
+  exit 0
+fi
 
 # ---------------------------------------------------------------- latest.json
 say "Update manifest (packages on GitHub release v$version of $repo)"
