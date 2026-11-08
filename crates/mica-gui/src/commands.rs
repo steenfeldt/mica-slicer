@@ -881,7 +881,7 @@ impl App {
                     self.editor.object_mode = true;
                 }
             }
-            Command::AddModel => self.open_dialog(ctx),
+            Command::AddModel => self.add_dialog(ctx),
             Command::Arrange => self.arrange(),
             Command::ArrangeAll => self.arrange_all(),
             Command::SelectAll => {

@@ -365,6 +365,7 @@ impl App {
                     project: false,
                     custom_gcode: Default::default(),
                     mixes: None,
+                    added: false,
                 })
                 .map_err(|e| format!("The copy was not saved: {}: {e}", target.display()));
             let _ = tx.send(result);

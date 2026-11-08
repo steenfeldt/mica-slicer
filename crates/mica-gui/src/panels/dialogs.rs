@@ -42,6 +42,9 @@ impl App {
         if self.dialogs.unsaved.is_some() {
             self.unsaved_prompt(ctx);
         }
+        if self.dialogs.open_or_add.is_some() {
+            self.open_or_add_prompt(ctx);
+        }
         if self.dialogs.calibration.is_some() {
             self.calibration_dialog(ctx);
         }

@@ -46,6 +46,24 @@ screenshot of a five-plate U1 project showed an empty plate.
   PrusaSlicer project lists none), **Revert to my settings** and **OK**. Use, Update and
   Revert are undo steps.
 
+## Adding a project's models (2026-11-08)
+
+Opening a 3MF while the bed has objects asks first: **Open as project** (it replaces the open
+project, after the unsaved-changes prompt when there are changes) or **Add models**, which is
+what OrcaSlicer and PrusaSlicer call "import geometry only". On an empty bed a 3MF just opens.
+File › Add models… (⌘I), the bed's and the object list's Add model… always add, and drag and
+drop, the library and recent files go through the same question.
+
+Added models keep the open project's printer, settings, file and filament list. The file's
+plates come in after the open ones (`Plates::import`) with their names, locks, plate settings,
+prime tower positions and custom G-code; a project without plates (PrusaSlicer's one bed) gets
+one new plate named after the file. Objects keep their filament numbers (F2 in the file is F2
+here); filaments the file uses beyond the open project's are added with the file's colours.
+Mixed colors come along only when the open project has none, as for STLs. The file's settings
+are not offered, and one undo step ("Add models") takes it all back. Tests:
+`adding_a_project_puts_its_plates_after_the_open_ones`,
+`an_added_project_without_plates_gets_its_own_plate` (`save.rs`).
+
 ## Project values (2026-10-17)
 
 A 3MF project slices with the settings it was saved with. Before, Mica matched the project

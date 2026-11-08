@@ -1072,6 +1072,71 @@ impl App {
             None => {}
         }
     }
+
+    /// A project opened over a scene with objects: open it as the project (replacing this
+    /// one), add its models to this project on new plates, or cancel.
+    pub(crate) fn open_or_add_prompt(&mut self, ctx: &egui::Context) {
+        let Some(paths) = self.dialogs.open_or_add.clone() else {
+            return;
+        };
+        let p = crate::theme::of_ctx(ctx);
+        let name = paths
+            .iter()
+            .find(|p| is_project(std::slice::from_ref(*p)))
+            .and_then(|p| p.file_name())
+            .map_or(String::new(), |n| n.to_string_lossy().into_owned());
+        let mut choice: Option<&str> = None;
+        egui::Modal::new(egui::Id::unique("open-or-add")).show(ctx, |ui| {
+            ui.set_width(440.);
+            ui.add_space(4.);
+            ui.label(
+                egui::RichText::new(format!("Open “{name}”"))
+                    .font(crate::theme::semibold(14.))
+                    .color(p.text),
+            );
+            ui.add_space(4.);
+            ui.label(
+                egui::RichText::new(
+                    "Open it as the project (it replaces this one), or add its models to this \
+                     project on new plates? Added models keep this project's printer and settings.",
+                )
+                .font(crate::theme::sans(12.))
+                .color(p.muted_alt),
+            );
+            ui.add_space(12.);
+            ui.horizontal(|ui| {
+                if crate::panels::widgets::button(ui, "Cancel", true).clicked() {
+                    choice = Some("cancel");
+                }
+                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                    if crate::panels::widgets::primary_button(ui, "Open as project", true).clicked()
+                    {
+                        choice = Some("open");
+                    }
+                    if crate::panels::widgets::button(ui, "Add models", true)
+                        .on_hover_text(
+                            "Its plates come in after this project's; nothing here changes",
+                        )
+                        .clicked()
+                    {
+                        choice = Some("add");
+                    }
+                });
+            });
+            ui.add_space(4.);
+            if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                choice = Some("cancel");
+            }
+        });
+        if choice.is_some() {
+            self.dialogs.open_or_add = None;
+        }
+        match choice {
+            Some("open") => self.open_project(paths, ctx),
+            Some("add") => self.add_models(paths, ctx),
+            _ => {}
+        }
+    }
 }
 
 /// Whether a plate still equals its recorded state (no clones: compared field by field).
@@ -1537,8 +1602,16 @@ mod tests {
         a.overlays.print.insert("perimeters".into(), "4".into());
         a.settings_changed();
         assert!(a.is_modified());
-        // Opening a project over a modified scene asks first.
+        // Opening a project over a scene with objects asks whether to open or add it; opening
+        // it over a modified scene then asks about the changes.
         a.load(vec![models().join("plates-orca.3mf")], &ctx);
+        assert_eq!(
+            a.dialogs.open_or_add,
+            Some(vec![models().join("plates-orca.3mf")])
+        );
+        assert!(a.dialogs.unsaved.is_none());
+        a.dialogs.open_or_add = None;
+        a.open_project(vec![models().join("plates-orca.3mf")], &ctx);
         assert_eq!(
             a.dialogs.unsaved,
             Some(Pending::Open(vec![models().join("plates-orca.3mf")]))
@@ -1552,6 +1625,72 @@ mod tests {
         assert_eq!(b.default_flavour(), Flavour::Prusa);
         b.load(vec![models().join("cube20.stl")], &ctx);
         assert!(b.dialogs.unsaved.is_none(), "models import without asking");
+    }
+
+    /// Adding a project's models keeps the open project: its plates come in after the open
+    /// ones, the document, printer and settings stay, and one undo takes it back.
+    #[test]
+    fn adding_a_project_puts_its_plates_after_the_open_ones() {
+        let ctx = egui::Context::default();
+        let mut a = app(&ctx);
+        open(&mut a, "cube20.stl");
+        let printer = a.profiles.printer.clone();
+        let source = crate::app::load_files(
+            vec![models().join("plates-orca.3mf")],
+            &a.config,
+            a.bed.center(),
+        )
+        .unwrap();
+        let plates = source.plates.len();
+        assert!(plates > 1, "the fixture has several plates");
+        a.finish_load(Ok(source.added()));
+        assert_eq!(a.plates.len(), 1 + plates);
+        assert_eq!(
+            a.plates.plates[0].objects.len(),
+            1,
+            "the open plate is untouched"
+        );
+        assert!(a.plates.plates[1..].iter().any(|p| !p.objects.is_empty()));
+        assert_eq!(a.plates.current, 1, "the first added plate is shown");
+        assert!(
+            a.document.path.is_none(),
+            "still the open project's document"
+        );
+        assert!(a.document.original.is_none());
+        assert!(a.project.is_none(), "no offer to use the file's settings");
+        assert_eq!(a.profiles.printer, printer);
+        assert!(a.is_modified());
+        a.undo();
+        assert_eq!(a.plates.len(), 1);
+        assert_eq!(a.plates.current().objects.len(), 1);
+    }
+
+    /// A project without plates (PrusaSlicer's) added to a scene with objects gets a plate
+    /// of its own, named after the file; added to an empty scene it fills the empty plate.
+    #[test]
+    fn an_added_project_without_plates_gets_its_own_plate() {
+        let ctx = egui::Context::default();
+        let mut a = app(&ctx);
+        let add = |a: &mut App| {
+            let loaded = crate::app::load_files(
+                vec![models().join("painted-cube.3mf")],
+                &a.config,
+                a.bed.center(),
+            );
+            a.finish_load(loaded.map(crate::app::LoadedScene::added));
+        };
+        add(&mut a);
+        assert_eq!(a.plates.len(), 1);
+        assert!(!a.plates.current().objects.is_empty());
+        assert!(a.document.path.is_none());
+        open(&mut a, "cube20.stl");
+        let before = a.plates.current().objects.len();
+        add(&mut a);
+        assert_eq!(a.plates.len(), 2);
+        assert_eq!(a.plates.plates[0].objects.len(), before);
+        assert_eq!(a.plates.plates[1].name, "painted-cube");
+        assert!(!a.plates.plates[1].objects.is_empty());
+        assert_eq!(a.plates.current, 1);
     }
 
     /// A colour picked for a tool is an unsaved filament change that keeps the slice (its

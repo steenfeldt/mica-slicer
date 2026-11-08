@@ -285,7 +285,7 @@ pub const BINDINGS: &[Binding] = &[
     // File and window.
     b(Key::N, M::CMD, S::Global, A::NewProject, G::File, "New project"),
     b(Key::O, M::CMD, S::Global, A::Open, G::File, "Open a project or model"),
-    b(Key::I, M::CMD, S::Global, A::Import, G::File, "Add a model to the plate"),
+    b(Key::I, M::CMD, S::Global, A::Import, G::File, "Add models, or another project's plates, to this project"),
     b(Key::S, M::CMD, S::Global, A::Save, G::File, "Save the project"),
     b(Key::S, M::CMD_SHIFT, S::Global, A::SaveAs, G::File, "Save the project under a new name or format"),
     b(Key::R, M::CMD, S::Global, A::Slice, G::File, "Slice the current plate"),
@@ -828,7 +828,8 @@ impl App {
         }
         match act {
             A::NewProject => self.new_project(),
-            A::Open | A::Import => self.open_dialog(ctx),
+            A::Open => self.open_dialog(ctx),
+            A::Import => self.add_dialog(ctx),
             A::Save => self.save(),
             A::SaveAs => self.save_as(None),
             A::Slice => self.slice_current(ctx),

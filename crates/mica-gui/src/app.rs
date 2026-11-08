@@ -62,6 +62,19 @@ pub struct LoadedScene {
     pub custom_gcode: mica_core::custom_gcode::Info,
     /// The project's mixed colors and their file text.
     pub mixes: Option<(mica_core::full_spectrum::FullSpectrum, String)>,
+    /// A project's models added to the open project (its plates after the open ones),
+    /// not opened as the project itself.
+    pub added: bool,
+}
+
+impl LoadedScene {
+    /// The project's models for adding to the open project: the open project's printer,
+    /// settings and file stay.
+    pub fn added(mut self) -> Self {
+        self.added = self.project;
+        self.project = false;
+        self
+    }
 }
 
 /// Editor state that is not persisted.
@@ -124,6 +137,8 @@ pub struct Dialogs {
     pub save_project: Option<crate::save::SaveProject>,
     /// "Save changes to X?" and what waits for the answer.
     pub unsaved: Option<crate::save::Pending>,
+    /// "Open as project, or add its models?" for a project opened over a scene with objects.
+    pub open_or_add: Option<Vec<PathBuf>>,
     /// The open Calibrate card (one test at a time).
     pub calibration: Option<crate::calibration::Card>,
     /// The Preferences window (⌘,).
@@ -2373,8 +2388,39 @@ impl App {
         }
     }
 
+    /// "Add model…" (⌘I): models join the current plate, a project's models come in on new
+    /// plates; nothing is replaced.
+    pub(crate) fn add_dialog(&mut self, ctx: &egui::Context) {
+        if self.headless {
+            self.status = "Adding needs the file dialog; pass files in headless mode".into();
+            return;
+        }
+        if let Some(paths) = rfd::FileDialog::new()
+            .add_filter("Models and projects", &["stl", "3mf"])
+            .pick_files()
+        {
+            self.add_models(paths, ctx);
+        }
+    }
+
+    /// Adds files to the open project: STLs on the current plate, a project's plates after
+    /// the open ones (one new plate for a project without plates). The open project's
+    /// printer, settings and file stay.
+    pub(crate) fn add_models(&mut self, paths: Vec<PathBuf>, ctx: &egui::Context) {
+        let paths: Vec<PathBuf> = paths
+            .into_iter()
+            .filter(|p| !crate::gcode_doc::is_gcode_path(p))
+            .collect();
+        if paths.is_empty() {
+            return;
+        }
+        self.close_gcode();
+        self.load_files_now(paths, true, ctx);
+    }
+
     /// Opens files: a project (3MF) replaces the scene, after asking about unsaved changes;
-    /// models (STL) join the current plate.
+    /// over a scene with objects it first asks whether to open it or add its models. Models
+    /// (STL) join the current plate.
     pub(crate) fn load(&mut self, paths: Vec<PathBuf>, ctx: &egui::Context) {
         if self.loading.is_some() {
             return;
@@ -2398,6 +2444,16 @@ impl App {
             return;
         }
         self.close_gcode();
+        if crate::save::is_project(&paths) && !self.plates.is_blank() {
+            self.dialogs.open_or_add = Some(paths);
+            return;
+        }
+        self.open_project(paths, ctx);
+    }
+
+    /// Opens files as the project (a 3MF replaces the scene), asking about unsaved changes
+    /// first.
+    pub(crate) fn open_project(&mut self, paths: Vec<PathBuf>, ctx: &egui::Context) {
         if crate::save::is_project(&paths) && self.is_modified() && self.dialogs.unsaved.is_none() {
             self.dialogs.unsaved = Some(crate::save::Pending::Open(paths));
             return;
@@ -2407,6 +2463,11 @@ impl App {
 
     /// Loads without asking (the prompt's answer, or nothing to ask).
     pub(crate) fn load_now(&mut self, paths: Vec<PathBuf>, ctx: &egui::Context) {
+        self.load_files_now(paths, false, ctx);
+    }
+
+    /// Loads off the UI thread; `add` takes a project's models into the open project.
+    fn load_files_now(&mut self, paths: Vec<PathBuf>, add: bool, ctx: &egui::Context) {
         if self.loading.is_some() {
             return;
         }
@@ -2420,7 +2481,12 @@ impl App {
         self.loading = Some(rx);
         self.status = "Loading geometry…".into();
         std::thread::spawn(move || {
-            let _ = tx.send(load_files(paths, &config, center));
+            let loaded = load_files(paths, &config, center);
+            let _ = tx.send(if add {
+                loaded.map(LoadedScene::added)
+            } else {
+                loaded
+            });
             ctx.request_repaint();
         });
     }
@@ -2440,10 +2506,34 @@ impl App {
                     project,
                     custom_gcode,
                     mixes,
+                    added,
                 } = scene;
+                let mut plates = plates;
+                let mut objects = objects;
+                let mut custom_gcode = custom_gcode;
+                // A project without plates (PrusaSlicer's one bed) added to a scene with
+                // objects gets a plate of its own, named after its file.
+                if added && plates.is_empty() && !objects.is_empty() && !self.plates.is_blank() {
+                    let name = paths
+                        .first()
+                        .and_then(|p| p.file_stem())
+                        .map_or("Added".into(), |s| s.to_string_lossy().into_owned());
+                    let mut plate = crate::plates::Plate::new(name);
+                    plate.custom_gcode = std::mem::take(&mut custom_gcode);
+                    plates.push(plate);
+                    for (p, _) in &mut objects {
+                        *p = Some(0);
+                    }
+                }
                 let had_plates = !plates.is_empty();
+                let added_plates = plates.len();
+                let added_name = paths
+                    .first()
+                    .and_then(|p| p.file_name())
+                    .map_or(String::new(), |n| n.to_string_lossy().into_owned());
+                let filaments_before = self.filament_count();
                 if !objects.is_empty() || had_plates {
-                    self.record("Open");
+                    self.record(if added { "Add models" } else { "Open" });
                     if project {
                         // A project replaces the scene (as Open project does in OrcaSlicer and
                         // PrusaSlicer) and becomes the document.
@@ -2465,7 +2555,6 @@ impl App {
                             "The imported model's mixed colors were not added: this project already has its own",
                         );
                     }
-                    let mut plates = plates;
                     // Orca keeps the prime tower position per plate in the project settings.
                     if let Some(s) = &settings {
                         for (plate, tower) in plates.iter_mut().zip(&s.towers) {
@@ -2520,9 +2609,23 @@ impl App {
                 // Objects that name filaments beyond the project's (a file for a printer
                 // with more tools) keep them.
                 if self.fit_filaments_to_scene() {
+                    // Filaments the added models bring beyond the open project's keep their
+                    // colors from the file.
+                    if added && let Some(s) = &settings {
+                        let mut colours = vec![None; filaments_before];
+                        colours.extend(s.colours.iter().skip(filaments_before).cloned());
+                        crate::project::colour_overlay(&mut self.overlays, &colours);
+                    }
                     self.settings_changed();
                 }
-                if let Some(settings) = settings {
+                if added {
+                    let name = added_name;
+                    self.notify_info(match added_plates {
+                        0 => format!("Added the models of {name} to this plate"),
+                        1 => format!("Added {name} on a new plate"),
+                        n => format!("Added the {n} plates of {name}"),
+                    });
+                } else if let Some(settings) = settings {
                     self.offer_project_settings(settings);
                 }
                 if project {
@@ -3387,6 +3490,7 @@ impl App {
                         project: false,
                         custom_gcode: Default::default(),
                         mixes: None,
+                        added: false,
                     })
                     .map_err(|e| format!("Export failed: {}: {e}", path.display()));
                 drop(job);
@@ -4712,6 +4816,7 @@ pub fn load_files(
             config: loaded.config,
             custom_gcode: loaded.custom_gcode,
             mixes: loaded.full_spectrum,
+            added: false,
         }
     })
 }

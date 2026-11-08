@@ -61,7 +61,7 @@ free for it.
 |---|---|---|---|---|
 | ⌘N | New project | New project | New project | New project |
 | ⌘O | Open project | Open project | Open | Open |
-| ⌘I | Import model | Import STL/3MF/STEP/OBJ | — | **Add model** (file dialog) |
+| ⌘I | Import model | Import STL/3MF/STEP/OBJ | — | **Add models** (file dialog; a 3MF's plates are added after the open ones) |
 | ⌘S | Save project | Save project | Save | Save |
 | ⌘⇧S | Save project as | — | Save as | Save as |
 | ⌘⌥S | — | Save project as | — | — (Orca uses ⌘⇧S) |

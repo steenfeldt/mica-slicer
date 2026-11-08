@@ -249,6 +249,11 @@ pub fn menus(mac: bool) -> Vec<Menu> {
             "Start over with an empty plate and the printer's default profiles",
         ),
         item("Open…", A::Act(Act::Open)),
+        hinted(
+            "Add models…",
+            A::Act(Act::Import),
+            "Add models, or another project's plates, to this project",
+        ),
         Entry::Recent,
         Sep,
         hinted(
@@ -530,7 +535,7 @@ impl App {
         match action {
             Action::Act(act) => match act {
                 Act::NewProject => on(self.loading.is_none()),
-                Act::Open => on(!busy),
+                Act::Open | Act::Import => on(!busy),
                 Act::Save | Act::SaveAs => on(!busy && !self.plates.is_blank()),
                 Act::Slice => on(can_slice),
                 Act::SliceAll => on(can_slice_all),
@@ -596,6 +601,7 @@ impl App {
             Action::Act(act) => match act {
                 Act::NewProject => self.new_project(),
                 Act::Open => self.open_dialog(ctx),
+                Act::Import => self.add_dialog(ctx),
                 Act::Save => self.save(),
                 Act::SaveAs => self.save_as(None),
                 Act::Slice => self.slice_current(ctx),
@@ -1084,8 +1090,8 @@ mod tests {
             Some(Act::ArrangeAll)
         );
         assert_eq!(
-            keymap::lookup(Key::I, cmd, false, cx).map(|b| b.act),
-            Some(Act::Import),
+            keymap::lookup(Key::F, cmd, false, cx).map(|b| b.act),
+            Some(Act::SearchSettings),
             "not in a menu: still the keymap's"
         );
     }

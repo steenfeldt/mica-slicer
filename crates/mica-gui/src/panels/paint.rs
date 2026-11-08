@@ -508,7 +508,7 @@ impl App {
                     });
             });
         if add {
-            self.open_dialog(ctx);
+            self.add_dialog(ctx);
         }
         if leave {
             self.viewport.paint = None;
