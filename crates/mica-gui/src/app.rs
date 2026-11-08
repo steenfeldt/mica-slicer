@@ -4262,6 +4262,7 @@ impl App {
                     self.changed();
                 }
             }
+            Action::MoveEnded => self.drop_on_plate(),
             Action::Edited => self.end_gesture(),
             Action::AddPlate if !busy => {
                 self.record("Add plate");
@@ -4480,6 +4481,12 @@ impl App {
     }
 
     pub(crate) fn select_plate(&mut self, i: usize) {
+        self.select_plate_framed(i, true);
+    }
+
+    /// [`Self::select_plate`]; `frame` false keeps the camera where it is (a model dropped on
+    /// another plate: the view does not jump away from where it was put).
+    pub(crate) fn select_plate_framed(&mut self, i: usize, frame: bool) {
         if i < self.plates.len() && i != self.plates.current {
             self.plates.current = i;
             self.selected = None;
@@ -4491,7 +4498,9 @@ impl App {
                 self.view = Self::view_for(f);
             }
             self.refresh_warnings();
-            self.fit_current_plate(false);
+            if frame {
+                self.fit_current_plate(false);
+            }
         }
     }
 

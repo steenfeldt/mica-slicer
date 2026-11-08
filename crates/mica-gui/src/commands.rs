@@ -954,12 +954,59 @@ impl App {
             self.plates.current = current;
         }
         let target = target.min(self.plates.len() - 1);
+        self.transfer_selection(&sel, target, Vec3::ZERO, true);
+    }
+
+    /// After a drag that moved the selection on the bed (Prepare): when the selection's centre
+    /// ended up over another plate's bed, the selection moves to that plate, staying where it
+    /// was dropped, as OrcaSlicer gives a moved instance to the plate that contains it. Part of
+    /// the drag's undo step; a locked plate refuses the drop (the models stay where they are,
+    /// outside their own plate, as before).
+    pub(crate) fn drop_on_plate(&mut self) {
+        let sel = self.selection();
+        if sel.is_empty() || self.plates.len() < 2 || self.previewing() {
+            return;
+        }
+        let objects = &self.plates.current().objects;
+        let Some((min, max)) = sel
+            .iter()
+            .filter_map(|&i| objects.get(i))
+            .map(|o| o.bounds())
+            .reduce(|(a, b), (c, d)| (a.min(c), b.max(d)))
+        else {
+            return;
+        };
+        let current = self.plates.current;
+        let from = self.plates.offset(current);
+        let centre = ((min + max) / 2. + from).truncate();
+        let Some(target) = (0..self.plates.len())
+            .find(|&i| self.bed.contains(centre - self.plates.offset(i).truncate()))
+        else {
+            return;
+        };
+        if target == current {
+            return;
+        }
+        if self.plates.plate(target).locked {
+            self.status = format!(
+                "{} is locked; the model stays on {}",
+                self.plates.plate(target).name,
+                self.plates.plate(current).name
+            );
+            return;
+        }
+        self.transfer_selection(&sel, target, from - self.plates.offset(target), false);
+    }
+
+    /// Moves the objects `sel` of the current plate to plate `target`, shifted by `shift`
+    /// (plate-local mm), and selects them there. Object ids stay unique per plate.
+    fn transfer_selection(&mut self, sel: &[usize], target: usize, shift: Vec3, frame: bool) {
         let mut moved = vec![];
         for &i in sel.iter().rev() {
-            let o = self.plates.current_mut().objects.remove(i);
+            let mut o = self.plates.current_mut().objects.remove(i);
+            o.position += shift;
             moved.push(o);
         }
-        // Object ids stay unique per plate.
         let base = self.plates.plates[target]
             .objects
             .iter()
@@ -978,9 +1025,9 @@ impl App {
         self.plates.plates[target].invalidate();
         self.select(None, false);
         self.changed();
-        self.select_plate(target);
+        self.select_plate_framed(target, frame);
         let n = self.plates.plate(target).objects.len();
-        let moved_n = ids.len();
+        let moved_n = sel.len();
         self.select_many(&(n - moved_n..n).collect::<Vec<_>>(), false);
     }
 

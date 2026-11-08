@@ -286,6 +286,9 @@ pub enum Action {
     },
     /// A drag began: the editor snapshots the scene for one undo step.
     GestureBegin(&'static str),
+    /// A drag that moved the selection on the bed ended (before [`Action::Edited`]): the
+    /// editor moves it to the plate it was dropped on, if that is another plate.
+    MoveEnded,
     /// A drag ended; the editor commits the undo step (if anything changed).
     Edited,
     /// A drag was cancelled with Esc; the editor restores the state from `GestureBegin`.
@@ -1687,6 +1690,12 @@ impl Viewport {
         }
         let mut finished_box: Option<(Rect, bool)> = None;
         if response.drag_stopped() {
+            if matches!(
+                self.drag,
+                Drag::Object { armed: true, .. } | Drag::Gizmo { .. }
+            ) {
+                actions.push(Action::MoveEnded);
+            }
             if self.dragging() {
                 actions.push(Action::Edited);
             }

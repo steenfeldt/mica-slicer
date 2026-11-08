@@ -404,3 +404,99 @@ fn the_orbit_pivot_follows_the_preference() {
         "the selection is not the pivot"
     );
 }
+
+/// Two plates, the cube on the first, the camera far enough out to show both beds.
+fn two_plates() -> Editor {
+    let mut e = Editor::new();
+    e.app.plates.add();
+    e.app.select_plate(0);
+    for _ in 0..30 {
+        e.frame(vec![]);
+    }
+    let bed = e.app.bed.center();
+    let mid = (bed + (e.app.plates.offset(1) + bed)) * 0.5;
+    e.app.viewport.camera = crate::scene::camera::Camera::looking_at(mid, 900.);
+    for _ in 0..5 {
+        e.frame(vec![]);
+    }
+    e
+}
+
+/// Press on the cube, release where the same point of it would be on plate `to`.
+fn drag_to_plate(e: &mut Editor, to: usize) {
+    let (min, max) = e.app.plates.current().objects[0].bounds();
+    let grab = ((min + max) * 0.5).with_z(max.z - 0.5);
+    let from = e.on_screen(0);
+    let uv = e.uv(grab + e.app.plates.offset(to) - e.app.plates.offset(0));
+    let rect = e.app.viewport_rect;
+    let target = egui::pos2(
+        rect.left() + uv.x * rect.width(),
+        rect.top() + uv.y * rect.height(),
+    );
+    assert!(rect.contains(target), "plate {} is on screen", to + 1);
+    e.drag(from, target, 12, 0.);
+}
+
+#[test]
+fn a_model_dropped_on_another_plate_moves_there_in_one_undo_step() {
+    let mut e = two_plates();
+    let before = e.position(0);
+    let undo = e.app.undo.len();
+    let target = e.app.viewport.camera.target;
+    drag_to_plate(&mut e, 1);
+    assert_eq!(
+        e.app.plates.current, 1,
+        "the plate it was dropped on is current"
+    );
+    assert!(e.app.plates.plate(0).objects.is_empty());
+    assert_eq!(e.app.plates.plate(1).objects.len(), 1);
+    let after = e.app.plates.plate(1).objects[0].position;
+    assert!(
+        (after - before).truncate().length() < 2.,
+        "it stays where it was dropped, now in plate 2's coordinates: {before} → {after}"
+    );
+    assert_eq!(
+        e.app.selection(),
+        vec![0],
+        "still selected, on its new plate"
+    );
+    assert_eq!(
+        e.app.viewport.camera.target, target,
+        "the view does not jump"
+    );
+    assert_eq!(
+        e.app.undo.len(),
+        undo + 1,
+        "the drag and the plate change: one step"
+    );
+    assert_eq!(e.app.undo.undo_label(), Some("Move"));
+    e.app.undo();
+    assert_eq!(e.app.plates.current, 0);
+    assert_eq!(e.app.plates.plate(0).objects.len(), 1);
+    assert!(e.app.plates.plate(1).objects.is_empty());
+    assert_eq!(e.position(0), before);
+}
+
+#[test]
+fn a_locked_plate_refuses_a_dropped_model() {
+    let mut e = two_plates();
+    e.app.plates.plates[1].locked = true;
+    let before = e.position(0);
+    drag_to_plate(&mut e, 1);
+    assert_eq!(e.app.plates.current, 0);
+    assert_eq!(
+        e.app.plates.plate(0).objects.len(),
+        1,
+        "it stays on its own plate"
+    );
+    assert!(e.app.plates.plate(1).objects.is_empty());
+    assert!(
+        (e.position(0) - before).length() > 5.,
+        "where it was dropped, outside its bed"
+    );
+    assert!(
+        e.app.status.contains("locked"),
+        "says why: {}",
+        e.app.status
+    );
+}
