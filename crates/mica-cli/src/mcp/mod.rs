@@ -23,7 +23,7 @@ pub mod tools;
 
 pub use tools::{
     AddShapeArgs, ClearArgs, ColorsArgs, CreateMixArgs, DirectionArgs, HeightBandArgs, OpenArgs,
-    PaintAtArgs, PartToolArgs, PickArgs, RenderArgs, SaveArgs,
+    PaintAtArgs, PartToolArgs, PickArgs, RemapToolArgs, RenderArgs, SaveArgs,
 };
 
 use live::Content;
@@ -62,6 +62,8 @@ parts (set_part_tool) -> render_view again to check -> undo mistakes -> slice_su
 save_project (a new .3mf in the user's folders; without a path it goes to the Desktop). add_shape
 puts a ready-made model on the plate (the 3DBenchy, a cube, cylinder, sphere, ...). Tools are
 numbered from 1 like the printer's slots; tool 0 erases paint back to the part's own tool.
+When a color the project uses is loaded in another slot, remap_tool moves (or swaps) everything
+that prints with one tool to another instead of repainting.
 create_mix finds a target color from loaded filaments with ColorMix. Its virtual tool number
 works with every paint/assignment tool. Mixed colors alternate physical tools per layer and
 add print time. Report colors by name; hex fields are machine-readable data.
@@ -348,6 +350,18 @@ impl MicaMcp {
                 result["next"] = json!("render_view to look at it");
                 Ok(vec![tools::text(&result)])
             }
+            "remap_tool" => {
+                let a: RemapToolArgs = tools::parse(tool, args)?;
+                let scene = s.scene()?;
+                let swap = a.swap.unwrap_or(false);
+                let (msg, changed) = scene
+                    .edit(&format!("remap_tool {} {}", a.from, a.to), |sc| {
+                        sc.remap_tool(a.from, a.to, swap)
+                    })?;
+                Ok(vec![tools::text(
+                    &json!({"changed": changed, "result": msg, "undo_steps": scene.undo_steps()}),
+                )])
+            }
             "slice_summary" => Ok(vec![tools::text(&s.scene()?.slice_summary()?)]),
             "save_project" => {
                 let a: SaveArgs = tools::parse(tool, args)?;
@@ -491,6 +505,16 @@ impl MicaMcp {
         Parameters(a): Parameters<PartToolArgs>,
     ) -> Result<CallToolResult, McpError> {
         self.run("set_part_tool", to_args(&a)).await
+    }
+
+    #[tool(
+        description = "Move what prints with one physical tool to another, for the whole project: objects and parts, painted areas, mixed colors, layer tool and color changes and the support and wipe tower tools. swap: true trades the two tools; otherwise everything on `from` moves to `to`. The loaded filaments stay in their slots, so the parts take the other slot's color (use it when the printer has a color in another slot than the project). One undo step."
+    )]
+    async fn remap_tool(
+        &self,
+        Parameters(a): Parameters<RemapToolArgs>,
+    ) -> Result<CallToolResult, McpError> {
+        self.run("remap_tool", to_args(&a)).await
     }
 
     #[tool(

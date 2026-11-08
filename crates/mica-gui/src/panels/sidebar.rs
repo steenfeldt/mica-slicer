@@ -955,7 +955,7 @@ impl App {
         self.mixes.draft = mix_draft;
         self.apply_mix_acts(mix_acts);
         if let Some(r) = remap
-            && let Err(e) = self.remap_tool(r)
+            && let Err(e) = self.remap_tool(r, None)
         {
             self.notify_error("Tools not changed", e);
         }

@@ -166,6 +166,18 @@ pub struct PartToolArgs {
     pub tool: u32,
 }
 
+/// The `remap_tool` tool's arguments.
+#[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
+pub struct RemapToolArgs {
+    /// The physical tool whose parts, paint and settings move, 1-based.
+    pub from: u32,
+    /// The physical tool they move to, 1-based.
+    pub to: u32,
+    /// true: the two tools trade places; false (default): everything on `from` moves to `to`
+    /// and `from` is left unused.
+    pub swap: Option<bool>,
+}
+
 #[derive(Debug, Default, Serialize, Deserialize, JsonSchema)]
 pub struct ClearArgs {
     /// Object, 1-based; omit to clear every object.

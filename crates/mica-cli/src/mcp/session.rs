@@ -149,7 +149,28 @@ struct Snapshot {
     part_settings: Vec<Vec<Settings>>,
     colors: Vec<[u8; 3]>,
     mixes_json: Option<String>,
+    custom_gcodes: std::collections::BTreeMap<u32, mica_core::custom_gcode::Info>,
+    /// The print settings that name a tool ([`PRINT_TOOL_KEYS`]).
+    print_tools: Vec<Option<String>>,
 }
+
+/// Settings of objects and parts that name a tool (one based, 0 for the default).
+const TOOL_KEYS: [&str; 7] = [
+    "extruder",
+    "perimeter_extruder",
+    "infill_extruder",
+    "solid_infill_extruder",
+    "support_material_extruder",
+    "support_material_interface_extruder",
+    "wipe_tower_extruder",
+];
+
+/// The print settings that name a tool (one based, 0 for the current one).
+const PRINT_TOOL_KEYS: [&str; 3] = [
+    "support_material_extruder",
+    "support_material_interface_extruder",
+    "wipe_tower_extruder",
+];
 
 pub struct Scene {
     pub source: PathBuf,
@@ -460,6 +481,11 @@ impl Scene {
                 .collect(),
             colors: self.colors.clone(),
             mixes_json: self.project.full_spectrum_json.clone(),
+            custom_gcodes: self.project.custom_gcodes.clone(),
+            print_tools: PRINT_TOOL_KEYS
+                .iter()
+                .map(|k| self.config.raw(k).map(|v| v.to_string()))
+                .collect(),
         }
     }
 
@@ -471,6 +497,8 @@ impl Scene {
             && now.part_settings == s.part_settings
             && now.colors == s.colors
             && now.mixes_json == s.mixes_json
+            && now.custom_gcodes == s.custom_gcodes
+            && now.print_tools == s.print_tools
     }
 
     /// Runs one edit as one undo step; an edit that changed nothing leaves no step.
@@ -535,6 +563,12 @@ impl Scene {
             }
         }
         self.project.full_spectrum_json = s.mixes_json;
+        self.project.custom_gcodes = s.custom_gcodes;
+        for (k, v) in PRINT_TOOL_KEYS.iter().zip(s.print_tools) {
+            if let Some(v) = v {
+                let _ = self.config.set_raw(k, &v);
+            }
+        }
         self.set_colors(s.colors);
     }
 
@@ -1052,6 +1086,98 @@ impl Scene {
                 ))
             }
         }
+    }
+
+    /// `remap_tool`: what prints with physical tool `from` prints with `to` (one based), and
+    /// with `swap` the other way round too: object and part tools, painted areas, mixed
+    /// colors' components, layer tool and color changes and the print settings' support and
+    /// wipe tower tools, as the window's Filaments card does (`mica-gui` `tool_remap.rs`). The
+    /// slots' filaments stay.
+    pub fn remap_tool(&mut self, from: u32, to: u32, swap: bool) -> Result<String, String> {
+        let tools = self.tools();
+        let (a, b) = (from as usize, to as usize);
+        if a == b || !(1..=tools).contains(&a) || !(1..=tools).contains(&b) {
+            return Err(format!(
+                "from and to must be two different physical tools 1..={tools}"
+            ));
+        }
+        let mut map = std::collections::BTreeMap::from([(a, b)]);
+        if swap {
+            map.insert(b, a);
+        }
+        let one = |t: usize| map.get(&t).copied().unwrap_or(t);
+        let mut mixes = self.mixes()?.extruders().to_vec();
+        for (k, m) in mixes.iter_mut().enumerate() {
+            for c in &mut m.components {
+                c.extruder = one(c.extruder);
+            }
+            let mut used: Vec<usize> = m.components.iter().map(|c| c.extruder).collect();
+            used.sort_unstable();
+            used.dedup();
+            if used.len() < m.components.len() {
+                let name = m
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("mixed color {}", k + 1));
+                return Err(format!(
+                    "{name} mixes T{a} and T{b}: it would mix T{b} with itself; change it first"
+                ));
+            }
+        }
+        let mixes = FullSpectrum::new(mixes, tools)?;
+        let settings = |s: &mut Settings| {
+            for k in TOOL_KEYS {
+                if let Some(v) = s.get_mut(k)
+                    && let Ok(t) = v.trim().parse::<usize>()
+                    && map.contains_key(&t)
+                {
+                    *v = one(t).to_string();
+                }
+            }
+        };
+        let states = |s: u8| map.get(&usize::from(s)).map_or(s, |t| *t as u8);
+        for o in 0..self.project.objects.len() {
+            settings(&mut self.project.objects[o].settings);
+            for p in 0..self.project.objects[o].parts.len() {
+                let part = &mut self.project.objects[o].parts[p];
+                settings(&mut part.settings);
+                if !part.painting.material.is_empty() {
+                    let mapped = part.painting.material.map_states(states);
+                    if mapped != part.painting.material {
+                        part.painting.material = mapped;
+                        self.selectors[o][p] = self.build_selector(o, p);
+                    }
+                }
+            }
+        }
+        self.set_mixes(&mixes)?;
+        for info in self.project.custom_gcodes.values_mut() {
+            for item in &mut info.items {
+                if map.contains_key(&item.extruder) {
+                    item.extruder = one(item.extruder);
+                    if item.kind == mica_core::custom_gcode::Kind::ToolChange
+                        && let Some(c) = self.colors.get(item.extruder - 1)
+                    {
+                        item.color = fdm_mixer::rgb_to_hex(*c);
+                    }
+                }
+            }
+        }
+        for k in PRINT_TOOL_KEYS {
+            if let Some(t) = self
+                .config
+                .raw(k)
+                .and_then(|v| v.trim().parse::<usize>().ok())
+                && map.contains_key(&t)
+            {
+                let _ = self.config.set_raw(k, &one(t).to_string());
+            }
+        }
+        Ok(if swap {
+            format!("T{a} and T{b} swapped: what printed with one prints with the other")
+        } else {
+            format!("everything that printed with T{a} now prints with T{b}; T{a} is unused")
+        })
     }
 
     pub fn clear_paint(

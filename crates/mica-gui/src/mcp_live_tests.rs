@@ -295,6 +295,15 @@ fn live_paint_matches_headless_and_is_one_undo_step() {
     );
     live.json("set_filament_colors", json!({"colors": ["white", "red"]}));
     assert_eq!(live.app.tool_colours()[1], [0xD3, 0x2F, 0x2F]);
+    // remap_tool runs the Filaments card's swap, as an AI step.
+    live.json("remap_tool", json!({"from": 2, "to": 1, "swap": true}));
+    assert_eq!(live.app.plates.current().objects[0].tools.0[0], Some(0));
+    assert_eq!(
+        live.app.undo.undo_label(),
+        Some(format!("{UNDO_PREFIX}remap tool").as_str())
+    );
+    live.json("undo", Value::Null);
+    assert_eq!(live.app.plates.current().objects[0].tools.0[0], Some(1));
     assert_eq!(
         live.app.undo.undo_label(),
         Some(format!("{UNDO_PREFIX}filament colors").as_str())

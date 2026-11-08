@@ -182,6 +182,7 @@ async fn ai_paints_the_benchy_for_the_u1() {
         "paint_by_direction",
         "set_part_tool",
         "set_filament_colors",
+        "remap_tool",
         "clear_paint",
         "undo",
         "slice_summary",
@@ -528,6 +529,21 @@ async fn bands_directions_tools_and_clearing() {
     assert_eq!(info["objects"][0]["parts"][0]["tool"], 4);
     assert!(tool_pct(&info, 1) < 1e-9);
     assert!(err(&call(&client, "set_part_tool", json!({"tool": 5})).await).contains("1..=4"));
+    // Tools 2 and 4 trade: the part's own tool and the paint follow; undo puts them back.
+    ok(&call(
+        &client,
+        "remap_tool",
+        json!({"from": 2, "to": 4, "swap": true}),
+    )
+    .await);
+    let info = ok(&call(&client, "scene_info", json!({})).await);
+    assert_eq!(info["objects"][0]["parts"][0]["tool"], 2);
+    assert!((tool_pct(&info, 4) - 100. * 4. / 18.).abs() < 0.5, "{info}");
+    assert!((tool_pct(&info, 3) - 100. / 6.).abs() < 0.2, "{info}");
+    assert!(err(&call(&client, "remap_tool", json!({"from": 2, "to": 2})).await).contains("1..=4"));
+    ok(&call(&client, "undo", json!({})).await);
+    let info = ok(&call(&client, "scene_info", json!({})).await);
+    assert_eq!(info["objects"][0]["parts"][0]["tool"], 4);
     // Sides by direction, then clear everything; undo brings the paint back.
     ok(&call(
         &client,

@@ -48,8 +48,13 @@ impl ToolRemap {
 }
 
 impl App {
-    /// Applies `remap` to the whole project as one undo step.
-    pub(crate) fn remap_tool(&mut self, remap: ToolRemap) -> Result<(), String> {
+    /// Applies `remap` to the whole project as one undo step (named `undo_label`, else after
+    /// the action).
+    pub(crate) fn remap_tool(
+        &mut self,
+        remap: ToolRemap,
+        undo_label: Option<&str>,
+    ) -> Result<(), String> {
         let (ToolRemap::Swap(a, b) | ToolRemap::Move(a, b)) = remap;
         let physical = self.tool_count();
         if a == b || a >= physical || b >= physical {
@@ -88,7 +93,7 @@ impl App {
             })
             .collect();
 
-        self.record(remap.label());
+        self.record(undo_label.unwrap_or(remap.label()));
         self.renumber_tools(&map);
         self.mixes.list = mixes;
         if let Some(d) = &mut self.mixes.draft {
@@ -213,7 +218,7 @@ mod tests {
             .custom_gcode
             .items
             .push(Item::new(6., Kind::ColorChange, 2));
-        app.remap_tool(ToolRemap::Swap(0, 2)).unwrap();
+        app.remap_tool(ToolRemap::Swap(0, 2), None).unwrap();
 
         let o = &app.plates.current().objects[0];
         assert_eq!(&o.tools.0[..4], [Some(2), Some(2), Some(2), Some(0)]);
@@ -252,7 +257,7 @@ mod tests {
             o.painting = Arc::new(painting(2, 4));
             o.painting_edited = true;
         }
-        app.remap_tool(ToolRemap::Move(1, 3)).unwrap();
+        app.remap_tool(ToolRemap::Move(1, 3), None).unwrap();
         let o = &app.plates.current().objects[0];
         assert_eq!(&o.tools.0[..3], [Some(3); 3]);
         assert_eq!(painted(&app), painting(4, 4));
@@ -267,16 +272,16 @@ mod tests {
         };
         app.add_mix_spec("1:50,2:50").unwrap();
         app.plates.current_mut().objects[0].set_tool(0);
-        let e = app.remap_tool(ToolRemap::Move(0, 1)).unwrap_err();
+        let e = app.remap_tool(ToolRemap::Move(0, 1), None).unwrap_err();
         assert!(e.contains("with itself"), "{e}");
         assert_eq!(
             app.plates.current().objects[0].tools.0[0],
             Some(0),
             "nothing changed"
         );
-        app.remap_tool(ToolRemap::Swap(0, 1)).unwrap();
+        app.remap_tool(ToolRemap::Swap(0, 1), None).unwrap();
         assert!(
-            app.remap_tool(ToolRemap::Swap(0, 5)).is_err(),
+            app.remap_tool(ToolRemap::Swap(0, 5), None).is_err(),
             "T6 is a mix, not a tool"
         );
     }

@@ -527,6 +527,7 @@ impl App {
             "undo" => self.mcp_undo(),
             "save_project" => self.mcp_save(args),
             "add_shape" => self.mcp_add_shape(args),
+            "remap_tool" => self.mcp_remap_tool(args),
             "open" => match self.mcp_open(args, ctx) {
                 Ok(job) => {
                     self.mcp.job = Some(job(incoming));
@@ -1058,6 +1059,36 @@ impl App {
             "object": object,
             "plate": self.plates.current + 1,
             "size_mm": size,
+            "undo_step": label,
+            "next": "render_view to look at it",
+        }))])
+    }
+
+    /// `remap_tool`: the Filaments card's Swap with / Move everything to.
+    fn mcp_remap_tool(&mut self, args: Value) -> Result<Vec<Content>, String> {
+        use crate::tool_remap::ToolRemap;
+        let a: tools::RemapToolArgs = tools::parse("remap_tool", args)?;
+        if self.viewing_gcode() {
+            return Err("the Mica window shows a G-code file; ask the user to close it".into());
+        }
+        let tools = self.tool_count();
+        let (from, to) = (a.from as usize, a.to as usize);
+        if from == to || !(1..=tools).contains(&from) || !(1..=tools).contains(&to) {
+            return Err(format!(
+                "from and to must be two different physical tools 1..={tools}"
+            ));
+        }
+        let swap = a.swap.unwrap_or(false);
+        let remap = if swap {
+            ToolRemap::Swap(from - 1, to - 1)
+        } else {
+            ToolRemap::Move(from - 1, to - 1)
+        };
+        let label = format!("{UNDO_PREFIX}remap tool");
+        self.remap_tool(remap, Some(&label))?;
+        Ok(vec![tools::text(&json!({
+            "changed": true,
+            "result": self.status,
             "undo_step": label,
             "next": "render_view to look at it",
         }))])
