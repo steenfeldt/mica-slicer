@@ -184,13 +184,32 @@ impl Host {
                         if stop.load(Ordering::SeqCst) {
                             return;
                         }
-                        let Ok(stream) = stream else {
+                        let Ok(mut stream) = stream else {
                             continue;
                         };
-                        let (tx, clients, ctx) = (tx.clone(), clients.clone(), ctx.clone());
-                        let _ = std::thread::Builder::new()
+                        // A bounded number of connections, each with its own thread.
+                        if clients.load(Ordering::SeqCst) >= live::MAX_CONNECTIONS {
+                            use std::io::Write;
+                            let busy = Response::new(
+                                0,
+                                Err(format!(
+                                    "the Mica window already serves {} connections; close one \
+                                     and retry",
+                                    live::MAX_CONNECTIONS
+                                )),
+                            );
+                            let _ = stream.write_all(live::encode(&busy).as_bytes());
+                            continue;
+                        }
+                        clients.fetch_add(1, Ordering::SeqCst);
+                        let (tx, counted, ctx) = (tx.clone(), clients.clone(), ctx.clone());
+                        if std::thread::Builder::new()
                             .name("mica-mcp-client".into())
-                            .spawn(move || serve(stream, &tx, &clients, &ctx));
+                            .spawn(move || serve(stream, &tx, &counted, &ctx))
+                            .is_err()
+                        {
+                            clients.fetch_sub(1, Ordering::SeqCst);
+                        }
                     }
                 })
                 .map_err(|e| format!("starting Mica MCP: {e}"))?;
@@ -238,7 +257,13 @@ impl Host {
     }
 }
 
-/// One connection: requests go to the UI thread, the thread waits for each answer.
+/// How long a connection waits for the window to answer one request (opening or slicing a big
+/// project takes minutes); then the caller gets an error instead of waiting forever.
+#[cfg(unix)]
+const ANSWER_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+
+/// One connection (counted in `clients` by the accepting thread): requests go to the UI
+/// thread, the thread waits for each answer.
 #[cfg(unix)]
 fn serve(
     stream: std::os::unix::net::UnixStream,
@@ -253,7 +278,6 @@ fn serve(
             self.1.request_repaint();
         }
     }
-    clients.fetch_add(1, Ordering::SeqCst);
     let _count = Count(clients, ctx);
     ctx.request_repaint();
     live::serve_connection(stream, |request| {
@@ -263,9 +287,19 @@ fn serve(
             return Response::new(id, Err("the Mica window is closing".into()));
         }
         ctx.request_repaint();
-        answer
-            .recv()
-            .unwrap_or_else(|_| Response::new(id, Err("the Mica window is closing".into())))
+        match answer.recv_timeout(ANSWER_TIMEOUT) {
+            Ok(r) => r,
+            Err(mpsc::RecvTimeoutError::Timeout) => Response::new(
+                id,
+                Err(format!(
+                    "the Mica window did not answer within {} minutes",
+                    ANSWER_TIMEOUT.as_secs() / 60
+                )),
+            ),
+            Err(mpsc::RecvTimeoutError::Disconnected) => {
+                Response::new(id, Err("the Mica window is closing".into()))
+            }
+        }
     });
 }
 

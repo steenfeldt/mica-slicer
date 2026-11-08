@@ -1522,6 +1522,20 @@ impl App {
                 .color(if store_ok { p.muted } else { p.warn_text }),
             );
         });
+        // The key or password goes with every request: say so when that is plain HTTP.
+        if printer.kind != Kind::PrusaConnect
+            && (has_saved || !secret.trim().is_empty())
+            && unencrypted(&printer.address)
+        {
+            ui.horizontal(|ui| {
+                ui.add_space(96.);
+                ui.label(
+                    egui::RichText::new(UNENCRYPTED_NOTE)
+                        .font(theme::sans(11.))
+                        .color(p.muted),
+                );
+            });
+        }
         field(ui, "Profile", &mut |ui| {
             let current = printer
                 .profile
@@ -1652,6 +1666,22 @@ impl App {
                     *camera_secret_touched = true;
                 }
             });
+            if (printer.camera_username.is_some()
+                || has_camera_secret
+                || !camera_secret.trim().is_empty())
+                && unencrypted(printer.camera.as_deref().unwrap_or(""))
+            {
+                ui.horizontal(|ui| {
+                    ui.add_space(96.);
+                    ui.label(
+                        egui::RichText::new(
+                            "The camera login is sent unencrypted on your network (not https://).",
+                        )
+                        .font(theme::sans(11.))
+                        .color(p.muted),
+                    );
+                });
+            }
         }
         if let Some(e) = &self.printers_editor.error {
             warn_card(ui, "Not saved", e);
@@ -1778,6 +1808,17 @@ fn file_header_hint(printer: &Printer) -> &'static str {
     }
 }
 
+/// The note under a key or password that travels as plain HTTP.
+const UNENCRYPTED_NOTE: &str = "Sent unencrypted on your network (HTTP): anyone on it can read \
+     the key. Use an https:// address if the printer offers one.";
+
+/// Whether `address` (a printer address, or a camera URL) is reached without TLS: a bare
+/// host is `http://`, and so are `ws://`, `rtsp://`.
+pub(crate) fn unencrypted(address: &str) -> bool {
+    let a = address.trim().to_ascii_lowercase();
+    !(a.starts_with("https://") || a.starts_with("wss://") || a.starts_with("rtsps://"))
+}
+
 /// `scheme://user:pass@host/…` → (`scheme://host/…`, user, password); `None` when the URL
 /// carries no login.
 fn split_credentials(url: &str) -> Option<(String, String, Option<String>)> {
@@ -1806,6 +1847,22 @@ fn where_kept(printer: &Printer, store: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plain_addresses_and_camera_urls_are_unencrypted() {
+        for a in [
+            "u1.local:7125",
+            "192.0.2.50",
+            "http://xl",
+            "rtsp://cam/s",
+            "ws://u1",
+        ] {
+            assert!(unencrypted(a), "{a}");
+        }
+        for a in ["https://xl.example", " HTTPS://xl", "rtsps://cam/s"] {
+            assert!(!unencrypted(a), "{a}");
+        }
+    }
 
     #[test]
     fn camera_urls_lose_their_login_to_separate_fields() {

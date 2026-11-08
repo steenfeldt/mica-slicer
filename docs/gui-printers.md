@@ -109,6 +109,11 @@ backend protocol logic stays in `mica-printhost` and is registered there.
   tools that nothing uses; the later ones move down. Sync and the printer comparison work per
   tool of the current plate: the spool on T3 is compared with (and synced into) the filament
   the plate prints there. Design: [project-conversion.md](project-conversion.md#filaments-and-tools-built-first).
+- **Unencrypted connections** (`printers.rs` `unencrypted`): most printers only speak HTTP on
+  the LAN (Moonraker, PrusaLink, the U1). An address without `https://` that has a key or
+  password shows "Sent unencrypted on your network (HTTP)…" under the field, and a camera
+  login on an `http://` or `rtsp://` URL says the same; an `https://` address is used as given
+  (the U1's WebSocket start then takes the HTTP route).
 - **File header** (Moonraker and U1 printers, `printhost/file_header.rs`): see
   [gcode-config-identity.md](gcode-config-identity.md#per-printer-file-header).
 

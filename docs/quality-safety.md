@@ -173,6 +173,12 @@ wall/raft/skin counts and a 100,000-layer allocation limit before geometry work.
 receive the same validation. Configuration numeric parsing rejects NaN/infinity. CLI unknown
 setting names error while known Mica tower coordinates remain supported.
 
+3MF archives come from anywhere, so reading one has budgets no real project reaches
+(`threemf::MAX_*`): at most 2 GiB compressed (refused before reading), 65,536 entries, 256 MiB
+per settings, list or metadata entry unpacked, and 50 million vertices and 50 million triangles
+for all meshes together (counted across the parallel part workers). A crafted archive is
+refused with a message instead of exhausting memory or time.
+
 CLI preflight reports open/non-manifold edges (an edge on an odd number of triangles; a closed
 surface touching itself along an edge, on 4, 6, ..., is only a note), potentially intersecting shell bounds, sub-mm
 models, partially below-bed models and zero-walls/zero-infill settings. It rejects out-of-volume

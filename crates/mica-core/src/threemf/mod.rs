@@ -339,6 +339,46 @@ fn append_mesh(
 /// Where Mica keeps custom texture images in a project (lower case).
 pub(crate) const TEXTURES: &str = "metadata/mica/textures/";
 
+// A 3MF comes from anywhere (a download, a mail): budgets that no real project reaches, so a
+// crafted archive cannot exhaust memory or time. A project's densest models have a few million
+// triangles; its settings and lists are a few megabytes.
+/// Largest archive read (compressed).
+pub(crate) const MAX_ARCHIVE: u64 = 2 << 30;
+/// Most entries in an archive.
+pub(crate) const MAX_ENTRIES: usize = 65_536;
+/// Largest settings, list or metadata entry, unpacked.
+pub(crate) const MAX_TEXT: u64 = 256 << 20;
+/// Most vertices, and most triangles, of all of a project's meshes together.
+pub(crate) const MAX_GEOMETRY: usize = 50_000_000;
+
+/// A text entry of at most [`MAX_TEXT`] bytes, unpacked.
+pub(crate) fn read_text(file: impl Read, name: &str) -> Result<String, ThreeMfError> {
+    read_text_within(file, name, MAX_TEXT)
+}
+
+fn read_text_within(file: impl Read, name: &str, limit: u64) -> Result<String, ThreeMfError> {
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    if bytes.len() as u64 > limit {
+        return Err(invalid(format!(
+            "{name} is larger than {} MiB unpacked",
+            limit >> 20
+        )));
+    }
+    String::from_utf8(bytes).map_err(|_| invalid(format!("{name} is not UTF-8 text")))
+}
+
+/// An archive within [`MAX_ENTRIES`].
+pub(crate) fn check_entries<R: Read + Seek>(zip: &zip::ZipArchive<R>) -> Result<(), ThreeMfError> {
+    if zip.len() > MAX_ENTRIES {
+        return Err(invalid(format!(
+            "the archive has {} entries, more than {MAX_ENTRIES}",
+            zip.len()
+        )));
+    }
+    Ok(())
+}
+
 /// Makes the project's custom texture images (stored by content hash) available for slicing
 /// and for saving the project again.
 pub(crate) fn register_textures<R: Read + Seek>(
@@ -368,12 +408,14 @@ pub(crate) fn register_textures<R: Read + Seek>(
 /// Mica's own options an Orca project keeps in Mica's sidecar (empty without a current one).
 pub fn load_mica_settings(path: impl AsRef<Path>) -> Result<Settings, ThreeMfError> {
     let mut zip = zip::ZipArchive::new(std::fs::File::open(path)?)?;
+    check_entries(&zip)?;
     register_textures(&mut zip)?;
     marker::mica_settings(&mut zip)
 }
 
 pub fn load_config(path: impl AsRef<Path>) -> Result<Option<RawConfig>, ThreeMfError> {
     let mut zip = zip::ZipArchive::new(std::fs::File::open(path)?)?;
+    check_entries(&zip)?;
     register_textures(&mut zip)?;
     if let Some(config) = marker::config(&mut zip)? {
         return Ok(config);
@@ -383,9 +425,8 @@ pub fn load_config(path: impl AsRef<Path>) -> Result<Option<RawConfig>, ThreeMfE
         "Metadata/Slic3r_PE.config",
     ] {
         match zip.by_name(path) {
-            Ok(mut file) => {
-                let mut text = String::new();
-                file.read_to_string(&mut text)?;
+            Ok(file) => {
+                let text = read_text(file, path)?;
                 return Ok(Some(RawConfig {
                     path: path.into(),
                     text,

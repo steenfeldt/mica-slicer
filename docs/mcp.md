@@ -79,6 +79,8 @@ that changes the scene is one undo step; a call that changed nothing leaves none
 | `save_project` | `path?`, `flavour?` (`orca` / `prusa`; default prusa for Prusa printers, orca otherwise), `overwrite?` | Writes a new 3MF with the painting, part tools, printer settings and slot colors. Without a path: a new name (`<model>-painted.3mf`, `-2`, …) on the Desktop (Documents without one, else the home folder). `~/` is the home folder; a relative path is taken from the server's working folder. Live: a copy of the window's project; its open file only with `overwrite` and `replace_open_project`. |
 | `status` | – | The mode (live or headless, and the requested one), the socket, and in live mode the window's project, unsaved state, printer, tools, filaments, plates, objects and last undo step. |
 
+The window's socket (mode 0600, the user's own processes only) reads request lines of at most 4 MiB, serves at most 8 connections at once (each with one request in flight, which also bounds the window's queue) and answers a request the window has not finished within 15 minutes with an error.
+
 The server's `instructions` and each tool's description teach the workflow: open → `scene_info`
 (→ `set_filament_colors`) → `render_view` → look → `paint_at` (or bands, directions, part tools) →
 `render_view` again to verify → `undo` mistakes → `slice_summary` → `save_project`. Errors are

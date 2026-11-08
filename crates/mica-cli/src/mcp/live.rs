@@ -25,6 +25,14 @@ pub const PROTOCOL: u32 = 1;
 /// The socket's file name in Mica's settings folder.
 pub const SOCKET_NAME: &str = "mcp.sock";
 
+/// The longest request line the window reads (real requests are a few kilobytes); a longer
+/// one is answered with an error and the connection closed.
+pub const MAX_REQUEST: usize = 4 << 20;
+
+/// Connections the window serves at once; more are answered "busy" and closed. Each has at
+/// most one request waiting, so this also bounds the window's queue.
+pub const MAX_CONNECTIONS: usize = 8;
+
 /// Mica's settings folder (`MICA_CONFIG_DIR` when set).
 pub fn config_dir() -> PathBuf {
     mica_core::user_data::config_dir()
@@ -156,7 +164,7 @@ pub use unix::{Client, Listener, bind, serve_connection};
 #[cfg(unix)]
 mod unix {
     use super::*;
-    use std::io::{BufRead, BufReader, Write};
+    use std::io::{BufRead, BufReader, Read, Write};
     use std::os::unix::fs::PermissionsExt;
     use std::os::unix::net::{UnixListener, UnixStream};
     use std::time::Duration;
@@ -315,9 +323,32 @@ mod unix {
         let Ok(mut writer) = stream.try_clone() else {
             return;
         };
-        let reader = BufReader::new(stream);
-        for line in reader.lines() {
-            let Ok(line) = line else {
+        let mut reader = BufReader::new(stream);
+        loop {
+            let mut bytes = Vec::new();
+            // At most one byte more than allowed: enough to tell an over-long line.
+            match (&mut reader)
+                .take(MAX_REQUEST as u64 + 1)
+                .read_until(b'\n', &mut bytes)
+            {
+                Ok(0) | Err(_) => return,
+                Ok(_) => {}
+            }
+            if bytes.len() > MAX_REQUEST {
+                let too_long = Response::new(
+                    0,
+                    Err(format!(
+                        "request longer than {} MiB; the connection is closed",
+                        MAX_REQUEST >> 20
+                    )),
+                );
+                let _ = writer.write_all(encode(&too_long).as_bytes());
+                return;
+            }
+            let Ok(line) = String::from_utf8(bytes) else {
+                let _ = writer.write_all(
+                    encode(&Response::new(0, Err("request is not UTF-8".into()))).as_bytes(),
+                );
                 return;
             };
             if line.trim().is_empty() {
@@ -373,6 +404,29 @@ impl Client {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A request line past `MAX_REQUEST` is answered with an error and the connection closes,
+    /// instead of the window buffering it whole.
+    #[cfg(unix)]
+    #[test]
+    fn an_over_long_request_is_refused_and_the_connection_closed() {
+        use std::io::{BufRead, BufReader, Write};
+        let (client, server) = std::os::unix::net::UnixStream::pair().unwrap();
+        let serving = std::thread::spawn(move || {
+            serve_connection(server, |r| Response::new(r.id, Ok(vec![])))
+        });
+        let mut writer = client.try_clone().unwrap();
+        let sending = std::thread::spawn(move || {
+            let _ = writer.write_all(&vec![b'x'; MAX_REQUEST + 10]);
+            let _ = writer.write_all(b"\n");
+        });
+        let mut line = String::new();
+        BufReader::new(&client).read_line(&mut line).unwrap();
+        assert!(line.contains("longer than 4 MiB"), "{line}");
+        serving.join().unwrap();
+        drop(client);
+        let _ = sending.join();
+    }
 
     #[test]
     fn messages_round_trip_one_line_each() {

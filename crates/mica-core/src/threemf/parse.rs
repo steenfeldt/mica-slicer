@@ -45,10 +45,20 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
     // The compressed archive is held in memory once, so independent model parts can be
     // decompressed and parsed by several workers, each with its own cheap archive clone.
     // The archive's offsets are absolute in the stream, wherever it is positioned now.
+    let size = reader.seek(std::io::SeekFrom::End(0))?;
+    if size > super::MAX_ARCHIVE {
+        return Err(invalid(format!(
+            "the archive is larger than {} GiB",
+            super::MAX_ARCHIVE >> 30
+        )));
+    }
     let mut bytes = Vec::new();
     reader.seek(std::io::SeekFrom::Start(0))?;
     reader.read_to_end(&mut bytes)?;
     let mut zip = ZipArchive::new(std::io::Cursor::new(std::sync::Arc::<[u8]>::from(bytes)))?;
+    super::check_entries(&zip)?;
+    // Vertices and triangles of every model part, counted across the parallel workers.
+    let geometry = Geometry::default();
     let mut entries = BTreeMap::new();
     let mut ignored = BTreeSet::new();
     for i in 0..zip.len() {
@@ -124,7 +134,7 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
                             .ok_or_else(|| invalid(format!("missing model entry {p}")))?;
                         let file = zip.by_index(index)?;
                         let mut ignored = BTreeSet::new();
-                        let model = parse_model(BufReader::new(file), p, &mut ignored)
+                        let model = parse_model(BufReader::new(file), p, &mut ignored, &geometry)
                             .map_err(|e| invalid(format!("{p}: {e}")))?;
                         Ok((model, ignored))
                     })();
@@ -169,7 +179,10 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
     .into_iter()
     .find(|p| entries.contains_key(*p));
     let metadata = if let Some(path) = metadata_path {
-        super::metadata::parse(BufReader::new(zip.by_index(entries[path])?), &mut ignored)?
+        super::metadata::parse(
+            BufReader::new(zip.by_index(entries[path])?.take(super::MAX_TEXT)),
+            &mut ignored,
+        )?
     } else {
         super::metadata::Metadata::default()
     };
@@ -181,8 +194,7 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         name.eq_ignore_ascii_case(crate::full_spectrum::ARCHIVE_PATH)
             .then_some(i)
     }) {
-        let mut text = String::new();
-        zip.by_index(i)?.read_to_string(&mut text)?;
+        let text = super::read_text(zip.by_index(i)?, crate::full_spectrum::ARCHIVE_PATH)?;
         project.full_spectrum_json = Some(text);
     }
     let mut object_indices = BTreeMap::new();
@@ -255,8 +267,7 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         "Metadata/Slic3r_PE.config",
     ] {
         if let Some(&i) = entries.get(path) {
-            let mut text = String::new();
-            zip.by_index(i)?.read_to_string(&mut text)?;
+            let text = super::read_text(zip.by_index(i)?, path)?;
             project.config = Some(RawConfig {
                 path: path.into(),
                 text,
@@ -265,11 +276,13 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         }
     }
     if let Some(&i) = entries.get(super::custom_gcode::ORCA_FILE) {
-        project.custom_gcodes =
-            super::custom_gcode::parse_orca(std::io::BufReader::new(zip.by_index(i)?))?;
+        project.custom_gcodes = super::custom_gcode::parse_orca(std::io::BufReader::new(
+            zip.by_index(i)?.take(super::MAX_TEXT),
+        ))?;
     } else if let Some(&i) = entries.get(super::custom_gcode::PRUSA_FILE) {
-        project.custom_gcodes =
-            super::custom_gcode::parse_prusa(std::io::BufReader::new(zip.by_index(i)?))?;
+        project.custom_gcodes = super::custom_gcode::parse_prusa(std::io::BufReader::new(
+            zip.by_index(i)?.take(super::MAX_TEXT),
+        ))?;
     }
     project
         .custom_gcodes
@@ -278,7 +291,9 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         info.check_mode();
     }
     if let Some(&i) = entries.get("Metadata/Prusa_Slicer_wipe_tower_information.xml") {
-        project.wipe_towers = super::tower::parse(std::io::BufReader::new(zip.by_index(i)?))?;
+        project.wipe_towers = super::tower::parse(std::io::BufReader::new(
+            zip.by_index(i)?.take(super::MAX_TEXT),
+        ))?;
     }
     if !project.wipe_towers.contains_key(&0)
         && let Some(config) = &project.config
@@ -302,7 +317,9 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         "Metadata/layer_config_ranges.xml",
     ] {
         if let Some(&i) = entries.get(path) {
-            for (id, ranges) in super::ranges::parse(BufReader::new(zip.by_index(i)?))? {
+            for (id, ranges) in
+                super::ranges::parse(BufReader::new(zip.by_index(i)?.take(super::MAX_TEXT)))?
+            {
                 let index = if path.contains("Prusa_Slicer") {
                     *prusa_range_indices
                         .get(id - 1)
@@ -324,8 +341,7 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         "Metadata/layer_heights_profile.txt",
     ] {
         if let Some(&i) = entries.get(path) {
-            let mut text = String::new();
-            zip.by_index(i)?.read_to_string(&mut text)?;
+            let text = super::read_text(zip.by_index(i)?, path)?;
             for (id, profile) in super::layer_heights::parse_profiles(&text) {
                 let index = if path.contains("Slic3r_PE") {
                     prusa_range_indices.get(id - 1).copied()
@@ -339,8 +355,7 @@ pub(super) fn load(mut reader: impl Read + Seek) -> Result<Project, ThreeMfError
         }
     }
     if let Some(&i) = entries.get("Metadata/brim_ear_points.txt") {
-        let mut text = String::new();
-        zip.by_index(i)?.read_to_string(&mut text)?;
+        let text = super::read_text(zip.by_index(i)?, "Metadata/brim_ear_points.txt")?;
         for (id, points) in super::layer_heights::parse_brim_points(&text) {
             if let Some(object) = project.objects.get_mut(id - 1) {
                 object.brim_points = points;
@@ -370,7 +385,7 @@ fn relationships<R: Read + Seek>(
     };
     let mut targets = Vec::new();
     walk(
-        BufReader::new(zip.by_index(i)?),
+        BufReader::new(zip.by_index(i)?.take(super::MAX_TEXT)),
         "Relationships",
         |name, attrs, _| {
             if name == "Relationship"
@@ -388,11 +403,42 @@ fn relationships<R: Read + Seek>(
     Ok(targets)
 }
 
+/// Vertices and triangles of a project's model parts, counted across the workers that parse
+/// them in parallel, against [`super::MAX_GEOMETRY`].
+#[derive(Default)]
+struct Geometry {
+    vertices: std::sync::atomic::AtomicUsize,
+    triangles: std::sync::atomic::AtomicUsize,
+}
+
+/// Elements a worker counts before adding them to the shared [`Geometry`].
+const GEOMETRY_BATCH: usize = 4096;
+
+impl Geometry {
+    /// Adds `n` to `counter`; an error once the project has more than the budget.
+    fn add(
+        counter: &std::sync::atomic::AtomicUsize,
+        n: usize,
+        what: &str,
+    ) -> Result<(), ThreeMfError> {
+        let total = counter.fetch_add(n, std::sync::atomic::Ordering::Relaxed) + n;
+        if total > super::MAX_GEOMETRY {
+            return Err(invalid(format!(
+                "the project has more than {} million {what}",
+                super::MAX_GEOMETRY / 1_000_000
+            )));
+        }
+        Ok(())
+    }
+}
+
 fn parse_model(
     reader: impl std::io::BufRead,
     path: &str,
     ignored: &mut BTreeSet<String>,
+    geometry: &Geometry,
 ) -> Result<Model, ThreeMfError> {
+    let (mut vertices, mut triangles) = (0, 0);
     let mut model = Model::default();
     let mut unit = 1.0;
     let mut current: Option<(u32, Resource)> = None;
@@ -474,6 +520,11 @@ fn parse_model(
                 if r.mesh.vertices.len() >= u32::MAX as usize {
                     return Err(invalid("too many vertices"));
                 }
+                vertices += 1;
+                if vertices == GEOMETRY_BATCH {
+                    Geometry::add(&geometry.vertices, vertices, "vertices")?;
+                    vertices = 0;
+                }
                 r.vertices.push(v);
                 r.mesh.vertices.push(v.map(|v| v as f32));
             }
@@ -485,6 +536,11 @@ fn parse_model(
                 r.mesh
                     .faces
                     .push([integer(a, "v1")?, integer(a, "v2")?, integer(a, "v3")?]);
+                triangles += 1;
+                if triangles == GEOMETRY_BATCH {
+                    Geometry::add(&geometry.triangles, triangles, "triangles")?;
+                    triangles = 0;
+                }
                 for (key, value) in a {
                     let states = match key.rsplit(':').next().unwrap_or(key) {
                         "custom_supports" | "paint_supports" => Some(&mut r.painting.supports),
@@ -611,4 +667,72 @@ fn archive_path(base: &str, target: &str) -> Result<String, ThreeMfError> {
         }
     }
     Ok(parts.join("/"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::{Cursor, SeekFrom};
+
+    /// A stream that says it is 3 GiB long and must never be read.
+    struct Huge;
+    impl Read for Huge {
+        fn read(&mut self, _: &mut [u8]) -> std::io::Result<usize> {
+            panic!("an archive over the budget was read")
+        }
+    }
+    impl Seek for Huge {
+        fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
+            Ok(match pos {
+                SeekFrom::End(_) => 3 << 30,
+                SeekFrom::Start(n) => n,
+                SeekFrom::Current(_) => 0,
+            })
+        }
+    }
+
+    fn message(r: Result<Project, ThreeMfError>) -> String {
+        match r {
+            Ok(_) => panic!("refused"),
+            Err(e) => e.to_string(),
+        }
+    }
+
+    #[test]
+    fn an_archive_over_the_size_budget_is_refused_unread() {
+        assert!(message(load(Huge)).contains("larger than 2 GiB"));
+    }
+
+    #[test]
+    fn an_archive_with_too_many_entries_is_refused() {
+        let mut w = zip::ZipWriter::new(Cursor::new(Vec::new()));
+        let stored = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Stored);
+        for i in 0..=super::super::MAX_ENTRIES {
+            w.start_file(format!("e{i}"), stored).unwrap();
+        }
+        let bytes = w.finish().unwrap().into_inner();
+        let e = message(load(Cursor::new(bytes)));
+        assert!(e.contains("more than 65536"), "{e}");
+    }
+
+    #[test]
+    fn text_past_its_budget_is_refused() {
+        let text = vec![b'a'; (2 << 20) + 1];
+        let e = super::super::read_text_within(&text[..], "Metadata/x.config", 2 << 20)
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("larger than 2 MiB"), "{e}");
+        assert!(super::super::read_text_within(&text[..2 << 20], "x", 2 << 20).is_ok());
+    }
+
+    #[test]
+    fn geometry_past_the_budget_is_refused() {
+        let counter = std::sync::atomic::AtomicUsize::new(super::super::MAX_GEOMETRY - 10);
+        assert!(Geometry::add(&counter, 10, "triangles").is_ok());
+        let e = Geometry::add(&counter, 1, "triangles")
+            .unwrap_err()
+            .to_string();
+        assert!(e.contains("more than 50 million triangles"), "{e}");
+    }
 }
