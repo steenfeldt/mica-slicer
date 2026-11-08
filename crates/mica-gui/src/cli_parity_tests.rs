@@ -1036,7 +1036,7 @@ fn mixes_case(printer: &Printer, flavour: Flavour) {
     );
     app.add_mix_spec("1:75,2:25/outer").unwrap();
     app.add_mix_spec("1:80,2:20/gradient:20,80@Sunset").unwrap();
-    let physical = app.tool_count();
+    let physical = app.filament_count();
     assert_eq!(app.mixes.list.len(), 2);
     assert_eq!(app.mix_name(1), "Sunset");
     app.plates.current_mut().objects[0].set_tool(physical);
@@ -1371,7 +1371,7 @@ fn color_mix_off_prints_main_colors_and_keeps_the_mixes() {
     );
     app.add_mix_spec("1:25,2:75/outer").unwrap();
     app.add_mix_spec("1:80,2:20/gradient:20,80@Sunset").unwrap();
-    let physical = app.tool_count();
+    let physical = app.filament_count();
     app.plates.current_mut().objects[0].set_tool(physical);
     app.plates.current_mut().objects[1].set_tool(physical + 1);
     app.changed();

@@ -562,11 +562,11 @@ impl App {
     /// Sets tool `tool`'s filament colour: a project colour (none when it is the preset's
     /// own), shown at once, the slice kept (`App::colours_changed`).
     pub(crate) fn set_filament_colour(&mut self, tool: usize, pick: Pick) {
-        if tool >= self.tool_count() {
+        if tool >= self.filament_count() {
             return;
         }
         self.begin_gesture("Change filament color");
-        self.overlays.resize(self.tool_count());
+        self.overlays.resize(self.filament_count());
         let preset = self
             .profiles
             .filaments

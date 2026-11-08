@@ -908,7 +908,7 @@ impl App {
                 self.plate_command(self.plates.current, crate::plate_menu::PlateCommand::Rename)
             }
             A::Digit(n) => {
-                let tools = self.tool_count();
+                let tools = self.filament_count();
                 let editing = !(self.preview && self.finished().is_some());
                 if editing && self.selected.is_some() && tools > 1 && n >= 1 {
                     if (n as usize) <= tools {

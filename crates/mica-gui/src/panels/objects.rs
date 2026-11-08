@@ -213,7 +213,7 @@ impl App {
         let mut t = before;
         let tool = o.tools.0[0].unwrap_or(0);
         let override_count = o.overrides.len();
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         let choices = self.tool_choices();
         let uniform_id = egui::Id::unique("uniform-scale");
         let mut uniform = ctx.data_mut(|d| *d.get_temp_mut_or(uniform_id, true));

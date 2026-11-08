@@ -56,7 +56,7 @@ impl App {
         undo_label: Option<&str>,
     ) -> Result<(), String> {
         let (ToolRemap::Swap(a, b) | ToolRemap::Move(a, b)) = remap;
-        let physical = self.tool_count();
+        let physical = self.filament_count();
         if a == b || a >= physical || b >= physical {
             return Err(format!("no tools {} and {} to remap", a + 1, b + 1));
         }

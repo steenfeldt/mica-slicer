@@ -1960,7 +1960,7 @@ mod tests {
             Some(crate::project::State::Applied { .. })
         ));
         assert_eq!(b.profiles.printer, a.profiles.printer);
-        assert_eq!(b.tool_count(), a.tool_count());
+        assert_eq!(b.filament_count(), a.filament_count());
         assert!(b.overlays.filaments[1].is_empty());
         assert_eq!(
             b.config.as_ref().unwrap().float_at("temperature", 1),
@@ -2075,7 +2075,7 @@ mod tests {
             serde_json::from_str(&saved.config.as_ref().unwrap().text).unwrap();
         assert_eq!(json["printer_settings_id"], u1.as_str());
         assert_eq!(json["print_settings_id"], c.profiles.process.as_str());
-        let tools = c.tool_count();
+        let tools = c.filament_count();
         assert_eq!(tools, 4);
         for key in [
             "filament_settings_id",

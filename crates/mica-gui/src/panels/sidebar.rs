@@ -1465,7 +1465,7 @@ impl App {
             groups: vec![curated],
             more,
         });
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         let mut pages: Vec<TopicDef> = settings::pages(Tab::Print)
             .iter()
             .filter(|page| page.name != "Multimaterial" || tools > 1)

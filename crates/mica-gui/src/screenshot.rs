@@ -1228,7 +1228,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     app.editor.plate_mode = a.plate_scope;
     if a.xl {
         // Spread the objects over the filaments.
-        let tools = app.tool_count();
+        let tools = app.filament_count();
         for (i, o) in app.plates.current_mut().objects.iter_mut().enumerate() {
             o.set_tool(i % tools);
         }
@@ -1820,7 +1820,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     };
     report_tower(&app);
     if let Some(spec) = &a.layer_gcode {
-        let tools = app.tool_count();
+        let tools = app.filament_count();
         let (object_tools, base) = app.plate_object_tools(app.plates.current);
         let colors = app.tool_colors_f32();
         let info = parse_layer_gcode(spec, tools, object_tools, base, &colors)?;

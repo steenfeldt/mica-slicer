@@ -21,6 +21,9 @@ mod cut;
 #[cfg(test)]
 mod cut_ui_tests;
 mod emboss;
+mod filaments;
+#[cfg(test)]
+mod filaments_tests;
 mod gcode_doc;
 mod import;
 #[cfg(test)]

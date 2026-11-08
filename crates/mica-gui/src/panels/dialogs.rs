@@ -69,7 +69,7 @@ impl App {
     fn printer_editor(&mut self, ctx: &egui::Context) {
         let mut open = self.dialogs.printer_editor;
         let title = format!("Printer · {}", self.profiles.printer);
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         let pages = settings::pages(Tab::Printer);
         let mut edits = Vec::new();
         let mut save = None;
@@ -269,7 +269,7 @@ impl App {
         let mut open = true;
         let name = self.profiles.filaments[tool].clone();
         let shown = crate::preset_names::display_name(&name);
-        let title = if self.tool_count() > 1 {
+        let title = if self.filament_count() > 1 {
             format!("Filament · Tool {} · {shown}", tool + 1)
         } else {
             format!("Filament · {shown}")

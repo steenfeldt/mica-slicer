@@ -109,9 +109,10 @@ G-code as before this change, filament within 0.2% of PrusaSlicer per role.
 - `SettingsMapper::tool_count` (new, default `None`): `mica_profiles::project::Mapper {
   project_tools: true }` (the GUI) resolves object tools against the project's filament
   count when it exceeds the printer's, with a warning, instead of failing the import. The
-  CLI's `Mapper::default()` keeps the strict check. The worker clamps tools to the printer's
-  count when it slices; the recompute no longer rewrites the objects' tools, so "Use project
-  settings" after "Keep mine" still finds them.
+  CLI's `Mapper::default()` keeps the strict check. The project keeps every filament (also more than
+  the printer has tools); each plate maps the filaments it uses onto the tools when it slices
+  ([filaments and tools](project-conversion.md#filaments-and-tools-built-first)), so "Use
+  project settings" after "Keep mine" still finds them.
 - `mica_profiles::project::ProjectSettings::parse(&RawConfig)` reads Orca's
   `project_settings.config` (JSON) and Prusa's `Slic3r_PE.config` (INI): preset names,
   model / variant, filament names, types, colours, per-plate tower positions and `Changes`

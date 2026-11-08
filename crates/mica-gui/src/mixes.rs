@@ -393,7 +393,7 @@ pub fn short_name(index: usize) -> String {
 impl App {
     /// The project's mixes as the engine takes them, validated for the current printer.
     pub(crate) fn mix_spectrum(&self) -> Result<FullSpectrum, String> {
-        FullSpectrum::new(self.mixes.list.clone(), self.tool_count())
+        FullSpectrum::new(self.mixes.list.clone(), self.filament_count())
     }
 
     /// Tool colors with the mixes' predicted colors after the physical ones (index = tool
@@ -426,7 +426,7 @@ impl App {
 
     /// The tool number a new mix gets: right after the physical tools and the other mixes.
     fn next_mix_id(&self) -> usize {
-        self.tool_count()
+        self.filament_count()
             .max(self.mixes.list.iter().map(|m| m.id).max().unwrap_or(0))
             + 1
     }
@@ -436,7 +436,7 @@ impl App {
     pub(crate) fn scene_colours_f32(&self) -> Vec<[f32; 3]> {
         let mut out = self.tool_colors_f32();
         if self.gcode.is_none() {
-            let physical = self.tool_count();
+            let physical = self.filament_count();
             out.extend(
                 self.model_colours()
                     .into_iter()
@@ -471,7 +471,7 @@ impl App {
     pub(crate) fn tool_choices(&self) -> Vec<ToolChoice> {
         let colours = self.model_colours();
         let alphas: Vec<u8> = self.tool_colours_rgba().iter().map(|c| c[3]).collect();
-        let physical = self.tool_count();
+        let physical = self.filament_count();
         // With ColorMix off only the physical tools are offered.
         let count = if self.prefs.features.color_mix {
             colours.len()
@@ -570,7 +570,7 @@ impl App {
     pub(crate) fn mixes_saved(&mut self, text: Option<String>) {
         self.mixes.original = text.map(|t| {
             (
-                FullSpectrum::from_json(&t, self.tool_count())
+                FullSpectrum::from_json(&t, self.filament_count())
                     .map(|s| s.extruders().to_vec())
                     .unwrap_or_default(),
                 t,
@@ -627,7 +627,7 @@ impl App {
         if self.mixes.list.is_empty() {
             return;
         }
-        let physical = self.tool_count();
+        let physical = self.filament_count();
         let mut ids: Vec<usize> = self.mixes.list.iter().map(|m| m.id).collect();
         ids.sort_unstable();
         let map: BTreeMap<usize, usize> = ids
@@ -669,68 +669,14 @@ impl App {
         if map.is_empty() {
             return;
         }
-        let one = |t: usize| map.get(&t).copied().unwrap_or(t);
-        let keys = [
-            "extruder",
-            "perimeter_extruder",
-            "infill_extruder",
-            "solid_infill_extruder",
-            "support_material_extruder",
-            "support_material_interface_extruder",
-            "wipe_tower_extruder",
-        ];
-        let remap_overrides = |o: &mut BTreeMap<String, String>| {
-            for k in keys {
-                if let Some(v) = o.get_mut(k)
-                    && let Ok(t) = v.trim().parse::<usize>()
-                    && t > 0
-                {
-                    *v = one(t).to_string();
-                }
-            }
-        };
-        let remap_config = |c: &mut Config| {
-            for k in keys {
-                if let Some(t) = c.raw(k).and_then(|v| v.trim().parse::<usize>().ok())
-                    && t > 0
-                    && map.contains_key(&t)
-                {
-                    let _ = c.set_raw(k, &one(t).to_string());
-                }
-            }
-        };
-        let states = |s: u8| map.get(&usize::from(s)).map_or(s, |t| *t as u8);
         for plate in &mut self.plates.plates {
-            remap_overrides(&mut plate.overrides);
-            for o in &mut plate.objects {
-                for role in o.tools.0.iter_mut().flatten() {
-                    *role = one(*role + 1) - 1;
-                }
-                remap_overrides(&mut o.overrides);
-                for v in &mut o.volumes {
-                    remap_overrides(&mut v.overrides);
-                }
-                for r in &mut o.height_ranges {
-                    remap_overrides(&mut r.overrides);
-                }
-                if !o.painting.material.is_empty() {
-                    let mut p = (*o.painting).clone();
-                    p.material = p.material.map_states(states);
-                    o.painting = Arc::new(p);
-                }
-                if let Some(region) = &mut o.region {
-                    let r = Arc::make_mut(region);
-                    for v in &mut r.volumes {
-                        remap_config(&mut v.config);
-                        v.painting.material = v.painting.material.map_states(states);
-                    }
-                }
-            }
+            renumber_overrides(&mut plate.overrides, map);
+            renumber_objects(&mut plate.objects, map);
         }
     }
 
     pub(crate) fn apply_mix_acts(&mut self, acts: Vec<MixAct>) {
-        let physical = self.tool_count();
+        let physical = self.filament_count();
         for act in acts {
             match act {
                 MixAct::Save(draft) => {
@@ -807,7 +753,7 @@ impl App {
             None => (spec, None),
         };
         let (parts, pattern) = spec.split_once('/').unwrap_or((spec, "layers"));
-        let mut d = Draft::new(self.tool_count());
+        let mut d = Draft::new(self.filament_count());
         d.tools.clear();
         d.percents.clear();
         for part in parts.split(',') {
@@ -850,7 +796,7 @@ impl App {
     /// Opens the editor on mix `which` (one-based) or `new`.
     pub(crate) fn open_mix_editor(&mut self, which: &str) -> Result<(), String> {
         self.mixes.draft = Some(if which == "new" {
-            Draft::new(self.tool_count())
+            Draft::new(self.filament_count())
         } else {
             let k: usize = which
                 .parse()
@@ -909,7 +855,7 @@ impl App {
         draft: &mut Option<Draft>,
         acts: &mut Vec<MixAct>,
     ) {
-        let physical = self.tool_count();
+        let physical = self.filament_count();
         if physical < 2 {
             return;
         }
@@ -1054,7 +1000,7 @@ impl App {
         acts: &mut Vec<MixAct>,
     ) {
         let p = theme::of(ui);
-        let physical = self.tool_count();
+        let physical = self.filament_count();
         ui.spacing_mut().item_spacing = Vec2::new(4., 4.);
         let index = d
             .editing
@@ -1513,6 +1459,73 @@ pub fn imported_tools(
     out
 }
 
+/// The settings that name a tool (one-based; 0 is "the object's own").
+pub(crate) const TOOL_KEYS: [&str; 7] = [
+    "extruder",
+    "perimeter_extruder",
+    "infill_extruder",
+    "solid_infill_extruder",
+    "support_material_extruder",
+    "support_material_interface_extruder",
+    "wipe_tower_extruder",
+];
+
+/// `map` (one-based old tool -> new) on the tool settings among `o`.
+pub(crate) fn renumber_overrides(o: &mut BTreeMap<String, String>, map: &BTreeMap<usize, usize>) {
+    for k in TOOL_KEYS {
+        if let Some(v) = o.get_mut(k)
+            && let Ok(t) = v.trim().parse::<usize>()
+            && let Some(n) = map.get(&t)
+        {
+            *v = n.to_string();
+        }
+    }
+}
+
+/// `map` (one-based old tool -> new) on everything of `objects` that names a tool: roles,
+/// object, part and height-range settings, painted areas, and the loaded regions.
+pub(crate) fn renumber_objects(objects: &mut [crate::scene::Object], map: &BTreeMap<usize, usize>) {
+    if map.is_empty() {
+        return;
+    }
+    let one = |t: usize| map.get(&t).copied().unwrap_or(t);
+    let remap_config = |c: &mut Config| {
+        for k in TOOL_KEYS {
+            if let Some(t) = c.raw(k).and_then(|v| v.trim().parse::<usize>().ok())
+                && t > 0
+                && map.contains_key(&t)
+            {
+                let _ = c.set_raw(k, &one(t).to_string());
+            }
+        }
+    };
+    let states = |s: u8| map.get(&usize::from(s)).map_or(s, |t| *t as u8);
+    for o in objects {
+        for role in o.tools.0.iter_mut().flatten() {
+            *role = one(*role + 1) - 1;
+        }
+        renumber_overrides(&mut o.overrides, map);
+        for v in &mut o.volumes {
+            renumber_overrides(&mut v.overrides, map);
+        }
+        for r in &mut o.height_ranges {
+            renumber_overrides(&mut r.overrides, map);
+        }
+        if !o.painting.material.is_empty() {
+            let mut p = (*o.painting).clone();
+            p.material = p.material.map_states(states);
+            o.painting = Arc::new(p);
+        }
+        if let Some(region) = &mut o.region {
+            let r = Arc::make_mut(region);
+            for v in &mut r.volumes {
+                remap_config(&mut v.config);
+                v.painting.material = v.painting.material.map_states(states);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1645,11 +1658,11 @@ mod tests {
         let ids = |app: &App| app.mixes.list.iter().map(|m| m.id).collect::<Vec<_>>();
         let opens = |app: &App| {
             let text = app.mixes_json().expect("the mixes are saved");
-            FullSpectrum::from_json(&text, app.tool_count()).map(|_| ())
+            FullSpectrum::from_json(&text, app.filament_count()).map(|_| ())
         };
         assert_eq!(ids(&app), [6, 7]);
         app.switch_printer(u1, &u1_name);
-        assert_eq!(app.tool_count(), 4);
+        assert_eq!(app.filament_count(), 4);
         assert_eq!(ids(&app), [5, 6]);
         assert_eq!(
             app.plates.current().objects[0].tools.0[0],
@@ -1674,7 +1687,7 @@ mod tests {
         let Some(mut app) = xl_app(&ctx) else {
             return;
         };
-        assert_eq!(app.tool_count(), 5);
+        assert_eq!(app.filament_count(), 5);
         app.add_mix_spec("1:50,2:50").unwrap();
         app.add_mix_spec("3:25,4:75/outer@Teal fade").unwrap();
         assert_eq!(

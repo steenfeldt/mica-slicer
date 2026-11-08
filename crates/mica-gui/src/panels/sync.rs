@@ -180,7 +180,7 @@ impl App {
             self.notify_warning(format!("{name} does not report what is loaded"));
             return 0;
         }
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         let mut changed = 0;
         let mut colours = 0;
         let mut materials = 0;

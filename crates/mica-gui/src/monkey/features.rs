@@ -358,7 +358,7 @@ impl Monkey {
     /// mix as their tool.
     fn mixes(&mut self) {
         self.feature_on(|f| &mut f.color_mix, true);
-        let tools = self.app.tool_count();
+        let tools = self.app.filament_count();
         let mixes = self.app.mixes.list.len();
         match self.rng.below(6) {
             0..=2 => {
@@ -595,7 +595,7 @@ impl Monkey {
         let Some(tx) = self.mcp.tx.clone() else {
             return;
         };
-        let tools = self.app.tool_count().max(1);
+        let tools = self.app.filament_count().max(1);
         let objects = self.app.plates.current().objects.len();
         let object = || -> Value { Value::Null };
         let obj = |rng: &mut super::Rng| -> Value {

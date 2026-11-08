@@ -591,7 +591,7 @@ impl App {
     fn tree_rows(&mut self, ui: &mut egui::Ui) {
         let p = theme::of(ui);
         let width = ui.available_width();
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         // Mixed colors follow the physical tools (`mixes`).
         let colours = self.model_colours();
         let alphas: Vec<u8> = self.tool_colours_rgba().iter().map(|c| c[3]).collect();

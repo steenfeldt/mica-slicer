@@ -497,37 +497,15 @@ impl App {
         }
     }
 
-    /// The tools a plate's objects print with: object and part tools, and the tools painted
-    /// on them (one-based facet material states).
-    fn plate_tools(&self, plate: usize) -> Vec<usize> {
-        let mut tools: Vec<usize> = self
-            .plates
-            .plate(plate)
-            .objects
-            .iter()
-            .flat_map(|o| {
-                let painted = o
-                    .painting
-                    .get(mica_core::painting::PaintKind::Material)
-                    .states()
-                    .into_iter()
-                    .map(|s| usize::from(s) - 1);
-                o.tools
-                    .0
-                    .iter()
-                    .flatten()
-                    .copied()
-                    .chain(painted)
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        let count = self.tool_count().max(1);
-        for t in &mut tools {
-            *t = (*t).min(count - 1);
+    /// The tools plate `plate` prints with: the tools its filaments are on (`plate_tools`).
+    fn tower_tools(&self, plate: usize) -> Vec<usize> {
+        let used = self.plate_filaments(plate, false);
+        match self.plate_tools(plate) {
+            Ok(m) => (0..m.slots.len())
+                .filter(|&t| used.contains(&m.slots[t]))
+                .collect(),
+            Err(_) => used.into_iter().collect(),
         }
-        tools.sort_unstable();
-        tools.dedup();
-        tools
     }
 
     /// The tower plate `plate` prints, if it prints one: the sliced job's exact plan while the
@@ -548,8 +526,8 @@ impl App {
         {
             return Some(t.clone());
         }
-        let tools = self.plate_tools(plate);
-        if tools.len() < 2 || self.tool_count() < 2 {
+        let tools = self.tower_tools(plate);
+        if tools.len() < 2 || self.profiles.tool_count() < 2 {
             return None;
         }
         let height = p
@@ -1240,7 +1218,7 @@ mod tests {
         let result = crate::app::load_files(vec![path], &app.config, app.bed.center());
         app.finish_load(result);
         assert_eq!(app.plates.current().objects.len(), 1, "{}", app.status);
-        assert_eq!(app.plate_tools(0).len(), 2, "{:?}", app.plate_tools(0));
+        assert_eq!(app.tower_tools(0).len(), 2, "{:?}", app.tower_tools(0));
         assert!(app.tower().is_some());
     }
 

@@ -686,7 +686,7 @@ impl App {
         viewport.toolbar_size = prefs.toolbar_size;
         viewport.fit_plate(&bed, &plates::snapshot(&plates), false, 1.5, false);
         let mut app = Self {
-            overlays: Overlays::new(profiles.nozzle_count()),
+            overlays: Overlays::new(profiles.filament_count()),
             profiles,
             prefs_dirty: options.prefs_path.is_some(),
             prefs_path: options.prefs_path,
@@ -863,14 +863,10 @@ impl App {
         self.config.as_ref().ok()
     }
 
-    pub(crate) fn tool_count(&self) -> usize {
-        self.profiles.nozzle_count()
-    }
-
     /// Distinct tools plate `i`'s objects print walls and infill with, and the lowest of them
     /// (upstream `Print::object_extruders`, which decides the custom G-code mode).
     pub(crate) fn plate_object_tools(&self, i: usize) -> (usize, usize) {
-        let last = self.tool_count().max(1) - 1;
+        let last = self.filament_count().max(1) - 1;
         let tools: std::collections::BTreeSet<usize> = self
             .plates
             .plate(i)
@@ -1232,7 +1228,27 @@ impl App {
                 if !self.prefs.features.brick_layers_enabled() {
                     objects = crate::brick_layers::without_brick_layers(objects);
                 }
-                crate::slice_cache::Job::Objects(objects, plate.custom_gcode.clone())
+                let mut custom_gcode = plate.custom_gcode.clone();
+                // The slicer sees tools: the plate's filaments on the printer's tools.
+                if let Ok(tools) = self.plate_tools(i)
+                    && !tools.map.is_empty()
+                {
+                    crate::mixes::renumber_objects(&mut objects, &tools.map);
+                    for item in &mut custom_gcode.items {
+                        if let Some(&t) = tools.map.get(&item.extruder) {
+                            item.extruder = t;
+                        }
+                    }
+                    if let Some(spectrum) = self.tool_spectrum(&tools) {
+                        let spectrum = std::sync::Arc::new(spectrum);
+                        for o in &mut objects {
+                            if o.mixes.is_some() {
+                                o.mixes = Some(spectrum.clone());
+                            }
+                        }
+                    }
+                }
+                crate::slice_cache::Job::Objects(objects, custom_gcode)
             }
         }
     }
@@ -1291,7 +1307,17 @@ impl App {
     /// edited on the XL never reaches the CORE One. Every way of choosing a printer goes
     /// through here.
     pub(crate) fn switch_printer(&mut self, vendor: usize, name: &str) {
+        let before = self.profiles.filaments.clone();
         self.profiles.select_printer(vendor, name);
+        // The project keeps the filaments it uses beyond the new printer's tools, with their
+        // presets where the new printer has them.
+        let tools = self.profiles.filament_count();
+        let _ = self.fit_filaments_to_scene();
+        for (i, f) in before.into_iter().enumerate().skip(tools) {
+            if i < self.profiles.filaments.len() && self.profiles.materials.contains(&f) {
+                self.profiles.filaments[i] = f;
+            }
+        }
         self.overlays.printer_switched();
         self.fit_mixes_to_printer();
         self.settings_changed();
@@ -1334,7 +1360,7 @@ impl App {
         self.config_generation += 1;
         self.bed_configs.borrow_mut().clear();
         self.overlays.normalize();
-        self.overlays.resize(self.profiles.nozzle_count());
+        self.overlays.resize(self.profiles.filament_count());
         let identity = self.printer_gcode_identity();
         self.applied_identity = identity;
         let differences = &mut self.project_differences;
@@ -1368,8 +1394,8 @@ impl App {
                 }
             }
         }
-        // Objects keep their tools even when the selected printer has fewer (a project for
-        // another printer, whose settings may be used next); the worker clamps when slicing.
+        // Objects keep their filaments even when the selected printer has fewer tools; each
+        // plate maps the ones it uses onto the tools when it slices (`crate::filaments`).
         self.profiles.store_selection(&mut self.prefs);
     }
 
@@ -1532,7 +1558,7 @@ impl App {
     }
 
     pub(crate) fn tool_colours_rgba(&self) -> Vec<[u8; 4]> {
-        let mine: Vec<Option<[u8; 4]>> = (0..self.tool_count())
+        let mine: Vec<Option<[u8; 4]>> = (0..self.filament_count())
             .map(|t| {
                 self.overlays
                     .colour(t)
@@ -1557,12 +1583,12 @@ impl App {
             .overlays
             .colours
             .iter()
-            .take(self.tool_count())
+            .take(self.filament_count())
             .any(Option::is_some);
         mine.into_iter()
             .enumerate()
             .map(|(t, c)| match c {
-                Some(c) if chosen || distinct > 1 || self.tool_count() == 1 => c,
+                Some(c) if chosen || distinct > 1 || self.filament_count() == 1 => c,
                 _ => {
                     let [r, g, b] = crate::preview::legend::TOOLS[t % 8];
                     [r, g, b, 255]
@@ -2015,7 +2041,7 @@ impl App {
                 } else {
                     0
                 };
-                let tools = (self.tool_count() + mixes) as i64;
+                let tools = (self.filament_count() + mixes) as i64;
                 let raw = match raw.trim().parse::<i64>() {
                     Ok(n) => n.clamp(0, tools).to_string(),
                     Err(_) => raw,
@@ -2475,6 +2501,11 @@ impl App {
                         self.fit_current_plate(false);
                     }
                 }
+                // Objects that name filaments beyond the project's (a file for a printer
+                // with more tools) keep them.
+                if self.fit_filaments_to_scene() {
+                    self.settings_changed();
+                }
                 if let Some(settings) = settings {
                     self.offer_project_settings(settings);
                 }
@@ -2543,7 +2574,7 @@ impl App {
         self.dialogs.calibration = None;
         self.profiles
             .reset_to_defaults(&self.prefs.defaults.print, &self.prefs.defaults.filament);
-        self.overlays = Overlays::new(self.profiles.nozzle_count());
+        self.overlays = Overlays::new(self.profiles.filament_count());
         self.settings_changed();
         // Nothing to slice yet; an automatic slice has nothing to wait for.
         self.dirty_since = None;
@@ -2597,10 +2628,13 @@ impl App {
 
     /// The project's filament colours into the tool overlays (also with "Keep mine").
     fn apply_project_colours(&mut self) {
-        if let Some(p) = &self.project {
-            self.overlays.resize(self.profiles.nozzle_count());
-            crate::project::colour_overlay(&mut self.overlays, &p.settings.colours);
-        }
+        let Some(colours) = self.project.as_ref().map(|p| p.settings.colours.clone()) else {
+            return;
+        };
+        // Every filament of the project, also beyond the printer's tools.
+        let _ = self.grow_filaments(colours.len());
+        self.overlays.resize(self.profiles.filament_count());
+        crate::project::colour_overlay(&mut self.overlays, &colours);
     }
 
     fn preset_selection(&self) -> crate::project::Selection {
@@ -2665,7 +2699,8 @@ impl App {
             }
             self.profiles.refresh();
         }
-        let tools = self.profiles.nozzle_count();
+        let _ = self.grow_filaments(prompt.settings.filaments.len());
+        let tools = self.profiles.filament_count();
         for t in 0..tools {
             let Some(wanted) = prompt.settings.filaments.get(t) else {
                 break;
@@ -2697,7 +2732,7 @@ impl App {
             self.profiles.orca_dialect(),
             mica_profiles::project::Mode::Embedded,
         );
-        let mut overlays = Overlays::new(self.profiles.nozzle_count());
+        let mut overlays = Overlays::new(self.profiles.filament_count());
         crate::project::colour_overlay(&mut overlays, &prompt.settings.colours);
         overlays.project = std::sync::Arc::new(layer);
         self.overlays = overlays;
@@ -3136,6 +3171,11 @@ impl App {
                 c.set_raw(key, &value.to_string())
                     .map_err(|e| e.to_string())?;
             }
+        }
+        // The plate's filaments on the printer's tools.
+        let tools = self.plate_tools(plate)?;
+        if !tools.is_identity() || self.filament_count() != self.profiles.tool_count() {
+            c = crate::filaments::to_tools(&c, &tools, self.profiles.orca_dialect());
         }
         Ok(c)
     }
@@ -3699,7 +3739,7 @@ impl App {
                             .is_empty(),
                     )
                 });
-                let tools = self.tool_count();
+                let tools = self.filament_count();
                 let previewing = self.previewing();
                 let preview = if let Some(d) = &self.gcode {
                     Some((&d.finished.preview, &mut self.view))
@@ -5058,7 +5098,7 @@ mod tests {
         app.undo();
         assert_eq!(app.config.as_ref().unwrap().float("fill_density"), Some(8.));
         assert_eq!(app.tool_colours()[0], [0xCB, 0x8F, 0x29]);
-        if app.tool_count() >= 4 {
+        if app.filament_count() >= 4 {
             assert_eq!(app.tool_colours()[1], [0, 0, 0]);
             assert_eq!(app.tool_colours()[3], [0xFB, 2, 7]);
         }
@@ -5176,7 +5216,7 @@ mod tests {
         assert_eq!(app.plates.len(), 1);
         assert!(app.plates.is_blank());
         assert!(!app.undo.can_undo() && !app.undo.can_redo());
-        assert_eq!(app.overlays, Overlays::new(app.profiles.nozzle_count()));
+        assert_eq!(app.overlays, Overlays::new(app.profiles.filament_count()));
         assert_eq!(app.profiles.printer, printer);
         assert_eq!(app.profiles.process, default);
         assert!(app.selected.is_none());

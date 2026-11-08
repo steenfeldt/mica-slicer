@@ -35,7 +35,7 @@ impl App {
             .calibration
             .as_ref()
             .map_or(0, |c| c.tool)
-            .min(self.tool_count().saturating_sub(1));
+            .min(self.profiles.tool_count().saturating_sub(1));
         self.dialogs.calibration = Some(Card::new(test, &config, tool));
     }
 
@@ -201,7 +201,8 @@ impl App {
             self.dialogs.calibration = None;
             return;
         };
-        let tools = self.tool_count();
+        // A test prints on one of the printer's tools, with that tool's filament.
+        let tools = self.profiles.tool_count();
         let filaments: Vec<String> = self
             .profiles
             .filaments

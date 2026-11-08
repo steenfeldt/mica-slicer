@@ -600,8 +600,9 @@ pub fn slice_with_custom_gcode(
     // Spiral vase forces its settings for the slice, as the CLI does (normalize_fdm).
     let mut config = config;
     mica_core::spiral_vase::normalize(&mut config);
-    // Tools beyond the printer's count print with its last tool (mixed colors are tools
-    // after the physical ones).
+    // The plate's filaments arrive on the printer's tools (`App::slice_job`); a tool beyond
+    // the printer's count would be a bug there, and prints with its last tool rather than
+    // failing (mixed colors are tools after the physical ones).
     let count = config.vector_len("nozzle_diameter").max(1);
     let objects: Vec<Object> = objects
         .into_iter()

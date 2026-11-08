@@ -852,7 +852,7 @@ impl App {
             .mixes
             .map(|text| {
                 text.map(|text| {
-                    mica_core::full_spectrum::FullSpectrum::from_json(&text, self.tool_count())
+                    mica_core::full_spectrum::FullSpectrum::from_json(&text, self.filament_count())
                         .map(|s| (s, text))
                 })
                 .transpose()
@@ -928,7 +928,7 @@ impl App {
     }
 
     fn mcp_parse_colors(&self, wanted: &[String]) -> Result<Vec<[u8; 3]>, String> {
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         if wanted.len() > tools {
             return Err(format!(
                 "{} colors given, but this printer has {tools} tool(s)",
@@ -950,7 +950,7 @@ impl App {
     /// Slot colors as project colors (none where it is the preset's own), as the color
     /// picker sets them: a translucent filament keeps its alpha (and an unchanged one its text).
     fn mcp_apply_colors(&mut self, colors: &[[u8; 3]]) {
-        let n = self.tool_count();
+        let n = self.filament_count();
         self.overlays.resize(n);
         let current = self.tool_colours_rgba();
         for (tool, c) in colors.iter().enumerate().take(n) {
@@ -979,7 +979,7 @@ impl App {
             ),
             "unsaved_changes": self.mcp_unsaved(),
             "printer": self.profiles.printer,
-            "tools": self.tool_count(),
+            "tools": self.filament_count(),
             "plates": self.plates.len(),
             "current_plate": self.plates.current + 1,
             "objects": objects,
@@ -1071,7 +1071,7 @@ impl App {
         if self.viewing_gcode() {
             return Err("the Mica window shows a G-code file; ask the user to close it".into());
         }
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         let (from, to) = (a.from as usize, a.to as usize);
         if from == to || !(1..=tools).contains(&from) || !(1..=tools).contains(&to) {
             return Err(format!(

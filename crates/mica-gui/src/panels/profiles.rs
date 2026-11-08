@@ -138,7 +138,12 @@ pub struct Profiles {
     pub vendor: usize,
     pub printer: String,
     pub process: String,
+    /// The project's filaments, one preset each: at least one per tool of the printer, and
+    /// more when the project has more colors than the printer has tools (each plate maps the
+    /// filaments it uses onto tools, `crate::filaments`).
     pub filaments: Vec<String>,
+    /// The printer's tools (extruders).
+    tools: usize,
     pub bed: String,
     pub printers: Vec<String>,
     pub processes: Vec<String>,
@@ -230,6 +235,7 @@ impl Profiles {
             printer: String::new(),
             process: String::new(),
             filaments: vec![String::new()],
+            tools: 1,
             bed: "High Temp Plate".into(),
             printers: vec![],
             processes: vec![],
@@ -580,6 +586,11 @@ impl Profiles {
             self.bed = self.default_bed();
             self.refresh();
         }
+        // One filament per tool of the new printer; the app adds back the ones its project
+        // uses beyond them (`App::switch_printer`).
+        if changed_printer {
+            self.filaments.truncate(self.tools.max(1));
+        }
     }
 
     /// The print profile Mica picks for the current printer: a 0.20 mm SPEED / Standard one.
@@ -684,9 +695,13 @@ impl Profiles {
             ensure(f, &self.materials);
         }
         if let Ok(c) = self.config() {
-            let first = self.filaments[0].clone();
-            self.filaments
-                .resize(c.vector_len("nozzle_diameter").max(1), first);
+            // At least one filament per tool; more stay (`App::fit_filaments_to_printer` drops
+            // the ones the project does not use).
+            self.tools = c.vector_len("nozzle_diameter").max(1);
+            if self.filaments.len() < self.tools {
+                let first = self.filaments[0].clone();
+                self.filaments.resize(self.tools, first);
+            }
         }
     }
 
@@ -910,7 +925,13 @@ impl Profiles {
         Some(raw.trim().trim_matches('"').trim().to_string())
     }
 
-    pub fn nozzle_count(&self) -> usize {
+    /// The printer's tools.
+    pub fn tool_count(&self) -> usize {
+        self.tools.max(1)
+    }
+
+    /// The project's filaments: never fewer than the tools.
+    pub fn filament_count(&self) -> usize {
         self.filaments.len().max(1)
     }
 
@@ -1106,11 +1127,16 @@ impl Profiles {
         };
         let mut c = resolve(&self.filaments[0])?;
         // Orca-only filament options (`pressure_advance`…) are typed vectors too; they are
-        // composed per tool like the canonical ones.
+        // composed per filament like the canonical ones.
         let orca_dialect = match v {
             Vendor::Orca(b) => Some(b.dialect),
             Vendor::Prusa(_) => None,
         };
+        // One entry per filament: more than the printer's tools when the project has more
+        // colors (each plate takes its tools' entries, `crate::filaments::to_tools`).
+        if self.filaments.len() > c.vector_len("nozzle_diameter") {
+            crate::filaments::resize(&mut c, self.filaments.len(), orca_dialect);
+        }
         for (i, f) in self.filaments.iter().enumerate().skip(1) {
             let tool = resolve(f)?;
             for (key, value) in tool.values() {
@@ -1209,6 +1235,7 @@ mod tests {
             printer: "P".into(),
             process: "Q".into(),
             filaments: vec!["A".into(), "B".into()],
+            tools: 2,
             bed: String::new(),
             printers: vec![],
             processes: vec![],
@@ -1259,7 +1286,7 @@ mod tests {
         assert_eq!(p.processes, ["Only Y", "Q"]);
         assert_eq!(p.materials, ["A"]);
         assert_eq!(p.filaments, ["A"]);
-        assert_eq!(p.nozzle_count(), 1);
+        assert_eq!((p.tool_count(), p.filament_count()), (1, 1));
     }
 
     #[test]

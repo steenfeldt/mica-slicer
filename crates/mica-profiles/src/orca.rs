@@ -739,7 +739,9 @@ impl Bundle {
             .get("nozzle_diameter")
             .and_then(Value::as_array)
             .map_or(1, Vec::len);
-        if n > 1 && n != filaments.len() {
+        // A project may have more filaments than the printer has tools (OrcaSlicer's U1
+        // projects: six filaments on four tools); never fewer.
+        if n > 1 && filaments.len() < n {
             return Err(Error(format!("{n} tools require {n} filament selections")));
         }
         // Bambu-style extruder variants need the upstream extruder mapping UI; do not silently

@@ -1531,7 +1531,7 @@ impl Monkey {
 
     fn command(&mut self, crowded: bool) {
         let shape = *self.rng.pick(&Shape::ALL);
-        let tools = self.app.tool_count();
+        let tools = self.app.filament_count();
         let plates = self.app.plates.len();
         let mut commands = vec![
             Command::Copy,
@@ -1600,7 +1600,7 @@ impl Monkey {
     }
 
     fn settings(&mut self) {
-        let tools = self.app.tool_count();
+        let tools = self.app.filament_count();
         let (target, keys) = match self.rng.below(10) {
             0..=5 => (Target::Print, &self.print_keys),
             6..=7 => (Target::Filament(self.rng.below(tools)), &self.filament_keys),
@@ -2621,7 +2621,7 @@ impl Monkey {
             return;
         };
         let info = self.app.plates.current().custom_gcode.clone();
-        let tools = self.app.tool_count();
+        let tools = self.app.filament_count();
         let (object_tools, base_tool) = self.app.plate_object_tools(self.app.plates.current);
         let colors = self.app.tool_colors_f32();
         let g = LayerGCode {
@@ -2787,7 +2787,7 @@ impl Monkey {
 
     /// Dialogs, editors and view toggles, then a few random clicks into them.
     fn dialogs(&mut self) {
-        let tools = self.app.tool_count();
+        let tools = self.app.filament_count();
         let what = match self.rng.below(14) {
             0 => {
                 self.app.dialogs.printer_editor = true;
@@ -3174,7 +3174,7 @@ impl Monkey {
                 let test = *self.rng.pick(&crate::calibration::Test::ALL);
                 self.note(format!("calibration: {test:?}"));
                 self.app.open_calibration(test);
-                let tools = self.app.tool_count();
+                let tools = self.app.filament_count();
                 if let Some(card) = &mut self.app.dialogs.calibration
                     && let Ok(c) = self.app.config.as_ref()
                 {

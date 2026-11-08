@@ -761,7 +761,7 @@ fn a_filament_value_set_back_leaves_the_other_tools_alone() {
         .expect("XL 5T preset");
     app.profiles.select_printer(vendor, &name);
     app.settings_changed();
-    assert!(app.tool_count() >= 2);
+    assert!(app.filament_count() >= 2);
     let own = |app: &App, tool| {
         crate::overlays::tool_raw(app.effective_config().unwrap(), "temperature", tool).unwrap()
     };

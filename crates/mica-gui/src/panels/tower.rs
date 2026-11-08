@@ -190,7 +190,7 @@ impl App {
             return;
         };
         let orca = mica_core::rules::Rules::of(&config).is_orca();
-        let tools = self.tool_count();
+        let tools = self.filament_count();
         let name = self.tower_name();
         let mut edits: Vec<(Target, Edit)> = Vec::new();
         let searching = !self.editor.search.trim().is_empty();
