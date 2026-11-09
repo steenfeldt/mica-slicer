@@ -36,9 +36,11 @@ jobs:
         uses: taiki-e/install-action@v2
         with:
           tool: cargo-fuzz
+      # The prebuilt cargo-fuzz is a musl binary and defaults to its own target, where the
+      # address sanitizer can't run.
       - name: Fuzz 3MF and ZIP input
         run: >-
-          cargo +nightly fuzz run threemf fuzz/corpus-seed/threemf --
+          cargo +nightly fuzz run --target x86_64-unknown-linux-gnu threemf fuzz/corpus-seed/threemf --
           -dict=fuzz/dictionaries/threemf.dict
           -max_len=262144
           -rss_limit_mb=2048
