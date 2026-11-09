@@ -3355,7 +3355,7 @@ dependencies = [
 
 [[package]]
 name = "mica-camera"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "aes 0.8.4",
  "aes-gcm 0.10.3",
@@ -3380,7 +3380,7 @@ dependencies = [
 
 [[package]]
 name = "mica-cli"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "mica-core",
  "mica-gcode",
@@ -3398,7 +3398,7 @@ dependencies = [
 
 [[package]]
 name = "mica-core"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "boostvoronoi",
  "clipper2-rust",
@@ -3413,7 +3413,7 @@ dependencies = [
 
 [[package]]
 name = "mica-gcode"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "flate2",
  "jiff",
@@ -3424,7 +3424,7 @@ dependencies = [
 
 [[package]]
 name = "mica-gui"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "arboard",
  "bytemuck",
@@ -3458,7 +3458,7 @@ dependencies = [
 
 [[package]]
 name = "mica-library"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "image",
  "mica-core",
@@ -3474,7 +3474,7 @@ dependencies = [
 
 [[package]]
 name = "mica-printers"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "mica-camera",
  "mica-core",
@@ -3487,7 +3487,7 @@ dependencies = [
 
 [[package]]
 name = "mica-printhost"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "mica-camera",
  "mica-core",
@@ -3498,7 +3498,7 @@ dependencies = [
 
 [[package]]
 name = "mica-profiles"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "mica-core",
  "mica-gcode",
@@ -3513,18 +3513,18 @@ dependencies = [
 
 [[package]]
 name = "mica-template"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "regex",
 ]
 
 [[package]]
 name = "mica-testkit"
-version = "0.0.4"
+version = "0.0.5"
 
 [[package]]
 name = "mica-update"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "base64 0.22.1",
  "minisign",
@@ -3537,7 +3537,7 @@ dependencies = [
 
 [[package]]
 name = "mica-videodec"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "block2 0.6.2",
  "gstreamer",
@@ -3553,7 +3553,7 @@ dependencies = [
 
 [[package]]
 name = "mica-web"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "httparse",
  "image",
@@ -7510,7 +7510,7 @@ checksum = "ec7a2a501ed189703dba8b08142f057e887dfc4b2cc4db2d343ac6376ba3e0b9"
 
 [[package]]
 name = "xtask"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "image",
  "mica-profiles",

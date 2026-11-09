@@ -7,6 +7,66 @@ and used everywhere: the app shows it after an update (Help › What's new…), 
 A section starts with `## <version>`. Inside it: `###` headings, `-` bullets, `**bold**` and
 `[links](https://…)`.
 
+## 0.0.5
+
+More colors than your printer has tools, adding models from other projects, and a Mica you
+can run on a home server.
+
+### Colors and filaments
+
+- **More filaments than tools:** a project can use more colors than the printer has tools,
+  as long as each plate needs no more than the printer holds. The Filaments card lists them as
+  F1, F2, … and shows which tool each one prints with on the current plate (F6→T3).
+  Right-click a filament to choose its tool on this plate, or to remove it; Add filament adds
+  one.
+- **Swap or move colors between tools:** right-click a tool in the Filaments card. Objects,
+  painted areas, mixed colors, layer color changes and the support and prime tower tools
+  follow, as one undo step.
+
+### Projects and plates
+
+- **Add models from another project:** opening a 3MF while the bed has objects asks whether
+  to open it as the project or add its models. Added plates come after yours with their
+  names and settings, and your printer and settings stay. File › Add models… (⌘I) always
+  adds.
+- **Drag a model onto another plate** to move it there.
+- Bambu Studio projects keep their negative parts and modifiers (a hole cut by a cylinder
+  was lost before).
+- A model that touches itself along an edge (common in sculpts) is no longer reported as
+  having open edges.
+
+### Slicing
+
+- **Purge into infill and objects:** tool changes can purge into an object's infill, or into
+  whole objects you choose, instead of only the prime tower (PrusaSlicer's wipe into infill
+  and objects, OrcaSlicer's flush into infill and objects). Off by default.
+- Combined infill on a toolchanger respects the infill tool's nozzle size, not tool 1's.
+- Fixed a crash while slicing some models with tree supports.
+
+### View
+
+- **Panning keeps the point you grabbed under the pointer**, also when zoomed in close.
+- ⌘-drag (Ctrl-drag) orbits around the middle of the view; a preference makes that the
+  default.
+- Fixed parts of the scene being cut off, stripes on the bed when zoomed in, and paint hiding
+  slightly raised details when zoomed out.
+
+### Mica on a home server
+
+- **Docker image:** Mica streamed to the browser, for a home server (Unraid template
+  included), plus a small web dashboard with your printers, their cameras and the model
+  library.
+- On Linux, printer keys and passwords are kept in a file only you can read.
+
+### Fixes
+
+- **Fixed a crash when resizing the Save dialog.** File dialogs now open as sheets on the
+  Mica window.
+- Warnings from the previous project no longer stay up after New project.
+- Updated components with security fixes; 3MF files and the Mica MCP connection have limits
+  on size, so a broken or hostile file can't exhaust memory.
+- The printer settings say when an address is not encrypted (plain HTTP).
+
 ## 0.0.4
 
 Projects with many plates are easier to work with, and there are three new infill patterns.
