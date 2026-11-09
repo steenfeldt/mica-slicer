@@ -321,6 +321,27 @@ impl Frame {
         far(self.bed.min.with_z(0.), self.bed.max.with_z(top))
             .max(plates.chain(objects).fold(0., f32::max))
     }
+    /// The distance from the eye to the nearest plate or object box (padded, so plate tags
+    /// and gizmos around them count too); 0 when the eye is inside one.
+    pub fn nearest(&self) -> f32 {
+        const PAD: f32 = 50.;
+        let eye = self.camera.eye();
+        let near = |min: Vec3, max: Vec3| {
+            let (min, max) = (min - Vec3::splat(PAD), max + Vec3::splat(PAD));
+            (min - eye).max(eye - max).max(Vec3::ZERO).length()
+        };
+        let top = self.bed.height.max(self.bed.max.z);
+        let plates = self.plates.iter().map(|p| {
+            let o = p.origin.extend(0.);
+            near(self.bed.min.with_z(0.) + o, self.bed.max.with_z(top) + o)
+        });
+        let objects = self.objects.iter().map(|o| {
+            let (min, max) = o.bounds();
+            near(min, max)
+        });
+        near(self.bed.min.with_z(0.), self.bed.max.with_z(top))
+            .min(plates.chain(objects).fold(f32::INFINITY, f32::min))
+    }
     pub fn aspect(&self) -> f32 {
         self.size[0] as f32 / self.size[1].max(1) as f32
     }
@@ -1657,7 +1678,7 @@ impl Renderer {
             .retain(|key, _| frame.caps.iter().any(|c| c.key == *key));
         let clip = frame.clip.unwrap_or(NO_CLIP);
         let camera = &frame.camera;
-        let vp = camera.matrix_reaching(frame.aspect(), frame.reach());
+        let vp = camera.matrix_for_scene(frame.aspect(), frame.nearest(), frame.reach());
         // Key light: high, from the viewer's upper left, following the camera so the model never
         // turns into an unlit silhouette.
         let (right, up) = camera.basis();

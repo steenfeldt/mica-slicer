@@ -500,3 +500,46 @@ fn a_locked_plate_refuses_a_dropped_model() {
         e.app.status
     );
 }
+
+#[test]
+fn a_right_drag_zoomed_in_pans_the_bed_with_the_pointer() {
+    let mut e = Editor::new();
+    // Zoomed in towards the pointer: the target just in front of the eye, the bed far behind.
+    let mut c = crate::scene::camera::Camera::looking_at(e.app.bed.center(), 60.);
+    c.target += c.direction() * 400.;
+    e.app.viewport.camera = c;
+    e.frame(vec![]);
+    let rect = e.app.viewport_rect;
+    let (from, to) = (
+        rect.center() + egui::vec2(-150., 60.),
+        rect.center() + egui::vec2(120., -40.),
+    );
+    let uv = |p: egui::Pos2| {
+        glam::Vec2::new(
+            (p.x - rect.left()) / rect.width(),
+            (p.y - rect.top()) / rect.height(),
+        )
+    };
+    let aspect = rect.aspect_ratio();
+    let grabbed = e.app.viewport.camera.bed_point(uv(from), aspect).unwrap();
+    let button = |pos, pressed| egui::Event::PointerButton {
+        pos,
+        button: egui::PointerButton::Secondary,
+        pressed,
+        modifiers: egui::Modifiers::NONE,
+    };
+    e.frame(vec![egui::Event::PointerMoved(from)]);
+    e.frame(vec![button(from, true)]);
+    for k in 1..=10 {
+        e.frame(vec![egui::Event::PointerMoved(
+            from.lerp(to, k as f32 / 10.),
+        )]);
+    }
+    e.frame(vec![button(to, false)]);
+    e.frame(vec![]);
+    let under = e.app.viewport.camera.bed_point(uv(to), aspect).unwrap();
+    assert!(
+        under.distance(grabbed) < 1.,
+        "the bed point stays under the pointer: {grabbed} → {under}"
+    );
+}

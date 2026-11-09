@@ -337,7 +337,11 @@ pub enum Action {
 enum Drag {
     None,
     Orbit,
-    Pan,
+    /// `anchor`: the scene point grabbed under the pointer, kept under it while panning
+    /// (`None` over empty space: pan at the target's depth).
+    Pan {
+        anchor: Option<Vec3>,
+    },
     /// A press on a model that moves it (and the rest of the selection) on the bed. `last` is
     /// the bed point the object has followed to; nothing moves until the pointer left the
     /// `press` point by more than [`drag::MOVE_THRESHOLD_PX`] (`armed`).
@@ -1495,7 +1499,27 @@ impl Viewport {
         if response.drag_started_by(PointerButton::Secondary)
             || response.drag_started_by(PointerButton::Middle)
         {
-            self.drag = Drag::Pan;
+            // Grabbed where the button went down, so the first pixels (before egui calls it
+            // a drag) count too.
+            let press = ctx.input(|i| i.pointer.press_origin()).or(pointer);
+            let anchor = press.and_then(|p| {
+                let (origin, dir) = self.camera.ray(uv(rect, p), aspect);
+                let t = picking::pick_face(scene.objects, origin, dir)
+                    .map(|h| h.distance)
+                    .or_else(|| {
+                        // The bed plane, only over the plates (not at the horizon).
+                        let t = (dir.z.abs() > 1e-5).then(|| -origin.z / dir.z)?;
+                        let (min, max) = plates::all_bounds(scene.bed, scene.shown_plates());
+                        let margin = (max - min).truncate().max_element() * 0.25;
+                        let at = (origin + dir * t).truncate();
+                        (t > 0.
+                            && at.cmpge(min.truncate() - margin).all()
+                            && at.cmple(max.truncate() + margin).all())
+                        .then_some(t)
+                    })?;
+                Some(origin + dir * t)
+            });
+            self.drag = Drag::Pan { anchor };
         }
         let usual_pivot = || {
             scene
@@ -1606,9 +1630,10 @@ impl Viewport {
                     self.camera.orbit_around(Vec2::new(delta.x, delta.y), pivot);
                 }
             }
-            Drag::Pan => {
-                self.camera.pan(Vec2::new(delta.x, delta.y), rect.height());
-            }
+            Drag::Pan { anchor } => match (*anchor, pointer) {
+                (Some(anchor), Some(p)) => self.camera.pan_keeping(anchor, uv(rect, p), aspect),
+                _ => self.camera.pan(Vec2::new(delta.x, delta.y), rect.height()),
+            },
             Drag::Object {
                 index,
                 last,

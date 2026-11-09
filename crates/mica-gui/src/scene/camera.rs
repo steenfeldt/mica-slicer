@@ -80,11 +80,21 @@ impl Camera {
     /// scene is never cut off when the target is close to the eye (zoomed in towards the
     /// pointer, then orbited or panned).
     pub fn matrix_reaching(&self, aspect: f32, reach: f32) -> Mat4 {
+        self.matrix_for_scene(aspect, 0., reach)
+    }
+    /// [`Self::matrix_reaching`] whose near plane (perspective) also follows the scene:
+    /// `nearest` is the distance from the eye to the closest content (0 when unknown). Zoomed
+    /// in towards the pointer, the target can sit just in front of the eye while the bed is
+    /// hundreds of millimetres away; a near plane at 2 % of the target distance then leaves
+    /// too little depth precision there, and the bed's layers (sheet, texture, grid) fight in
+    /// stripes. A quarter of the nearest distance keeps everything in view.
+    pub fn matrix_for_scene(&self, aspect: f32, nearest: f32, reach: f32) -> Mat4 {
         let view = glam::camera::rh::view::look_at_mat4(self.eye(), self.target, self.up());
         let projection = if self.perspective {
             let d = self.distance();
             let far = (d * 40.).max(reach * 1.05);
-            glam::camera::rh::proj::directx::perspective(self.fov, aspect, d * 0.02, far)
+            let near = (d * 0.02).max(nearest * 0.25).min(far * 0.5);
+            glam::camera::rh::proj::directx::perspective(self.fov, aspect, near, far)
         } else {
             glam::camera::rh::proj::directx::orthographic(
                 -self.span * aspect / 2.,
@@ -151,6 +161,20 @@ impl Camera {
         let (right, up) = self.basis();
         let mm = self.mm_per_pixel(height);
         self.target += (-right * delta.x + up * delta.y) * mm;
+    }
+    /// Pans so that world point `anchor` (grabbed when the drag began) lies under viewport
+    /// point `uv` again: the scene follows the pointer one to one at any depth, as OrcaSlicer
+    /// pans by the point under the mouse. [`Self::pan`] moves at the target's depth instead,
+    /// which crawls when the target is much nearer the eye than what is under the pointer.
+    pub fn pan_keeping(&mut self, anchor: Vec3, uv: Vec2, aspect: f32) {
+        let (a, d) = self.ray(uv, aspect);
+        let n = self.direction();
+        let denom = d.dot(n);
+        if denom.abs() < 1e-6 {
+            return;
+        }
+        let p = a + d * ((anchor - a).dot(n) / denom);
+        self.target += anchor - p;
     }
     /// Immediate zoom (no animation) centred on the target.
     pub fn zoom(&mut self, delta: f32) {
@@ -313,5 +337,65 @@ mod tests {
         assert!((c.span - 220. * 1.15).abs() < 1e-3);
         c.fit(Vec3::ZERO, Vec3::new(600., 100., 0.), 1.5);
         assert!((c.span - 600. / 1.5 * 1.15).abs() < 1e-3);
+    }
+
+    /// Zoomed in towards the pointer: the target just in front of the eye, the bed far
+    /// behind it, as in a project where the bed then crawled under a right-drag.
+    fn zoomed_in() -> Camera {
+        let mut c = Camera::looking_at(Vec3::new(150., 150., 0.), 60.);
+        c.target += c.direction() * 400.;
+        c
+    }
+
+    #[test]
+    fn pan_keeps_the_grabbed_point_under_the_pointer() {
+        for perspective in [false, true] {
+            let mut c = Camera {
+                perspective,
+                ..zoomed_in()
+            };
+            let (start, end) = (Vec2::new(0.4, 0.6), Vec2::new(0.7, 0.35));
+            let grabbed = c.bed_point(start, 1.5).unwrap();
+            // A few steps, as a drag arrives over several frames.
+            for k in 1..=5 {
+                c.pan_keeping(grabbed, start.lerp(end, k as f32 / 5.), 1.5);
+            }
+            let under = c.bed_point(end, 1.5).unwrap();
+            assert!(
+                under.distance(grabbed) < 0.01,
+                "{perspective}: {grabbed} → {under}"
+            );
+        }
+        // The old pan, by the target's depth, moves the far bed far less than the pointer.
+        let mut c = zoomed_in();
+        let grabbed = c.bed_point(Vec2::new(0.4, 0.6), 1.5).unwrap();
+        c.pan(Vec2::new(0.3 * 1500., 0.), 1000.);
+        let under = c.bed_point(Vec2::new(0.7, 0.6), 1.5).unwrap();
+        assert!(under.distance(grabbed) > 10., "the crawl this replaces");
+    }
+
+    #[test]
+    fn near_plane_follows_the_scene_for_depth_precision() {
+        let c = zoomed_in();
+        let bed = c.bed_point(Vec2::splat(0.5), 1.5).unwrap();
+        let reach = c.eye().distance(bed) * 2.;
+        // The bed sheet and a layer 0.02 mm above it.
+        let depth_gap =
+            |m: Mat4| m.project_point3(bed + Vec3::Z * 0.02).z - m.project_point3(bed).z;
+        let old = depth_gap(c.matrix_reaching(1.5, reach)).abs();
+        let new = depth_gap(c.matrix_for_scene(1.5, c.eye().distance(bed) * 0.9, reach)).abs();
+        // Depth32Float near 1.0 resolves about 6e-8.
+        assert!(
+            old < 6e-8 * 4.,
+            "the old near plane barely tells them apart: {old}"
+        );
+        assert!(new > old * 20., "{old} → {new}");
+        // Nothing nearer than the reported content is cut off.
+        let m = c.matrix_for_scene(1.5, 100., reach);
+        let at = c.eye() - c.direction() * 30.;
+        assert!(
+            m.project_point3(at).z >= 0.,
+            "content 30 mm from the eye is in front of near"
+        );
     }
 }
